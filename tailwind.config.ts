@@ -1,0 +1,61 @@
+import type { Config } from "tailwindcss";
+
+/**
+ * Tailwind theme mapped onto the ds.css design tokens (Fluent 2).
+ * Tokens live as CSS variables in src/app/globals.css; Tailwind references them
+ * so the prototype's visual language is preserved 1:1.
+ */
+const config: Config = {
+  content: ["./src/**/*.{ts,tsx}"],
+  theme: {
+    extend: {
+      colors: {
+        primary: {
+          50: "var(--primary-50)",
+          100: "var(--primary-100)",
+          600: "var(--primary-600)",
+          700: "var(--primary-700)",
+          800: "var(--primary-800)",
+        },
+        surface: {
+          DEFAULT: "var(--surface)",
+          2: "var(--surface-2)",
+          app: "var(--app-bg)",
+        },
+        ink: {
+          DEFAULT: "var(--text)",
+          muted: "var(--text-muted)",
+          disabled: "var(--text-disabled)",
+        },
+        line: "var(--border)",
+        "line-strong": "var(--border-strong)",
+        success: { DEFAULT: "var(--success)", bg: "var(--success-bg)" },
+        warning: { DEFAULT: "var(--warning)", bg: "var(--warning-bg)" },
+        danger: { DEFAULT: "var(--danger)", bg: "var(--danger-bg)" },
+        info: { DEFAULT: "var(--info)", bg: "var(--info-bg)" },
+        gold: "var(--gold)",
+        silver: "var(--silver)",
+        bronze: "var(--bronze)",
+      },
+      fontFamily: {
+        sans: ["Segoe UI", "system-ui", "-apple-system", "Inter", "Roboto", "Arial", "sans-serif"],
+      },
+      borderRadius: {
+        sm: "8px",
+        md: "12px",
+        lg: "16px",
+        xl: "24px",
+        pill: "999px",
+      },
+      boxShadow: {
+        e2: "0 1px 2px rgba(0,0,0,.10), 0 0 1px rgba(0,0,0,.06)",
+        e4: "0 2px 6px rgba(0,0,0,.12), 0 0 2px rgba(0,0,0,.06)",
+        e8: "0 4px 12px rgba(0,0,0,.14), 0 0 2px rgba(0,0,0,.08)",
+        e16: "0 8px 24px rgba(0,0,0,.18)",
+      },
+    },
+  },
+  plugins: [],
+};
+
+export default config;

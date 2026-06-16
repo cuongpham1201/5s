@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>5S Daily — Dashboard</title>
+<link rel="stylesheet" href="ds.css">
+</head>
+<body>
+<div class="proto-tag">Dashboard.html · Admin · 1440×900 / responsive</div>
+<div class="admin">
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sb">
+    <div class="brand">
+      <div class="logo">5S</div>
+      <div><div class="brand-name">5S Daily</div><div class="brand-sub">Ban Môi trường đời sống</div></div>
+    </div>
+    <div class="nav-section">Tổng quan</div>
+    <a class="nav-item is-active" href="Dashboard.html"><span class="ni-ico">📊</span> Dashboard</a>
+    <a class="nav-item" href="Pending.html"><span class="ni-ico">⚠️</span> Chưa gửi</a>
+    <a class="nav-item" href="Calendar.html"><span class="ni-ico">🗓️</span> Lịch tổng hợp</a>
+    <div class="nav-section">Phân tích</div>
+    <a class="nav-item" href="Ranking.html"><span class="ni-ico">🏆</span> Xếp hạng</a>
+    <a class="nav-item" href="Gallery.html"><span class="ni-ico">🖼️</span> Thư viện ảnh</a>
+    <a class="nav-item" href="#"><span class="ni-ico">⬇️</span> Xuất báo cáo</a>
+    <div class="user-pill">
+      <div class="avatar sm">MT</div>
+      <div class="grow"><div class="caption strong">Trần Thị B</div><div class="caption muted">Quản trị viên</div></div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <div class="admin-main">
+    <header class="topbar">
+      <button class="hamburger" onclick="document.getElementById('sb').classList.toggle('open')">☰</button>
+      <div class="grow"><div class="h2">Dashboard</div><div class="caption muted">Hôm nay · Thứ Hai, 15/06/2026</div></div>
+      <span class="select-pill">📅 Hôm nay ▾</span>
+      <div class="avatar">MT</div>
+    </header>
+
+    <div class="content">
+      <!-- KPI cards -->
+      <div class="kpi-grid">
+        <div class="kpi">
+          <div class="kpi-top"><span class="kpi-label">Expected Units</span><span class="kpi-ico ico-blue">🏭</span></div>
+          <div class="kpi-value num">23</div>
+          <div class="kpi-delta muted">Tổng đơn vị tham gia</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-top"><span class="kpi-label">Submitted Units</span><span class="kpi-ico ico-green">✅</span></div>
+          <div class="kpi-value num">18</div>
+          <div class="kpi-delta up">▲ 2 so với hôm qua</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-top"><span class="kpi-label">Missing Units</span><span class="kpi-ico ico-red">⚠️</span></div>
+          <div class="kpi-value num">5</div>
+          <div class="kpi-delta down">▼ cần nhắc nhở</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-top"><span class="kpi-label">Completion %</span><span class="kpi-ico ico-amber">📈</span></div>
+          <div class="kpi-value num">78%</div>
+          <div class="kpi-delta up">▲ 5% so với hôm qua</div>
+        </div>
+      </div>
+
+      <!-- Chart + pending -->
+      <div style="display:grid;grid-template-columns:1.6fr 1fr;gap:18px;margin-top:18px" class="dash-split">
+        <div class="panel">
+          <div class="panel-head">
+            <span class="h3">Tỷ lệ hoàn thành</span>
+            <div class="segmented" style="width:230px">
+              <button>Ngày</button><button class="is-active">Tuần</button><button>Tháng</button>
+            </div>
+          </div>
+          <div class="panel-body chart-wrap">
+            <div class="chart">
+              <div class="bar" style="height:62%"><b>62%</b><span>T2</span></div>
+              <div class="bar" style="height:71%"><b>71%</b><span>T3</span></div>
+              <div class="bar" style="height:68%"><b>68%</b><span>T4</span></div>
+              <div class="bar" style="height:83%"><b>83%</b><span>T5</span></div>
+              <div class="bar" style="height:90%"><b>90%</b><span>T6</span></div>
+              <div class="bar" style="height:74%"><b>74%</b><span>T7</span></div>
+              <div class="bar" style="height:78%;background:linear-gradient(to top,#0E700E,#5cc25c)"><b>78%</b><span>CN</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><span class="h3">Chưa gửi hôm nay</span><span class="badge badge-danger">5</span></div>
+          <div>
+            <div class="list-item"><span class="li-dot warn"></span><div class="grow"><div class="strong">PMKT</div><div class="caption muted">Lần cuối: 14/06</div></div><a class="btn btn-secondary" style="min-height:36px;padding:6px 14px" href="Pending.html">Nhắc</a></div>
+            <div class="list-item"><span class="li-dot warn"></span><div class="grow"><div class="strong">PXHL</div><div class="caption muted">Lần cuối: 13/06</div></div><a class="btn btn-secondary" style="min-height:36px;padding:6px 14px" href="Pending.html">Nhắc</a></div>
+            <div class="list-item"><span class="li-dot warn"></span><div class="grow"><div class="strong">KCS</div><div class="caption muted">Lần cuối: 15/06 (sáng)</div></div><a class="btn btn-secondary" style="min-height:36px;padding:6px 14px" href="Pending.html">Nhắc</a></div>
+            <div style="padding:14px 20px"><a class="btn btn-ghost btn-block" href="Pending.html">Xem tất cả →</a></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<style>@media(max-width:1100px){.dash-split{grid-template-columns:1fr!important}}</style>
+</body>
+</html>

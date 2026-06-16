@@ -1,0 +1,133 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   5S Daily — design tokens ported from design/ds.css (Fluent 2)
+   Tailwind references these via tailwind.config.ts.
+   ============================================================ */
+:root {
+  /* Brand / Primary */
+  --primary-600: #0F6CBD;
+  --primary-700: #115EA3;
+  --primary-800: #0C3B5E;
+  --primary-100: #EBF3FC;
+  --primary-50: #F6FAFE;
+
+  /* Neutral */
+  --bg: #FFFFFF;
+  --app-bg: #F0F2F5;
+  --surface: #F5F5F5;
+  --surface-2: #FAFAFA;
+  --border: #E1E1E1;
+  --border-strong: #C7C7C7;
+  --text: #242424;
+  --text-muted: #616161;
+  --text-disabled: #BDBDBD;
+
+  /* Semantic */
+  --success: #0E700E;
+  --success-bg: #E7F4E7;
+  --warning: #BC4B09;
+  --warning-bg: #FFF4CE;
+  --danger: #B10E1C;
+  --danger-bg: #FDE7E9;
+  --info: #0F6CBD;
+  --info-bg: #EBF3FC;
+
+  --gold: #C99700;
+  --silver: #8A8886;
+  --bronze: #A55A2A;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+}
+
+body {
+  background: var(--app-bg);
+  color: var(--text);
+  font-family: "Segoe UI", system-ui, -apple-system, "Inter", Roboto, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---- Component layer (ported prototype primitives) ---- */
+@layer components {
+  /* Phone frame for employee screens */
+  .phone-stage {
+    @apply min-h-screen flex items-center justify-center p-6;
+    background: radial-gradient(1200px 600px at 50% -10%, #e6ecf5, transparent), var(--app-bg);
+  }
+  .phone {
+    @apply relative flex flex-col overflow-hidden bg-white;
+    width: 390px;
+    height: 844px;
+    border-radius: 44px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .18), 0 0 0 11px #1b1b1b, 0 0 0 13px #2c2c2c;
+  }
+  .statusbar {
+    @apply flex items-center justify-between px-6 text-[13px] font-semibold;
+    height: 44px;
+    flex: none;
+  }
+  .screen {
+    @apply flex-1 min-h-0 overflow-y-auto flex flex-col;
+  }
+
+  /* Buttons */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 font-semibold rounded-md transition-colors;
+    min-height: 48px;
+    padding: 12px 20px;
+    font-size: 16px;
+    line-height: 20px;
+  }
+  .btn-primary { @apply text-white; background: var(--primary-600); }
+  .btn-primary:hover { background: var(--primary-700); }
+  .btn-secondary { @apply text-ink; background: var(--surface); box-shadow: inset 0 0 0 1px var(--border-strong); }
+  .btn-ghost { background: transparent; color: var(--primary-600); }
+  .btn-ghost:hover { background: var(--primary-100); }
+  .btn-lg { min-height: 56px; font-size: 17px; border-radius: 16px; }
+  .btn-block { @apply w-full; }
+  .btn[disabled] { background: var(--surface); color: var(--text-disabled); pointer-events: none; }
+
+  /* Cards */
+  .card { @apply bg-white rounded-lg p-4 shadow-e4; }
+  .card-flat { @apply bg-white rounded-lg; border: 1px solid var(--border); }
+
+  /* Badges */
+  .badge { @apply inline-flex items-center gap-1.5 text-xs font-semibold rounded-pill; padding: 4px 10px; }
+  .badge-success { background: var(--success-bg); color: var(--success); }
+  .badge-warning { background: var(--warning-bg); color: var(--warning); }
+  .badge-danger { background: var(--danger-bg); color: var(--danger); }
+  .badge-info { background: var(--info-bg); color: var(--info); }
+  .badge-neutral { background: var(--surface); color: var(--text-muted); }
+
+  /* Bottom nav */
+  .bottom-nav {
+    @apply flex bg-white;
+    flex: none;
+    border-top: 1px solid var(--border);
+    padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+  }
+
+  /* Admin sidebar */
+  .nav-item { @apply flex items-center gap-3 rounded-md mb-0.5 text-sm font-semibold text-ink; padding: 11px 12px; }
+  .nav-item:hover { background: var(--surface); }
+  .nav-item.is-active { background: var(--primary-100); color: var(--primary-700); }
+
+  /* Segmented control */
+  .segmented { @apply flex rounded-md p-1 gap-1; background: var(--surface); }
+  .segmented button { @apply flex-1 rounded-[9px] text-sm font-semibold; padding: 9px 8px; color: var(--text-muted); }
+  .segmented button.is-active { @apply bg-white shadow-e2; color: var(--primary-700); }
+
+  /* Heatmap cells */
+  .cell { @apply inline-grid place-items-center font-bold text-[13px]; width: 34px; height: 34px; border-radius: 8px; }
+  .cell.ok { background: var(--success); color: #fff; }
+  .cell.miss { background: var(--danger); color: #fff; }
+  .cell.partial { background: var(--warning); color: #fff; }
+  .cell.future { background: var(--surface); color: var(--text-disabled); }
+  .cell.weekend { background: #eef0f3; color: var(--text-disabled); }
+}

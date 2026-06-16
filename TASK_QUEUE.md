@@ -1,0 +1,50 @@
+# 5S Daily — Task Queue (for Autonomous Worker)
+
+> Hàng đợi công việc có thứ tự & phụ thuộc, để một worker tự động (hoặc người) thực thi tuần tự.
+> Trạng thái: `TODO` · `DOING` · `DONE` · `BLOCKED`. Phase 0 đã DONE.
+
+---
+
+## Phase 0 — Architecture (DONE)
+
+| ID | Task | Status | Output |
+|---|---|---|---|
+| P0-1 | Business analysis (roles, workflows, KPI) | DONE | ARCHITECTURE.md §1 |
+| P0-2 | High-level architecture & deployment | DONE | ARCHITECTURE.md §2 |
+| P0-3 | SharePoint storage design | DONE | SHAREPOINT_SCHEMA.md |
+| P0-4 | Metadata schema | DONE | DATA_MODEL.md §2 |
+| P0-5 | Dashboard data model & formulas | DONE | DATA_MODEL.md §3 |
+| P0-6 | Reporting model | DONE | DATA_MODEL.md §4 |
+| P0-7 | Security model & RBAC | DONE | SECURITY_MODEL.md |
+| P0-8 | Watermark / Upload / Offline design | DONE | ARCHITECTURE.md §3–5 |
+| P0-9 | Notification model | DONE | ARCHITECTURE.md §6 |
+| P0-10 | Anti-fraud design | DONE | RISKS_AND_DECISIONS.md §3 |
+| P0-11 | Roadmap | DONE | ROADMAP.md |
+| P0-12 | Risks/Decisions/Assumptions/Open Q | DONE | RISKS_AND_DECISIONS.md |
+
+---
+
+## Phase 1A — Auth · PWA · Camera · UI Port (DONE)
+
+| ID | Task | Depends | Status |
+|---|---|---|---|
+| P1-1 | Init Next.js 14 + TS + Tailwind, cấu trúc `src/` | — | DONE |
+| P1-2 | Cấu hình Auth.js (NextAuth v5) + Entra ID provider (+ dev mock) | P1-1 | DONE |
+| P1-3 | Route guard middleware + session/role/department trên `/me` | P1-2 | DONE |
+| P1-4 | PWA: manifest + service worker + offline page + install prompt + icons | P1-1 | DONE |
+| P1-5 | Port prototype → React: Home/Capture/Preview/Success/History + Admin (Dashboard/Pending/Ranking/Gallery/Calendar) | P1-1 | DONE |
+| P1-6 | Camera thật (`getUserMedia`, flip trước/sau) | P1-5 | DONE |
+| P1-7 | Quality gate: tsc + lint + build PASS; smoke test routes | P1-1..6 | DONE |
+
+> **Lưu ý:** P1-3 dùng session (`auth()` + `useSession`) thay cho `/api/me` riêng — phù hợp Phase 1A (chưa Graph). Verify PM2 + Cloudflare Tunnel (P1-7 gốc) chuyển sang Phase 1B vì cần môi trường thật.
+
+## Phase 1B+ (TODO — chờ phê duyệt)
+SharePoint thật, Graph, watermark ghép ảnh, upload + offline queue, dashboard data thật, Excel, notifications. Xem ROADMAP Phase 2–6. Không mở rộng task queue quá xa để tránh lãng phí.
+
+---
+
+## Quy ước thực thi
+- Worker chỉ làm task `TODO` có **mọi dependency = DONE**.
+- Trước khi bắt đầu một phase code, **đọc AGENT_RULES.md và STOP_CONDITIONS.md**.
+- Mỗi task hoàn thành: cập nhật status + ghi output path tại đây.
+- **Phase 0 KHÔNG chuyển sang Phase 1 nếu chưa có phê duyệt của con người** (xem STOP_CONDITIONS).

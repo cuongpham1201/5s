@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>5S Daily — Thư viện ảnh</title>
+<link rel="stylesheet" href="ds.css">
+</head>
+<body>
+<div class="proto-tag">Gallery.html · Admin · 1440×900 / responsive</div>
+<div class="admin">
+  <aside class="sidebar" id="sb">
+    <div class="brand">
+      <div class="logo">5S</div>
+      <div><div class="brand-name">5S Daily</div><div class="brand-sub">Ban Môi trường đời sống</div></div>
+    </div>
+    <div class="nav-section">Tổng quan</div>
+    <a class="nav-item" href="Dashboard.html"><span class="ni-ico">📊</span> Dashboard</a>
+    <a class="nav-item" href="Pending.html"><span class="ni-ico">⚠️</span> Chưa gửi</a>
+    <a class="nav-item" href="Calendar.html"><span class="ni-ico">🗓️</span> Lịch tổng hợp</a>
+    <div class="nav-section">Phân tích</div>
+    <a class="nav-item" href="Ranking.html"><span class="ni-ico">🏆</span> Xếp hạng</a>
+    <a class="nav-item is-active" href="Gallery.html"><span class="ni-ico">🖼️</span> Thư viện ảnh</a>
+    <a class="nav-item" href="#"><span class="ni-ico">⬇️</span> Xuất báo cáo</a>
+    <div class="user-pill"><div class="avatar sm">MT</div><div class="grow"><div class="caption strong">Trần Thị B</div><div class="caption muted">Quản trị viên</div></div></div>
+  </aside>
+
+  <div class="admin-main">
+    <header class="topbar">
+      <button class="hamburger" onclick="document.getElementById('sb').classList.toggle('open')">☰</button>
+      <div class="grow"><div class="h2">Thư viện ảnh</div><div class="caption muted">1.248 ảnh · tháng 06/2026</div></div>
+    </header>
+
+    <div class="content">
+      <!-- Filter bar -->
+      <div class="filter-bar">
+        <span class="select-pill">🏭 Department: PMKT ▾</span>
+        <span class="select-pill">📍 Area: Tất cả ▾</span>
+        <span class="select-pill">📅 Date: 15/06/2026 ▾</span>
+        <span class="grow"></span>
+        <button class="btn btn-secondary" style="min-height:40px">⬇️ Tải về</button>
+      </div>
+
+      <!-- Grid -->
+      <div class="gallery-grid">
+        <div class="g-item" onclick="document.getElementById('lb').style.display='grid'"><span class="g-wm">✓ 5S</span><div class="g-meta">Văn phòng · 17:20</div></div>
+        <div class="g-item"><span class="g-wm">✓ 5S</span><div class="g-meta">Phòng họp · 17:05</div></div>
+        <div class="g-item"><span class="g-wm">✓ 5S</span><div class="g-meta">Kho POSM · 16:48</div></div>
+        <div class="g-item"><span class="g-wm">✓ 5S</span><div class="g-meta">Văn phòng · 16:30</div></div>
+        <div class="g-item"><span class="g-wm">✓ 5S</span><div class="g-meta">Phòng họp · 16:12</div></div>
+        <div class="g-item"><span class="g-wm">✓ 5S</span><div class="g-meta">Kho POSM · 15:50</div></div>
+        <div class="g-item"><span class="g-wm">✓ 5S</span><div class="g-meta">Văn phòng · 15:33</div></div>
+        <div class="g-item"><span class="g-wm">✓ 5S</span><div class="g-meta">Phòng họp · 15:10</div></div>
+        <div class="g-item"><span class="g-wm">✓ 5S</span><div class="g-meta">Kho POSM · 14:55</div></div>
+        <div class="g-item"><span class="g-wm">✓ 5S</span><div class="g-meta">Văn phòng · 14:40</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Lightbox mock (click first photo to open) -->
+<div class="lightbox" id="lb" style="display:none">
+  <div class="lb-card">
+    <div class="lb-photo">
+      <div class="watermark">
+        <div class="wm-strong">17:20 | 15/06/2026</div>
+        <div>Thứ Hai · PMKT · Văn phòng</div>
+        <div>Nguyễn Văn A · GPS 20.9512, 107.0834</div>
+        <div class="wm-verified">✓ 5S Verified</div>
+      </div>
+      <button class="cam-icon-btn" style="position:absolute;top:14px;right:14px" onclick="document.getElementById('lb').style.display='none'">✕</button>
+    </div>
+    <div class="lb-info">
+      <div class="h2">Chi tiết ảnh</div>
+      <div class="card-flat mt-4" style="padding:4px 16px">
+        <div class="info-row"><span class="muted">Department</span><span class="strong">PMKT</span></div>
+        <div class="info-row"><span class="muted">Area</span><span class="strong">Văn phòng</span></div>
+        <div class="info-row"><span class="muted">Reporter</span><span class="strong">Nguyễn Văn A</span></div>
+        <div class="info-row"><span class="muted">PhotoTime</span><span class="strong">17:20 · 15/06/2026</span></div>
+        <div class="info-row"><span class="muted">GPS</span><span class="strong num">20.9512, 107.0834</span></div>
+        <div class="info-row"><span class="muted">Address</span><span class="strong" style="text-align:right">Lê Lợi, Hồng Gai, QN</span></div>
+      </div>
+      <div class="wrap-gap mt-4">
+        <button class="btn btn-secondary grow">⬇️ Tải ảnh</button>
+        <button class="btn btn-primary grow">Xem gốc</button>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
