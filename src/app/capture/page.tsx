@@ -1,16 +1,30 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { areasForDepartment, CURRENT_USER, DEPARTMENTS } from "@/lib/mock-data";
+import { useSessionCapture } from "@/features/capture/session-context";
 
 export default function CapturePage() {
+  const router = useRouter();
+  const { area: sessionArea, photos, setArea } = useSessionCapture();
+
   // Department is READONLY (from M365 account) — never selectable.
   const department = CURRENT_USER.department;
   const deptName = DEPARTMENTS.find((d) => d.code === department)?.name ?? "";
   const areas = areasForDepartment(department);
-  const [selected, setSelected] = useState<string | null>(areas[0]?.id ?? null);
+  const [selected, setSelected] = useState<string | null>(
+    areas.find((a) => a.name === sessionArea)?.id ?? areas[0]?.id ?? null,
+  );
+
+  const openCamera = () => {
+    const areaName = areas.find((a) => a.id === selected)?.name;
+    if (!areaName) return;
+    setArea(areaName);
+    router.push("/camera");
+  };
 
   return (
     <AppShell showNav={false}>
@@ -59,19 +73,29 @@ export default function CapturePage() {
         <div className="mt-6 flex gap-2.5 items-start rounded-lg border border-line p-3.5">
           <span className="text-lg">ℹ️</span>
           <span className="text-[13px] text-ink-muted">
-            Thời gian, vị trí GPS và người chụp sẽ được tự động gắn vào ảnh.
+            Bạn có thể chụp <b>nhiều ảnh</b> trong một lần gửi. Thời gian, GPS, người chụp tự động gắn vào ảnh.
           </span>
         </div>
+
+        {photos.length > 0 && (
+          <Link
+            href="/session"
+            className="mt-4 flex items-center justify-between rounded-md bg-primary-50 border border-primary-100 px-4 py-3 text-[14px] font-semibold text-primary-700"
+          >
+            <span>📸 Lần gửi đang có {photos.length} ảnh</span>
+            <span>Xem →</span>
+          </Link>
+        )}
       </div>
 
       <div className="px-5 py-4 border-t border-line">
-        <Link
-          href="/camera"
-          aria-disabled={!selected}
-          className={`btn btn-primary btn-lg btn-block ${!selected ? "pointer-events-none opacity-50" : ""}`}
+        <button
+          onClick={openCamera}
+          disabled={!selected}
+          className={`btn btn-primary btn-lg btn-block ${!selected ? "opacity-50 pointer-events-none" : ""}`}
         >
           📷 Mở Camera
-        </Link>
+        </button>
       </div>
     </AppShell>
   );

@@ -20,7 +20,7 @@
 ---
 
 ## Phase 1 — Auth · PWA · Camera
-**Trạng thái:** Phase **1A DONE** (scaffold, Auth.js skeleton + dev mock, PWA, UI port, camera). Phase **1B DONE** (Graph foundation `src/lib/graph`, `/api/me`, profile card thật, department mapping, roles/permissions, env + staging docs; login Entra thật wired, chờ App Registration ở staging). Còn lại của Phase 1: verify PM2 + Cloudflare Tunnel với tenant thật (staging).
+**Trạng thái:** Phase **1A DONE** (scaffold, Auth.js skeleton + dev mock, PWA, UI port, camera). Phase **1B DONE** (Graph foundation `src/lib/graph`, `/api/me`, profile card thật, department mapping, roles/permissions, env + staging docs). Phase **1C DONE** (refactor **1 Submission = N Photos**: session store client + route `/session` Session Gallery; data model header–lines `5SSubmissions`+`5SSubmissionPhotos`). Còn lại của Phase 1: verify PM2 + Cloudflare Tunnel với tenant thật (staging).
 **Mục tiêu:** Khung app chạy được, đăng nhập M365, cài PWA, mở camera & chụp (chưa upload thật).
 
 - Next.js + TS + Tailwind scaffold; cấu trúc thư mục (xem ARCHITECTURE).
@@ -37,9 +37,9 @@
 ## Phase 2 — Upload · Watermark · SharePoint
 **Mục tiêu:** Gửi ảnh thật lên SharePoint với metadata; offline queue hoạt động.
 
-- Tạo Document Library + Lists thật theo SHAREPOINT_SCHEMA.
+- Tạo Document Library + Lists thật theo SHAREPOINT_SCHEMA (gồm `5SSubmissionPhotos`).
 - Graph client (App-only, Sites.Selected); ensure-folder-path; upload session.
-- `/api/submissions` (init/upload/commit) idempotent theo SubmissionID.
+- `/api/submissions` (init header → upload N ảnh → ghi N lines → commit) idempotent theo SubmissionID + PhotoID (mô hình 1 submission = N photos của Phase 1C).
 - Offline queue (IndexedDB) + background sync + retry/backoff.
 - Xử lý lỗi GPS/mạng/timeout/partial theo ARCHITECTURE §4.
 - History cá nhân/đơn vị từ dữ liệu thật.

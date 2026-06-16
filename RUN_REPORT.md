@@ -273,3 +273,46 @@ Xem cuối báo cáo (in sau commit local). **Không push, không deploy.**
 1. Render lỗi: ❌ không · 2. Responsive 390×844: phone-frame + bottom nav OK (CSS) · 3. Desktop: AdminShell grid + sidebar collapse (md breakpoint) OK · 4. Navigation: tất cả link 200 · 5. Login flow: dev mock 302 + session OK · 6. Camera permission: cần thiết bị thật (getUserMedia có xử lý lỗi quyền) · 7. PWA manifest: `/manifest.webmanifest` 200 · 8. Install prompt: component beforeinstallprompt (cần browser hỗ trợ) · 9/10. Console/Hydration: giới hạn headless (xem mục 5) · 11. Runtime: 0 lỗi.
 
 **Trạng thái:** Phase 1B.5 HOÀN THÀNH — 2 lỗi UI/React đã sửa, gates PASS lại, các route render đúng. **Dừng.**
+
+---
+---
+
+# 5S Daily — Phase 1C Run Report (Multi-photo Submission Refactor)
+
+> Ngày: 2026-06-16 · Branch `feature/phase1-foundation`.
+> Refactor **1 Submission = 1 Photo → 1 Submission = N Photos**. KHÔNG SharePoint/Watermark/Upload/Graph.
+
+## Thay đổi cốt lõi
+Một "lần gửi" (submission) nay **gom N ảnh** rồi nộp một lần. Thêm vùng tích lũy ảnh (**Session Gallery**, route `/session`) giữa Camera và Success. Ảnh giữ ở **client session store** (in-memory + sessionStorage) cho tới khi "Xác nhận nộp" — chưa upload.
+
+## 1. Files created
+- `src/features/capture/session-context.tsx` — store ảnh của lần gửi (add/remove/clear/submit + persist sessionStorage)
+- `src/app/session/page.tsx` — **route mới `/session`** (Session Gallery)
+
+## 2. Files modified
+- **Docs:** `DATA_MODEL.md` (§2 → header `5SSubmissions` + lines `5SSubmissionPhotos`; cập nhật công thức KPI/PhotoCount/CoveredAreas), `ARCHITECTURE.md` (flow multi-photo §1.2 + upload N ảnh §4 + idempotency 2 cấp), `SHAREPOINT_SCHEMA.md` (folder N ảnh theo `PhotoID`, list lines, ERD 1–N), `ROADMAP.md`, `TASK_QUEUE.md`, `RUN_REPORT.md`
+- **Code:** `src/components/providers/Providers.tsx` (bọc `SessionCaptureProvider`), `src/app/capture/page.tsx` (lưu Area vào session), `src/app/camera/page.tsx` (shutter → addPhoto + badge số ảnh), `src/app/preview/page.tsx` (Giữ ảnh → /session, Chụp lại → bỏ ảnh), `src/app/success/page.tsx` ("Đã nộp N ảnh"), `src/app/history/page.tsx` (nhóm theo lần gửi × số ảnh)
+
+## 3. Flow mới (đã implement)
+`Capture` (chọn Area) → `Camera` (chụp) → `Preview` (Giữ ảnh) → **`/session` Session Gallery** → { Chụp thêm → Camera (lặp) | Hoàn tất → Xác nhận nộp } → `Success` ("Đã nộp N ảnh").
+
+## 4. Route `/session` — tính năng
+- Danh sách ảnh đã chụp (thumbnail + #thứ tự + khu vực + giờ)
+- Xoá từng ảnh (✕) · Xoá tất cả
+- Ô "＋ Chụp thêm" (→ Camera) · nút "+ Chụp thêm"
+- Tổng số ảnh (badge) · "Hoàn tất (N)" → sheet "Xác nhận nộp" → Success
+- Empty state khi chưa có ảnh
+
+## 5. Data model (mô hình mới)
+- `5SSubmissions` (header, 1 dòng/lần gửi): + `PhotoCount`, `Areas`, `SubmittedAt`; bỏ field ảnh đơn lẻ.
+- `5SSubmissionPhotos` (lines, 1 dòng/ảnh): `PhotoID`, `SubmissionID`(FK), `Area`, `PhotoTime`, `SeqNo`, GPS, URL, `ContentHash`.
+- Idempotency 2 cấp: `SubmissionID` (header) + `PhotoID` (ảnh).
+
+## 6. Build / Lint / TSC — ✅ PASS
+`npx tsc --noEmit` 0 lỗi · `npm run lint` no warnings · `npm run build` **18 routes** (thêm `/session`).
+
+## 7. Giới hạn / ngoài phạm vi
+- Không upload, không SharePoint, không Graph, không watermark ghép ảnh (đúng yêu cầu 1C).
+- "Ảnh" trong session là bản ghi placeholder (gradient) — chưa có bytes ảnh thật / chưa nén; sẽ nối ở Phase 2.
+
+**Trạng thái:** Phase 1C HOÀN THÀNH — refactor N-photo (UX + data model + state client), gates PASS, route `/session` hoạt động. **Dừng.**

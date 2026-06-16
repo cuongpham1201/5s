@@ -54,8 +54,21 @@
 
 > **Blocker (documented, không STOP build):** login Microsoft 365 *thật* chỉ kích hoạt khi có App Registration + `AUTH_AZURE_AD_*` (Phase staging). Code đã sẵn sàng; phiên này chạy bằng dev mock.
 
+## Phase 1C — Multi-photo Submission Refactor (DONE)
+
+| ID | Task | Status |
+|---|---|---|
+| P1C-1 | Data model header–lines: `5SSubmissions` + `5SSubmissionPhotos` (DATA_MODEL §2a/2b) | DONE |
+| P1C-2 | Cập nhật ARCHITECTURE (flow multi-photo, upload N ảnh) + SHAREPOINT (folder N ảnh, list lines) | DONE |
+| P1C-3 | Client session store `session-context.tsx` (in-memory + sessionStorage) | DONE |
+| P1C-4 | Route mới `/session` (Session Gallery: list, xoá, chụp thêm, tổng số, xác nhận nộp) | DONE |
+| P1C-5 | Cập nhật UI Capture/Camera/Preview/Success/History theo flow N ảnh | DONE |
+| P1C-6 | Quality gate tsc + lint + build PASS | DONE |
+
+> Không upload / SharePoint / Graph / watermark trong 1C — chỉ UX + data-model + state client.
+
 ## Phase 2+ (TODO — chờ phê duyệt)
-SharePoint thật (Library/List), Graph app-only, watermark ghép ảnh, upload + offline queue, dashboard data thật, Excel, notifications. Xem ROADMAP Phase 2–6.
+SharePoint thật (Library + `5SSubmissions`/`5SSubmissionPhotos`), Graph app-only, watermark ghép ảnh, upload N ảnh/lần gửi + offline queue, dashboard data thật, Excel, notifications. Xem ROADMAP Phase 2–6.
 
 ---
 

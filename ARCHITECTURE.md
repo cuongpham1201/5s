@@ -36,13 +36,16 @@ Mở app (đã đăng nhập M365, session còn hiệu lực)
  → Bấm CHỤP ẢNH
  → Department: readonly (lấy từ M365 profile / mapping)
  → Chọn Area (danh sách động theo Department)
- → Camera (fullscreen) → chụp
- → Preview: xem watermark thật + GPS + địa chỉ
- → Gửi → (watermark + upload + ghi metadata) → Success
- → (tùy chọn) Chụp tiếp khu vực khác
+ → Camera (fullscreen) → chụp 1 ảnh
+ → Preview: xem watermark thật + GPS + địa chỉ → "Giữ ảnh"
+ → Session Gallery: danh sách ảnh đã chụp trong lần gửi này
+     ├─ Chụp thêm → quay lại Camera (lặp, tích lũy N ảnh)
+     └─ Hoàn tất → Xác nhận nộp → (watermark + upload N ảnh + ghi metadata) → Success
 ```
 
-Mục tiêu thời gian: **< 30 giây** cho 1 lần gửi thành công ở điều kiện mạng bình thường.
+> **Mô hình 1 Submission = N Photos (Phase 1C):** một "lần gửi" gom nhiều ảnh (nhiều khu vực/góc) rồi nộp một lần. UI thêm route `/session` (Session Gallery) làm vùng tích lũy ảnh trước khi nộp. Trước khi nộp, ảnh giữ ở **client session store** (in-memory + sessionStorage); chưa upload (Phase 2).
+
+Mục tiêu thời gian: **< 30 giây** cho lần gửi tối thiểu (1 ảnh); chụp thêm là tùy chọn, không bắt buộc.
 
 ### 1.3 Admin Workflow (Environment Team)
 
@@ -181,30 +184,30 @@ GPS: 20.9512, 107.0834
 ## 4. Upload Flow (§6) — Sequence
 
 ```
-[User] bấm "Gửi" trên Preview
+[User] tích lũy N ảnh trong Session Gallery → bấm "Xác nhận nộp"
    │
    ▼
-[1] Validate client: có ảnh? có Area? có thời gian? (GPS optional — xem dưới)
+[1] Validate client: có ≥1 ảnh? mỗi ảnh có Area + thời gian? (GPS optional — xem dưới)
    │
    ▼
-[2] Watermark (Canvas) → tạo watermarked blob   (đã làm sẵn ở bước Preview để WYSIWYG)
+[2] Với MỖI ảnh: Watermark (Canvas) → watermarked blob (đã làm sẵn từ Preview để WYSIWYG)
    │
    ▼
-[3] Sinh SubmissionID (client UUID/ULID) + đóng gói payload + 2 blob
+[3] Sinh SubmissionID (header) + PhotoID cho từng ảnh (client ULID) + đóng gói payload + 2 blob/ảnh
    │
    ├── (Online) ─────────────────────────────────────────────┐
    │                                                          ▼
-   │   [4a] POST /api/submissions/init → server trả upload session
-   │   [4b] PUT original.jpg → SharePoint Doc Library
-   │   [4c] PUT watermarked.jpg → SharePoint Doc Library
-   │   [4d] POST metadata → server tạo item trong 5SSubmissions List
-   │   [4e] Server trả 201 + submission record
+   │   [4a] POST /api/submissions/init → tạo header 5SSubmissions + upload session
+   │   [4b] LẶP cho từng ảnh: PUT original.jpg + watermarked.jpg → Doc Library
+   │   [4c] LẶP cho từng ảnh: POST line → 5SSubmissionPhotos (kèm SubmissionID)
+   │   [4d] PATCH header: PhotoCount, Areas, Status='complete'
+   │   [4e] Server trả 201 + submission record (header + N lines)
    │                                                          │
-   └── (Offline) ─► [4'] Đẩy vào IndexedDB queue (status=PENDING)
-                     Service Worker Background Sync sẽ thử lại
+   └── (Offline) ─► [4'] Đẩy CẢ lần gửi (header + N ảnh) vào IndexedDB queue (PENDING)
+                     Service Worker Background Sync thử lại
                                                               │
    ▼                                                          ▼
-[5] UI → Success screen (online: confirmed; offline: "đã lưu, sẽ đồng bộ")
+[5] UI → Success ("Đã nộp N ảnh"); offline: "đã lưu, sẽ đồng bộ"
    │
    ▼
 [6] Dashboard cập nhật (server invalidate cache KPI cho Department+ngày)
@@ -217,14 +220,14 @@ GPS: 20.9512, 107.0834
 | **Lỗi GPS** (timeout > 5s / từ chối quyền / trong nhà xưởng) | KHÔNG chặn gửi. Cho gửi với `lat/lng = null`, `geoStatus = "unavailable"`. Watermark ghi "GPS: không xác định". Dashboard vẫn tính hoàn thành. |
 | **Lỗi mạng khi upload** | Chuyển submission vào **offline queue** (IndexedDB), retry tự động (exponential backoff). UI báo "đang chờ đồng bộ". |
 | **Timeout upload** (mạng chậm) | Mặc định 30s/blob; quá hạn → đưa vào queue, không bắt user chờ. |
-| **Upload ảnh 1 thành công, ảnh 2 fail** | Submission đánh dấu `PARTIAL`; retry chỉ phần thiếu (idempotent theo SubmissionID + tên file). |
+| **Trong 1 lần gửi: ảnh i lên OK, ảnh j fail** | Header `Status='partial'`; retry chỉ các ảnh/line thiếu (idempotent theo PhotoID + tên file). Khi đủ N → `complete`. |
 | **Metadata fail sau khi ảnh đã lên** | Có file mồ côi → job dọn dẹp định kỳ đối soát Doc Library vs List (xem STOP_CONDITIONS / future). Retry tạo metadata bằng SubmissionID (chống trùng). |
 | **Token hết hạn giữa chừng** | Auth.js silent refresh; nếu fail → giữ submission ở queue, yêu cầu đăng nhập lại, không mất ảnh. |
 | **Ảnh quá lớn** | Nén client trước khi vào flow (resize + quality). |
 
 ### 4.2 Idempotency
 
-`SubmissionID` sinh ở client là khóa idempotent xuyên suốt: tên file (`{SubmissionID}_original.jpg`), item List (cột `SubmissionID` unique-indexed). Retry không tạo bản ghi trùng.
+Hai cấp khóa idempotent sinh ở client: `SubmissionID` (header) + `PhotoID` (mỗi ảnh). Tên file theo `PhotoID` (`{PhotoID}_original.jpg` / `_watermarked.jpg`), line list dùng `PhotoID` unique-indexed, header dùng `SubmissionID` unique-indexed. Retry ở bất kỳ cấp nào không tạo bản ghi trùng.
 
 ---
 

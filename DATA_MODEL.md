@@ -12,43 +12,64 @@
 
 ---
 
-## 2. Metadata Schema — `5SSubmissions`
+## 2. Metadata Schema — mô hình **1 Submission = N Photos** (Phase 1C)
+
+> **Thay đổi quan trọng (Phase 1C):** trước đây 1 submission = 1 ảnh. Nay **1 lần gửi (submission) chứa N ảnh**. Model chuẩn hóa thành **header–lines**: bảng header `5SSubmissions` (1 dòng/lần gửi) + bảng lines `5SSubmissionPhotos` (1 dòng/ảnh), nối bằng `SubmissionID`. Lý do: người dùng chụp nhiều khu vực/góc trong 1 phiên rồi nộp một lần; tách lines giúp đếm ảnh, lọc theo khu vực, và anti-fraud theo từng ảnh.
+
+### 2a. `5SSubmissions` (HEADER — 1 dòng / lần gửi)
 
 | # | Field | Type | Required | Indexed | Searchable | Mô tả |
 |---|-------|------|:---:|:---:|:---:|-------|
 | 1 | **SubmissionID** | Text (ULID) | ✅ | ✅ (unique) | ✅ | Khóa nghiệp vụ, idempotency |
 | 2 | **Department** | Lookup/Text | ✅ | ✅ | ✅ | Mã đơn vị (PMKT...) — readonly từ user |
-| 3 | **Area** | Text | ✅ | ➖ | ✅ | Khu vực chụp |
-| 4 | **Reporter** | Text | ✅ | ➖ | ✅ | Tên người chụp (display) |
-| 5 | **ReporterEmail** | Text | ✅ | ✅ | ✅ | Định danh user M365 |
-| 6 | **PhotoTime** | DateTime | ✅ | ✅ | ➖ | Thời điểm chụp (client) |
-| 7 | **SubmissionDate** | Date | ✅ | ✅ | ➖ | Ngày (theo giờ VN) — **cột tính KPI chính** |
-| 8 | **Latitude** | Number | ⬜ | ➖ | ➖ | Có thể null nếu GPS lỗi |
-| 9 | **Longitude** | Number | ⬜ | ➖ | ➖ | Có thể null |
+| 3 | **Reporter** | Text | ✅ | ➖ | ✅ | Tên người chụp (display) |
+| 4 | **ReporterEmail** | Text | ✅ | ✅ | ✅ | Định danh user M365 |
+| 5 | **SubmittedAt** | DateTime | ✅ | ✅ | ➖ | Thời điểm bấm "Xác nhận nộp" (client) |
+| 6 | **SubmissionDate** | Date | ✅ | ✅ | ➖ | Ngày (giờ VN) — **cột tính KPI chính** |
+| 7 | **PhotoCount** | Number | ✅ | ➖ | ➖ | Số ảnh trong lần gửi (= COUNT lines) |
+| 8 | **Areas** | Text | ⬜ | ➖ | ✅ | Danh sách khu vực phủ trong lần gửi (denormalized, tiện hiển thị) |
+| 9 | **Source** | Choice | ✅ | ➖ | ➖ | `online` / `offline-sync` |
+| 10 | **Status** | Choice | ✅ | ✅ | ➖ | `complete` / `partial` / `flagged` |
+| 11 | **AppVersion** | Text | ⬜ | ➖ | ➖ | Phiên bản PWA |
+| 12 | **CreatedAt** | DateTime | ✅ | ✅ | ➖ | Server timestamp khi ghi header |
+| 13 | **CreatedBy** | Person | auto | ➖ | ✅ | SharePoint system field |
+
+### 2b. `5SSubmissionPhotos` (LINES — 1 dòng / ảnh)
+
+| # | Field | Type | Required | Indexed | Searchable | Mô tả |
+|---|-------|------|:---:|:---:|:---:|-------|
+| 1 | **PhotoID** | Text (ULID) | ✅ | ✅ (unique) | ➖ | Khóa ảnh, idempotency từng ảnh |
+| 2 | **SubmissionID** | Lookup → 5SSubmissions | ✅ | ✅ | ➖ | Thuộc lần gửi nào (FK logic) |
+| 3 | **Department** | Text | ✅ | ✅ | ✅ | Sao chép từ header (tiện query/threshold) |
+| 4 | **Area** | Text | ✅ | ✅ | ✅ | Khu vực của **ảnh này** (mỗi ảnh có thể khác khu vực) |
+| 5 | **SubmissionDate** | Date | ✅ | ✅ | ➖ | Sao chép từ header (filter KPI) |
+| 6 | **PhotoTime** | DateTime | ✅ | ✅ | ➖ | Thời điểm chụp ảnh (client) |
+| 7 | **SeqNo** | Number | ✅ | ➖ | ➖ | Thứ tự ảnh trong lần gửi (1..N) |
+| 8 | **Latitude** | Number | ⬜ | ➖ | ➖ | null nếu GPS lỗi |
+| 9 | **Longitude** | Number | ⬜ | ➖ | ➖ | null nếu GPS lỗi |
 | 10 | **Address** | Text | ⬜ | ➖ | ✅ | Reverse-geocode; null nếu offline |
 | 11 | **GeoStatus** | Choice | ✅ | ➖ | ➖ | `ok` / `unavailable` / `denied` |
 | 12 | **OriginalPhotoUrl** | Text/URL | ✅ | ➖ | ➖ | Đường dẫn original.jpg |
 | 13 | **WatermarkedPhotoUrl** | Text/URL | ✅ | ➖ | ➖ | Đường dẫn watermarked.jpg |
-| 14 | **DeviceInfo** | Text | ⬜ | ➖ | ➖ | UA/model (hỗ trợ debug & fraud) |
-| 15 | **AppVersion** | Text | ⬜ | ➖ | ➖ | Phiên bản PWA |
-| 16 | **Source** | Choice | ✅ | ➖ | ➖ | `online` / `offline-sync` |
-| 17 | **Status** | Choice | ✅ | ✅ | ➖ | `complete` / `partial` / `flagged` |
-| 18 | **ContentHash** | Text | ⬜ | ✅ | ➖ | SHA-256 ảnh gốc — chống ảnh trùng (anti-fraud) |
-| 19 | **CreatedAt** | DateTime | ✅ | ✅ | ➖ | Server timestamp khi ghi item |
-| 20 | **CreatedBy** | Person | auto | ➖ | ✅ | SharePoint system field |
+| 14 | **ContentHash** | Text | ⬜ | ✅ | ➖ | SHA-256 ảnh gốc — chống ảnh trùng (anti-fraud) |
+| 15 | **DeviceInfo** | Text | ⬜ | ➖ | ➖ | UA/model (debug & fraud) |
+| 16 | **CreatedAt** | DateTime | ✅ | ✅ | ➖ | Server timestamp khi ghi line |
 
 ### 2.1 Lưu ý thiết kế
 
-- **`SubmissionDate` tách khỏi `PhotoTime`:** KPI tính theo *ngày*; tách ra cột Date riêng (indexed) để filter nhanh, không phải xử lý datetime từng query. Tính ở server theo giờ VN.
-- **`PhotoTime` (client) vs `CreatedAt` (server):** chênh lệch lớn = tín hiệu ảnh cũ / đồng bộ trễ (anti-fraud + minh bạch offline).
-- **`ContentHash`:** SHA-256 của ảnh gốc, indexed → phát hiện gửi trùng ảnh (xem RISKS anti-fraud). MVP có thể chỉ tính & lưu, chưa chặn.
-- **`GeoStatus`:** tách khỏi lat/lng để phân biệt "0,0 hợp lệ" với "không có GPS".
-- **Không lưu PII thừa:** chỉ tên + email công ty; không số điện thoại/dữ liệu nhạy cảm.
+- **Header–lines, nối bằng `SubmissionID`:** ràng buộc giữ ở tầng app (BFF) — không có FK cứng trong SharePoint. Ghi header trước, rồi N lines; `PhotoCount` đối soát với số lines.
+- **`Area` ở line, không ở header:** mỗi ảnh có thể thuộc khu vực khác nhau trong cùng lần gửi → phục vụ "phủ đủ khu vực" (§3.4) và lọc Gallery theo Area.
+- **Denormalize có chủ đích:** `Department`, `SubmissionDate` copy xuống line để query/threshold trên list lines mà không phải join header.
+- **`SubmissionDate` tách khỏi thời gian:** KPI tính theo *ngày* (giờ VN), cột Date indexed để filter nhanh.
+- **`PhotoTime` (client) vs `CreatedAt` (server):** chênh lệch lớn = tín hiệu ảnh cũ / sync trễ (anti-fraud).
+- **`ContentHash`** ở line: phát hiện ảnh trùng từng tấm. MVP chỉ tính & lưu.
+- **`GeoStatus`** tách khỏi lat/lng để phân biệt "0,0 hợp lệ" với "không có GPS".
 
-### 2.2 Indexing strategy (do giới hạn 5000-view-threshold)
+### 2.2 Indexing strategy (5000-view-threshold)
 
-Cột **indexed bắt buộc**: `SubmissionID`, `Department`, `ReporterEmail`, `PhotoTime`, `SubmissionDate`, `Status`, `ContentHash`, `CreatedAt`.
-→ Mọi query dashboard phải filter trước hết trên `Department` và/hoặc `SubmissionDate`.
+- `5SSubmissions` indexed: `SubmissionID`, `Department`, `ReporterEmail`, `SubmittedAt`, `SubmissionDate`, `Status`, `CreatedAt`.
+- `5SSubmissionPhotos` indexed: `PhotoID`, `SubmissionID`, `Department`, `Area`, `SubmissionDate`, `PhotoTime`, `ContentHash`, `CreatedAt`.
+→ Lines tăng nhanh hơn (N ảnh/lần) nên **bắt buộc** filter theo cột indexed (`Department`/`SubmissionDate`) và cân nhắc archive theo năm sớm hơn.
 
 ---
 
@@ -57,7 +78,7 @@ Cột **indexed bắt buộc**: `SubmissionID`, `Department`, `ReporterEmail`, `
 ### 3.1 Khái niệm nền
 
 - **Expected Units (E):** số đơn vị `IsActive=true` trong `5SDepartments`.
-- **Submitted Units hôm nay:** số đơn vị *distinct* có ≥1 submission với `SubmissionDate = today`.
+- **Submitted Units hôm nay:** số đơn vị *distinct* có ≥1 **lần gửi** (`5SSubmissions`) với `SubmissionDate = today`. (Một lần gửi nay chứa N ảnh — vẫn tính 1 đơn vị "đã gửi".)
 - **Working Day:** ngày tính kỳ vọng. Mặc định loại trừ cuối tuần + ngày lễ (cấu hình trong `5SSettings`). → quan trọng cho mẫu số Completion.
 
 ### 3.2 Today Completion
@@ -90,7 +111,7 @@ OverallCompletion(period) = Σ SubmittedDays(unit) / Σ ExpectedDays(unit)   (tr
 Heatmap có 3 trạng thái (xanh/cam/đỏ). Cần khái niệm "đủ":
 ```
 RequiredAreas(unit)  = COUNT(5SAreas WHERE Department=unit AND IsActive)
-CoveredAreas(unit,d) = COUNT(DISTINCT Area WHERE Department=unit AND SubmissionDate=d)
+CoveredAreas(unit,d) = COUNT(DISTINCT Area in 5SSubmissionPhotos WHERE Department=unit AND SubmissionDate=d)
 
 DayStatus(unit, d):
   - 'ok'      nếu CoveredAreas >= RequiredAreas (hoặc >=1 nếu không cấu hình required)
@@ -114,7 +135,8 @@ PendingToday = [ unit ∈ ExpectedUnits | DayStatus(unit, today) ∈ {miss} ]
 ```
 Rank theo CompletionRate(unit, month) DESC,
   tie-break: PhotoCount(unit, month) DESC, rồi SubmittedDays DESC
-PhotoCount(unit, period) = COUNT(submissions WHERE Department=unit AND date ∈ period AND Status='complete')
+PhotoCount(unit, period) = COUNT(rows in 5SSubmissionPhotos WHERE Department=unit AND date ∈ period)
+                         = Σ PhotoCount(header) cho các lần gửi 'complete' trong kỳ
 ```
 
 ### 3.7 Calendar Heatmap data shape

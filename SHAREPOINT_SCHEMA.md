@@ -25,15 +25,18 @@
 └── 2026/                         ← YYYY
     └── 06/                       ← MM
         └── PMKT/                 ← Department (mã)
-            └── 2026-06-15_{SubmissionID}/   ← 1 thư mục / submission
-                ├── original.jpg
-                └── watermarked.jpg
+            └── 2026-06-15_{SubmissionID}/      ← 1 thư mục / lần gửi (N ảnh)
+                ├── {PhotoID-1}_original.jpg
+                ├── {PhotoID-1}_watermarked.jpg
+                ├── {PhotoID-2}_original.jpg
+                ├── {PhotoID-2}_watermarked.jpg
+                └── ...                          ← N ảnh trong cùng lần gửi
 ```
 
-Quy ước:
-- `SubmissionID` = ULID/UUID sinh ở client (sortable theo thời gian nếu dùng ULID).
-- Thư mục submission gắn ngày để con người đọc được + máy đối soát dễ.
-- Tên file cố định (`original.jpg`, `watermarked.jpg`) → đường dẫn suy ra được từ metadata, giảm phụ thuộc tra cứu.
+Quy ước (cập nhật Phase 1C — **1 submission = N ảnh**):
+- `SubmissionID` = ULID/UUID sinh client; mỗi ảnh có thêm `PhotoID` riêng.
+- **1 thư mục submission chứa N cặp file** `{PhotoID}_original.jpg` + `{PhotoID}_watermarked.jpg`.
+- Tên file theo `PhotoID` → tránh trùng khi nhiều ảnh, đường dẫn suy ra từ metadata line (`5SSubmissionPhotos`).
 
 ### 2.2 Ưu / Nhược cấu trúc YYYY/MM/Department/SubmissionID
 
@@ -66,14 +69,20 @@ Chi phí: gấp ~2 dung lượng & băng thông. Giảm thiểu bằng nén clie
 
 ## 3. SharePoint Lists — phân tích & đề xuất
 
-> Đề xuất 6 list. Mỗi list kèm lý do tồn tại; những thứ gộp được đã gộp.
+> Đề xuất 7 list (Phase 1C tách `5SSubmissionPhotos` khỏi `5SSubmissions`). Mỗi list kèm lý do tồn tại.
 
-### 3.1 `5SSubmissions` (cốt lõi — bắt buộc)
-Mỗi item = 1 lần gửi ảnh của 1 đơn vị cho 1 khu vực tại 1 thời điểm.
-→ Chi tiết cột xem **DATA_MODEL.md §2**.
+### 3.1 `5SSubmissions` (HEADER — cốt lõi, bắt buộc)
+Mỗi item = **1 lần gửi** của 1 đơn vị tại 1 thời điểm, chứa **N ảnh**.
+→ Chi tiết cột xem **DATA_MODEL.md §2a**.
 
-- **Vì sao cần:** nguồn sự thật cho mọi KPI, dashboard, report, lịch sử.
-- **Lưu ý quy mô:** 200 đơn vị × ~3 ảnh/ngày × 30 ngày ≈ 18.000 item/tháng. Vượt 5000-view-threshold → **bắt buộc indexed columns + query có filter theo cột indexed** (Department, SubmissionDate). Cân nhắc archive theo năm.
+- **Vì sao cần:** nguồn sự thật cấp lần-gửi cho KPI "đơn vị đã gửi", lịch sử, report.
+
+### 3.1b `5SSubmissionPhotos` (LINES — cốt lõi, bắt buộc · Phase 1C)
+Mỗi item = **1 ảnh** thuộc một lần gửi (nối bằng `SubmissionID`), kèm Area/PhotoTime/GPS/URL/ContentHash.
+→ Chi tiết cột xem **DATA_MODEL.md §2b**.
+
+- **Vì sao tách:** 1 submission = N ảnh; tách lines cho phép đếm ảnh, lọc Gallery theo Area, anti-fraud từng tấm.
+- **Lưu ý quy mô:** lines tăng nhanh — 200 đơn vị × ~3 ảnh/ngày × 30 ngày ≈ **18.000 line/tháng**. Vượt 5000-view-threshold → **bắt buộc indexed + filter theo `Department`/`SubmissionDate`**; cân nhắc archive theo năm sớm.
 
 ### 3.2 `5SDepartments` (danh mục — bắt buộc)
 Danh sách đơn vị tham gia 5S.
@@ -141,7 +150,8 @@ Ghi nhận hành động nhạy cảm: export báo cáo, xóa ảnh, sửa danh 
 
 | List | Bắt buộc MVP | Vai trò |
 |---|---|---|
-| 5SSubmissions | ✅ | Bản ghi nghiệp vụ chính |
+| 5SSubmissions | ✅ | Header lần gửi (1 dòng/lần gửi, N ảnh) |
+| 5SSubmissionPhotos | ✅ | Lines ảnh (1 dòng/ảnh) — Phase 1C |
 | 5SDepartments | ✅ | Danh mục đơn vị + Expected |
 | 5SAreas | ✅ | Danh mục khu vực động |
 | 5SUserMap | ✅ (khuyến nghị) | Map user → đơn vị/role |
@@ -156,7 +166,8 @@ Ghi nhận hành động nhạy cảm: export báo cáo, xóa ảnh, sửa danh 
 5SDepartments (Code) 1───* 5SAreas (Department lookup)
 5SDepartments (Code) 1───* 5SSubmissions (Department)
 5SDepartments (Code) 1───* 5SUserMap (Department)
-5SSubmissions (SubmissionID) 1───1 [folder trong 5SPhotos: original + watermarked]
+5SSubmissions (SubmissionID) 1───* 5SSubmissionPhotos (SubmissionID)   ← 1 lần gửi : N ảnh
+5SSubmissionPhotos (PhotoID) 1───1 [2 file trong 5SPhotos: {PhotoID}_original + _watermarked]
 5SUserMap (UserEmail) 1───* 5SSubmissions (ReporterEmail)
 ```
 

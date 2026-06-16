@@ -3,13 +3,16 @@
 import { SessionProvider } from "next-auth/react";
 import type { ReactNode } from "react";
 import { PwaRegister } from "@/components/pwa/PwaRegister";
+import { SessionCaptureProvider } from "@/features/capture/session-context";
 
-/** Client providers wrapper (session + PWA service worker registration). */
+/** Client providers wrapper (auth session + capture session + PWA SW). */
 export function Providers({ children }: { children: ReactNode }) {
   return (
     <SessionProvider>
-      <PwaRegister />
-      {children}
+      <SessionCaptureProvider>
+        <PwaRegister />
+        {children}
+      </SessionCaptureProvider>
     </SessionProvider>
   );
 }
