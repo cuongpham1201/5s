@@ -1,6 +1,6 @@
+import Link from "next/link";
 import { auth } from "@/auth";
 import { AppShell } from "@/components/layout/AppShell";
-import { ButtonLink } from "@/components/ui/Button";
 import { Card, InfoRow } from "@/components/ui/Card";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import { CURRENT_USER } from "@/lib/mock-data";
@@ -22,9 +22,13 @@ export default async function HomePage() {
           <div className="text-[18px] font-semibold">Xin chào, {name} 👋</div>
           <div className="text-[13px] text-ink-muted">Thứ Hai · 15/06/2026</div>
         </div>
-        <ButtonLink href="/me" variant="ghost" className="!min-h-[40px] !p-0 !w-10 !rounded-pill bg-surface">
+        <Link
+          href="/me"
+          aria-label="Cài đặt"
+          className="w-10 h-10 rounded-pill grid place-items-center text-xl bg-surface text-ink"
+        >
           ⚙
-        </ButtonLink>
+        </Link>
       </div>
 
       <InstallPrompt />
@@ -59,16 +63,16 @@ export default async function HomePage() {
         </Card>
 
         {/* Big CTA — largest element */}
-        <ButtonLink
+        <Link
           href="/capture"
-          className="!block !p-0 mt-6 w-full rounded-xl text-white text-center shadow-e8 bg-gradient-to-b from-[#1480d4] via-[#0F6CBD] to-[#115EA3]"
+          className="block mt-6 w-full rounded-xl text-white text-center shadow-e8 bg-gradient-to-b from-[#1480d4] via-[#0F6CBD] to-[#115EA3]"
         >
           <span className="flex flex-col items-center justify-center gap-2.5 min-h-[188px]">
             <span className="text-[54px] leading-none">📷</span>
             <span className="text-[22px] font-bold tracking-wide">CHỤP ẢNH</span>
             <span className="text-[13px] opacity-90">Gửi ảnh 5S trong dưới 30 giây</span>
           </span>
-        </ButtonLink>
+        </Link>
 
         <div className="flex items-center justify-between mt-6 mb-2">
           <span className="text-[16px] font-semibold">Gần đây</span>

@@ -34,7 +34,12 @@ export function ButtonLink({
   href,
   ...props
 }: BaseProps & { href: string } & Omit<ComponentProps<typeof Link>, "href" | "className">) {
-  const { children, className = "", ...rest } = props as BaseProps;
+  // Pull variant/size/block out so they are not leaked onto the <a> DOM element.
+  const { children, className = "", variant, size, block, ...rest } = props as BaseProps &
+    Omit<ComponentProps<typeof Link>, "href" | "className">;
+  void variant;
+  void size;
+  void block;
   return (
     <Link href={href} className={`${classes(props)} ${className}`} {...rest}>
       {children}

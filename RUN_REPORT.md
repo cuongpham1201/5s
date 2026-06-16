@@ -239,3 +239,37 @@ Xác nhận: Auth.js **v5** (beta.20) · **MicrosoftEntraID** provider (env-gate
 Xem cuối báo cáo (in sau commit local). **Không push, không deploy.**
 
 **Trạng thái phiên:** Phase 1B HOÀN THÀNH — Graph foundation + `/api/me` + profile card + department mapping + RBAC foundation + staging docs; build/lint/tsc PASS; chưa đụng SharePoint. **Dừng, chờ mở Phase 2 (SharePoint + Upload + Watermark).**
+
+---
+---
+
+# 5S Daily — Phase 1B.5 Run Report (Local UI Review)
+
+> Ngày: 2026-06-16 · Branch `feature/phase1-foundation`. Không thêm feature, không SharePoint/watermark/upload.
+
+## 1. Route đã test (13)
+`/signin` `/offline` `/` `/me` `/capture` `/camera` `/preview` `/history` `/admin` `/admin/pending` `/admin/ranking` `/admin/gallery` `/admin/calendar` (+ `/api/me`).
+
+## 2. Screenshot
+⚠️ **Không thể tự chụp screenshot** — sandbox không có browser engine (Chromium/Playwright/Puppeteer đều không có). Thay bằng **render-verification qua HTTP**: mỗi route trả **200** và HTML chứa đúng marker nội dung (vd `/` có "CHỤP", `/admin` có "Dashboard", `/admin/calendar` có "tổng hợp"...). Screenshot pixel cần chạy thủ công trên trình duyệt (`npm run dev` → mở localhost:3000).
+
+## 3. Lỗi phát hiện
+- **B1 (React warning):** `ButtonLink` rò rỉ prop `variant/size/block` xuống DOM `<a>` → cảnh báo unknown-attribute.
+- **B2 (UI):** CTA Home + nút ⚙ dùng `ButtonLink`(btn-primary) → nền xanh đặc chồng gradient, dễ lệch so với prototype.
+- **FP (false positive):** detector bắt cụm "could not be found" trên mọi trang — thực ra là template not-found mặc định của Next nhúng trong RSC payload, **không phải lỗi**.
+
+## 4. Lỗi đã sửa
+- ✅ B1: tách `variant/size/block` khỏi `...rest` trong `ButtonLink`.
+- ✅ B2: đổi CTA + nút ⚙ ở `/` sang `Link` thuần → gradient render đúng, bỏ nền btn-primary.
+
+## 5. Lỗi còn tồn tại
+- Không có lỗi render/runtime/auth (0 auth error, log server sạch).
+- **Giới hạn kiểm tra:** Console errors / hydration errors **không soi được headless** (chỉ hiện ở browser console). Đã thay bằng static scan: 0 pattern rủi ro (Date/Math.random/window/localStorage chỉ trong hooks), 100% file tương tác có `"use client"` → rủi ro hydration thấp. Cần 1 lần xem mắt thường trên trình duyệt để đóng hẳn mục Console/Hydration/Install-prompt/Camera-permission (các API này cần thiết bị + HTTPS/localhost thật).
+
+## 6. Build / Lint / TSC — ✅ PASS lại sau khi sửa
+`npx tsc --noEmit` 0 lỗi · `npm run lint` no warnings · `npm run build` 17 routes OK.
+
+## Kiểm tra theo checklist (1–11)
+1. Render lỗi: ❌ không · 2. Responsive 390×844: phone-frame + bottom nav OK (CSS) · 3. Desktop: AdminShell grid + sidebar collapse (md breakpoint) OK · 4. Navigation: tất cả link 200 · 5. Login flow: dev mock 302 + session OK · 6. Camera permission: cần thiết bị thật (getUserMedia có xử lý lỗi quyền) · 7. PWA manifest: `/manifest.webmanifest` 200 · 8. Install prompt: component beforeinstallprompt (cần browser hỗ trợ) · 9/10. Console/Hydration: giới hạn headless (xem mục 5) · 11. Runtime: 0 lỗi.
+
+**Trạng thái:** Phase 1B.5 HOÀN THÀNH — 2 lỗi UI/React đã sửa, gates PASS lại, các route render đúng. **Dừng.**
