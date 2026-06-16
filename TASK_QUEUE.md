@@ -38,8 +38,24 @@
 
 > **Lưu ý:** P1-3 dùng session (`auth()` + `useSession`) thay cho `/api/me` riêng — phù hợp Phase 1A (chưa Graph). Verify PM2 + Cloudflare Tunnel (P1-7 gốc) chuyển sang Phase 1B vì cần môi trường thật.
 
-## Phase 1B+ (TODO — chờ phê duyệt)
-SharePoint thật, Graph, watermark ghép ảnh, upload + offline queue, dashboard data thật, Excel, notifications. Xem ROADMAP Phase 2–6. Không mở rộng task queue quá xa để tránh lãng phí.
+## Phase 1B — Microsoft 365 Integration Foundation (DONE)
+
+| ID | Task | Status |
+|---|---|---|
+| P1B-1 | Review auth hiện tại (v5, Entra, jwt, trustHost) | DONE |
+| P1B-2 | `docs/ENVIRONMENT_SETUP.md` (Required/Optional/Future env) | DONE |
+| P1B-3 | Graph foundation `src/lib/graph/` (client, types, user — GET /me) | DONE |
+| P1B-4 | `GET /api/me` (Graph thật khi có token, mock fallback dev) | DONE |
+| P1B-5 | `/me` Profile Card đọc dữ liệu thật + fallback đẹp | DONE |
+| P1B-6 | `src/lib/department-mapping.ts` (Entra dept → mã 5S, config-based) | DONE |
+| P1B-7 | `src/lib/auth/roles.ts` + `permissions.ts` (whitelist + RBAC matrix) | DONE |
+| P1B-8 | Staging readiness: `ecosystem.config.js`, `deployment/*` | DONE |
+| P1B-9 | Quality gate: tsc + lint + build PASS; smoke /api/me | DONE |
+
+> **Blocker (documented, không STOP build):** login Microsoft 365 *thật* chỉ kích hoạt khi có App Registration + `AUTH_AZURE_AD_*` (Phase staging). Code đã sẵn sàng; phiên này chạy bằng dev mock.
+
+## Phase 2+ (TODO — chờ phê duyệt)
+SharePoint thật (Library/List), Graph app-only, watermark ghép ảnh, upload + offline queue, dashboard data thật, Excel, notifications. Xem ROADMAP Phase 2–6.
 
 ---
 

@@ -1,0 +1,78 @@
+# 5S Daily — Environment Setup
+
+> Cấu hình biến môi trường. **KHÔNG commit secret thật** — `.env*` đã gitignore.
+> Copy `.env.example` → `.env.local` và điền giá trị thật khi triển khai.
+
+---
+
+## Required (bắt buộc để login M365 thật)
+
+| Biến | Mô tả | Lấy ở đâu |
+|---|---|---|
+| `AUTH_SECRET` | Khóa mã hóa session/JWT của Auth.js | `npx auth secret` (random 32+ bytes) |
+| `AUTH_AZURE_AD_CLIENT_ID` | Application (client) ID của App Registration | Entra admin center → App registrations |
+| `AUTH_AZURE_AD_CLIENT_SECRET` | Client secret của App Registration | Entra → Certificates & secrets |
+| `AUTH_AZURE_AD_TENANT_ID` | Directory (tenant) ID | Entra → Overview |
+| `GRAPH_CLIENT_ID` | Client ID dùng cho Graph **app-only** (Phase 2 — SharePoint) | Có thể trùng app trên, hoặc app riêng |
+| `GRAPH_CLIENT_SECRET` | Secret cho Graph app-only | Entra → Certificates & secrets |
+| `GRAPH_TENANT_ID` | Tenant ID cho Graph app-only | Entra → Overview |
+
+> **Phase 1B chỉ cần `AUTH_*`** (login + đọc `/me` bằng delegated token, scope `User.Read`).
+> `GRAPH_*` (app-only) là **chuẩn bị cho Phase 2** (đọc/ghi SharePoint), chưa dùng bây giờ.
+
+## Optional
+
+| Biến | Mô tả | Mặc định |
+|---|---|---|
+| `NEXTAUTH_URL` | URL gốc của app (callback OAuth) | `http://localhost:3000` (dev) |
+| `SHAREPOINT_SITE_URL` | URL site SharePoint chứa Library/List 5S | — (Phase 2) |
+| `NEXT_PUBLIC_ALLOW_DEV_LOGIN` | Bật đăng nhập thử (dev mock) khi chưa có Entra | `true` (dev) → đặt `false` ở production |
+
+## Future (thiết kế trước, chưa dùng)
+
+| Biến | Mô tả |
+|---|---|
+| `TEAMS_WEBHOOK_URL` / `TEAMS_*` | Gửi thông báo Teams (Phase 5) |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | Gửi email nhắc nhở (Phase 5) |
+
+---
+
+## App Registration (Entra) — checklist để bật login thật (Phase 1B → staging)
+
+> ⚠️ Các bước này cần **quyền tạo App Registration** trong tenant. Nếu tenant yêu cầu
+> **admin consent** cho scope, hãy dừng và xin phê duyệt — KHÔNG tự cấp.
+
+1. Entra admin center → **App registrations** → New registration.
+2. Redirect URI (Web): `https://<staging-domain>/api/auth/callback/microsoft-entra-id`
+   (dev: `http://localhost:3000/api/auth/callback/microsoft-entra-id`).
+3. **API permissions** → Microsoft Graph → Delegated → `User.Read`, `openid`, `profile`, `email`, `offline_access`.
+   - `User.Read` thường **không cần admin consent**. Nếu tenant cấu hình bắt buộc consent → STOP, xin admin.
+4. **Certificates & secrets** → tạo client secret → copy vào `AUTH_AZURE_AD_CLIENT_SECRET`.
+5. Copy Application ID / Tenant ID vào `.env.local`.
+6. Đặt `NEXT_PUBLIC_ALLOW_DEV_LOGIN=false` ở môi trường thật để ẩn dev login.
+
+## Ví dụ `.env.local` (giá trị giả)
+
+```dotenv
+AUTH_SECRET="<random-32-bytes>"
+NEXTAUTH_URL="http://localhost:3000"
+
+AUTH_AZURE_AD_CLIENT_ID=""
+AUTH_AZURE_AD_CLIENT_SECRET=""
+AUTH_AZURE_AD_TENANT_ID=""
+
+# Phase 2 (SharePoint app-only) — để trống ở Phase 1B
+GRAPH_CLIENT_ID=""
+GRAPH_CLIENT_SECRET=""
+GRAPH_TENANT_ID=""
+
+NEXT_PUBLIC_ALLOW_DEV_LOGIN="true"
+```
+
+## Hành vi theo cấu hình
+
+| Trạng thái env | Hành vi đăng nhập |
+|---|---|
+| `AUTH_AZURE_AD_CLIENT_ID` + `_SECRET` có | Hiện nút **Đăng nhập với Microsoft 365**; `/api/me` đọc Graph thật |
+| Thiếu Entra + `NEXT_PUBLIC_ALLOW_DEV_LOGIN=true` | Chỉ có **Dev mock login**; `/api/me` trả hồ sơ mock từ session |
+| Có cả hai | Hiện cả hai (tiện test) |

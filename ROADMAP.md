@@ -20,7 +20,7 @@
 ---
 
 ## Phase 1 — Auth · PWA · Camera
-**Trạng thái:** Phase **1A DONE** (foundation: scaffold, Auth.js skeleton + dev mock, PWA, UI port, camera thật, gates xanh). Phase **1B TODO** (Entra App thật, `/api/me` qua Graph, verify PM2 + Cloudflare Tunnel).
+**Trạng thái:** Phase **1A DONE** (scaffold, Auth.js skeleton + dev mock, PWA, UI port, camera). Phase **1B DONE** (Graph foundation `src/lib/graph`, `/api/me`, profile card thật, department mapping, roles/permissions, env + staging docs; login Entra thật wired, chờ App Registration ở staging). Còn lại của Phase 1: verify PM2 + Cloudflare Tunnel với tenant thật (staging).
 **Mục tiêu:** Khung app chạy được, đăng nhập M365, cài PWA, mở camera & chụp (chưa upload thật).
 
 - Next.js + TS + Tailwind scaffold; cấu trúc thư mục (xem ARCHITECTURE).

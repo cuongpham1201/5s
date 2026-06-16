@@ -173,3 +173,69 @@ Admin: Dashboard (KPI + chart CSS), Pending, Ranking (podium + bảng), Gallery 
 Xem phần cuối báo cáo (in sau khi commit local). **Không push, không deploy** — đúng giới hạn Phase 1A.
 
 **Trạng thái phiên:** Phase 1A HOÀN THÀNH — build/lint/tsc PASS, login skeleton + PWA + UI port + camera hoạt động, chưa đụng SharePoint. **Dừng, chờ mở Phase 1B.**
+
+---
+---
+
+# 5S Daily — Phase 1B Run Report (Microsoft 365 Integration Foundation)
+
+> Ngày: 2026-06-16 · Branch: `feature/phase1-foundation` · Base: `0ea53da`
+> Phạm vi: login M365 thật (wired) + Graph foundation + `/api/me` + department mapping + RBAC foundation + staging docs. **Chưa** SharePoint/List/Library/watermark/upload/dashboard backend.
+
+## Preflight (BƯỚC 0)
+- Branch `feature/phase1-foundation` · working tree **sạch** (không STOP) · HEAD `0ea53da` (đúng base) · Node v20.20.2 · npm 10.8.2.
+
+## BƯỚC 1 — Auth review
+Xác nhận: Auth.js **v5** (beta.20) · **MicrosoftEntraID** provider (env-gated) + dev Credentials · session **jwt** · **trustHost: true** · pages.signIn `/signin`.
+
+## 1. Files created
+- `docs/ENVIRONMENT_SETUP.md`
+- `src/lib/graph/{graph-client.ts, graph-types.ts, graph-user.ts}`
+- `src/app/api/me/route.ts`
+- `src/lib/department-mapping.ts`
+- `src/lib/auth/{roles.ts, permissions.ts}`
+- `ecosystem.config.js`, `deployment/{DEPLOYMENT.md, STAGING_CHECKLIST.md}`
+
+## 2. Files modified
+- `src/auth.ts` (env naming `AUTH_AZURE_AD_*`, Graph scope `User.Read`, capture access_token vào JWT, derive role + 5S department từ profile)
+- `src/middleware.ts` (giữ nguyên route-guard)
+- `src/app/me/page.tsx` (đọc `/api/me`, hiển thị dữ liệu thật + badge nguồn)
+- `.env.example`, `.env.local` (đổi sang `AUTH_AZURE_AD_*` + `GRAPH_*`)
+- `TASK_QUEUE.md`, `ROADMAP.md`, `RUN_REPORT.md`
+
+## 3. Graph foundation status
+✅ Hoàn thành ở mức foundation: `createGraphClient(accessToken)` (fetch wrapper, no SDK), `getMe()` gọi `GET /me?$select=...`, chuẩn hóa → `MeProfile`. Chỉ user profile, **không** endpoint SharePoint. Access token đọc server-side từ JWT (không lộ ra client).
+
+## 4. Auth status
+✅ Login Microsoft 365 **đã wire đầy đủ** (provider Entra + scope + token capture). Kích hoạt thật cần `AUTH_AZURE_AD_*` (App Registration) — chưa có trong phiên này nên chạy bằng **dev mock**. Không yêu cầu admin consent (scope `User.Read` mức thấp).
+
+## 5. /api/me result
+Đã verify end-to-end qua dev session:
+```json
+{"displayName":"tran thi b","email":"tran.thi.b@biahalong.com","entraDepartment":null,
+ "department":null,"jobTitle":"Ban Môi trường đời sống","officeLocation":null,
+ "employeeId":null,"source":"mock"}
+```
+Đủ field theo spec (displayName/email/department/jobTitle/officeLocation/employeeId), field thiếu = null. Không auth → 307 (middleware guard) + 401 fallback trong route.
+
+## 6. Department mapping status
+✅ `department-mapping.ts`: config object (code/name/aliases) + `mapEntraDepartment()` (khớp code → alias → contains). Mock mapping cho 6 đơn vị. Dùng trong `auth.ts` (jwt) và `graph-user.ts`. Không hardcode trong component. Cập nhật giá trị thật ở Phase 2.
+
+## 7. Build result — ✅ PASS
+`npm run build` → 17 routes (thêm `/api/me`).
+
+## 8. Lint result — ✅ PASS (no warnings/errors).
+
+## 9. TypeScript result — ✅ PASS (0 lỗi).
+> Vòng sửa: lint/build PASS ngay; **tsc fail rồi fix trong 2 vòng** — đều cùng 1 chỗ: typing của `getToken` (next-auth/jwt beta.20 yêu cầu `secret`+`salt`; `process.env.AUTH_SECRET` là `string|undefined`). Đã cấp `secret`+`salt`(=cookie name) + narrow `accessToken`. Trong ngưỡng cho phép.
+
+## 10. Outstanding blockers
+- 🚧 **Login M365 thật chưa kích hoạt** — cần App Registration + `AUTH_AZURE_AD_*` (staging). KHÔNG yêu cầu secret/admin consent trong phiên này (đúng STOP condition). Đã ghi checklist ở `deployment/STAGING_CHECKLIST.md`.
+- ⚠️ Department mapping dùng **mock aliases** — cần đối chiếu chuỗi `department` thật của tenant (Open Q-02).
+- ⚠️ Role whitelist là **mock email** — Phase 2 thay bằng Entra group / 5SUserMap.
+- ℹ️ `/api/me` bị middleware redirect (307) khi chưa auth thay vì 401 JSON — chấp nhận ở foundation (trang `/me` gọi có cookie nên 200).
+
+## 11. Git status & 12. Commit hash
+Xem cuối báo cáo (in sau commit local). **Không push, không deploy.**
+
+**Trạng thái phiên:** Phase 1B HOÀN THÀNH — Graph foundation + `/api/me` + profile card + department mapping + RBAC foundation + staging docs; build/lint/tsc PASS; chưa đụng SharePoint. **Dừng, chờ mở Phase 2 (SharePoint + Upload + Watermark).**
