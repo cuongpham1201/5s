@@ -15,10 +15,9 @@ function fmt(iso: string): string {
 
 export default function SessionPage() {
   const router = useRouter();
-  const { session, removePhoto, clearSession, submitSession } = useSessionCapture();
+  const { session, removePhoto, clearSession, completeSession } = useSessionCapture();
   const [confirming, setConfirming] = useState(false);
 
-  // Missing session → guide back to /capture.
   if (!session) {
     return (
       <AppShell showNav={false}>
@@ -38,8 +37,8 @@ export default function SessionPage() {
   const withGps = photos.filter((p) => p.latitude != null).length;
 
   const submit = () => {
-    const summary = submitSession();
-    if (summary) router.push("/success");
+    const completed = completeSession();
+    if (completed) router.push("/success");
   };
 
   return (
@@ -71,9 +70,9 @@ export default function SessionPage() {
           <div className="flex-1 px-5 pb-4 overflow-y-auto">
             <div className="grid grid-cols-2 gap-3">
               {photos.map((p, i) => (
-                <div key={p.photoId} className="relative rounded-md overflow-hidden shadow-e2">
+                <div key={p.photoId} className="relative rounded-md overflow-hidden shadow-e2 bg-surface">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={p.localUrl} alt={`Ảnh ${i + 1}`} className="aspect-square w-full object-cover" />
+                  <img src={p.watermarkedDataUrl} alt={`Ảnh ${i + 1}`} className="aspect-square w-full object-cover" />
                   <span className="absolute left-1.5 top-1.5 bg-black/50 text-white text-[10px] px-1.5 py-0.5 rounded">
                     #{i + 1}
                   </span>
@@ -118,7 +117,6 @@ export default function SessionPage() {
         </>
       )}
 
-      {/* Confirmation panel */}
       {confirming && (
         <div className="absolute inset-0 z-50 flex flex-col justify-end bg-black/40" onClick={() => setConfirming(false)}>
           <div
@@ -132,7 +130,7 @@ export default function SessionPage() {
               <InfoRow label="Người chụp" value={session.reporterName} />
               <InfoRow label="Số ảnh" value={`${photos.length} ảnh`} />
               <InfoRow label="Bắt đầu lúc" value={fmt(session.startedAt)} />
-              <InfoRow label="GPS" value={withGps > 0 ? `${withGps}/${photos.length} ảnh có GPS` : "Chưa thu thập (Phase 2)"} />
+              <InfoRow label="GPS" value={withGps > 0 ? `${withGps}/${photos.length} ảnh có GPS` : "Chưa có GPS"} />
             </div>
             <div className="flex gap-2.5 mt-5">
               <button onClick={() => setConfirming(false)} className="btn btn-secondary btn-lg flex-1">

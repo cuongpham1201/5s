@@ -360,3 +360,65 @@ Cập nhật: `/`, `/capture`, `/camera`, `/preview`, `/success`, `/history`. C�
 - History là mock cục bộ (localStorage), không đồng bộ giữa thiết bị.
 
 **Trạng thái:** Phase 1C-ext HOÀN THÀNH — mobile shell sạch, camera HTTPS-aware, flow N-ảnh đầy đủ; gates PASS. **Dừng.**
+
+---
+---
+
+# 5S Daily — Phase 2A Run Report (Local Data Flow + Watermark Engine)
+
+> Ngày: 2026-06-17 · Branch `feature/phase1-foundation` · Base `e735723`.
+> Luồng nộp cục bộ thật + watermark Canvas. **KHÔNG** upload SharePoint/Graph/backend.
+
+## Preflight
+pwd `/data/dev/5s-app` · branch `feature/phase1-foundation` · working tree **clean** · log `e735723/20b776c/82efde5/6acf855/0ea53da` · tag `phase-1b5-ui-review` · node v20.20.2 / npm 10.8.2. (Đã dừng dev server 5s-app trên 3002 để build sạch.)
+
+## Files created
+- `src/types/submission.ts`
+- `src/lib/submissions/local-submission-store.ts`, `src/lib/submissions/metadata.ts`
+- `src/hooks/useGeolocation.ts`
+- `src/lib/watermark/watermark-types.ts`, `src/lib/watermark/watermark-engine.ts`
+- `docs/WATERMARK_ENGINE.md`, `docs/LOCAL_DATA_FLOW.md`
+
+## Files modified
+- `src/features/capture/session-context.tsx` (rewrite: store delegation + pendingCapture)
+- `src/app/{camera,preview,session,success}/page.tsx`
+- `DATA_MODEL.md`, `ARCHITECTURE.md`, `ROADMAP.md`, `TASK_QUEUE.md`, `RUN_REPORT.md`
+
+## Data model summary
+`SubmissionSession` (1 lần gửi) chứa N `SessionPhoto` (mỗi ảnh: `originalDataUrl` + `watermarkedDataUrl` + `watermarkMetadata` + GPS + status). `completeSession()` → `CompletedSubmission(status: UploadStatus="local-only")`. Type chuẩn ở `src/types/submission.ts`.
+
+## Local storage flow summary
+Store `local-submission-store.ts` (localStorage, SSR-safe): getCurrentSession/saveCurrentSession/clearCurrentSession/addPhotoToSession/removePhotoFromSession/completeCurrentSession/listCompletedSubmissions/getCompletedSubmissionById. Draft giữ original+watermarked; history strip original (giữ watermarked thumbnail); ghi history chống vượt quota (trim entry cũ). Context React mirror trên store.
+
+## Geolocation summary
+`useGeolocation` + `getGeoSnapshot`: timeout 5s, **không chặn nộp**; trả lat/lng/accuracy/capturedAt/status. UI: "Đang lấy GPS…" / "Đã lấy GPS" / "Không lấy được GPS (vẫn nộp được)". Insecure context → unavailable. Reverse geocoding: future (fallback "Chưa xác định địa chỉ").
+
+## Watermark engine summary
+`generateWatermarkedImage()` (Canvas): downscale ≤1280px giữ tỉ lệ, khối góc dưới-trái nền đen 55% + chữ trắng + dòng "✓ 5S Verified" xanh, font scale theo ảnh, JPEG quality cấu hình; trả original+watermarked dataURL + width/height/mime/sizeBytes. Nội dung đúng spec nghiệp vụ.
+
+## Camera integration summary
+`/camera`: getUserMedia + `capture()` frame thật (hoặc ảnh mô phỏng khi insecure/no-cam) + GPS snapshot → `setPendingCapture` → `/preview`. `/preview`: ghép watermark thật, hiển thị, **Chụp lại / Giữ ảnh** (Giữ ảnh → addPhoto + `/session`). `/session`: thumbnail watermarked, xoá, +chụp thêm, Hoàn tất → Xác nhận nộp → completeSession → `/success`. `/history`: list từ store.
+
+## Routes updated
+`/capture /camera /preview /session /success /history` (18 routes; không thêm route mới).
+
+## Build / Lint / TSC — ✅ PASS (vòng 1)
+`tsc --noEmit` 0 lỗi · `lint` no warnings · `build` 18 routes.
+
+## Manual test checklist
+1. Mở **https://she.biahalong.com** (camera cần HTTPS) → đăng nhập.
+2. `/capture` chọn khu vực → **Bắt đầu chụp**.
+3. `/camera`: cho phép camera + GPS → thấy badge "Đã lấy GPS" → bấm chụp.
+4. `/preview`: thấy **ảnh thật có watermark** (giờ/ngày/đơn vị/khu vực/người chụp/GPS/5S Verified) → **Giữ ảnh**.
+5. `/session`: thumbnail watermarked, chụp thêm 2–3 tấm, thử **xoá**.
+6. **Hoàn tất → Xác nhận nộp** → `/success` "Đã nộp N ảnh".
+7. `/history`: thấy lần gửi vừa nộp (số ảnh + thời gian).
+8. Test HTTP/Tailscale: camera báo "cần HTTPS" + "Dùng ảnh mô phỏng" vẫn chạy hết luồng.
+
+## Known limitations
+Local-only: chưa upload/SharePoint/Graph (2C), chưa IndexedDB (2B → localStorage có giới hạn quota). Reverse geocoding chưa có (địa chỉ = "Chưa xác định địa chỉ"). History strip ảnh gốc (giữ watermarked). Watermark client-side (server re-stamp/anti-fraud future).
+
+## Git status / Commit hash
+Xem cuối báo cáo (commit local sau khi viết xong). **Không push.**
+
+**Trạng thái:** Phase 2A HOÀN THÀNH — local data flow + watermark engine thật, gates PASS. **Dừng.**

@@ -14,8 +14,8 @@ function fmt(iso?: string): string {
 }
 
 export default function SuccessPage() {
-  const { lastSubmitted } = useSessionCapture();
-  const s = lastSubmitted;
+  const { lastCompleted } = useSessionCapture();
+  const s = lastCompleted;
 
   return (
     <AppShell showNav={false}>

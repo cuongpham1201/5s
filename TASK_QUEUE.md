@@ -79,6 +79,21 @@
 
 > Vẫn local/mock: chưa watermark (Phase 2A), chưa SharePoint/Graph (2B), chưa upload (2C).
 
+## Phase 2A — Local data flow + Watermark engine (DONE)
+
+| ID | Task | Status |
+|---|---|---|
+| P2A-A | Types `src/types/submission.ts` (SubmissionSession/SessionPhoto/CompletedSubmission/WatermarkMetadata/GeoLocationSnapshot/UploadStatus/PendingCapture) | DONE |
+| P2A-B | Local store `lib/submissions/local-submission-store.ts` (SSR-safe, quota-aware) + `metadata.ts` | DONE |
+| P2A-C | `hooks/useGeolocation.ts` (timeout 5s, non-blocking, status) | DONE |
+| P2A-D | Watermark engine `lib/watermark/*` (Canvas, bottom-left, scale font, JPEG quality) | DONE |
+| P2A-E | Tích hợp Camera→Preview(watermark)→Session→Success→History dùng store + ảnh thật | DONE |
+| P2A-F | Error handling (camera/insecure/GPS/storage/image/empty/refresh) — friendly VI, no crash | DONE |
+| P2A-G | Docs: WATERMARK_ENGINE.md, LOCAL_DATA_FLOW.md + cập nhật DATA_MODEL/ARCHITECTURE/ROADMAP/TASK_QUEUE/RUN_REPORT | DONE |
+| P2A-H | Quality gate tsc + lint + build PASS | DONE |
+
+> Vẫn local-only: chưa IndexedDB (2B), chưa SharePoint upload (2C).
+
 ## Phase 2+ (TODO — chờ phê duyệt)
 SharePoint thật (Library + `5SSubmissions`/`5SSubmissionPhotos`), Graph app-only, watermark ghép ảnh, upload N ảnh/lần gửi + offline queue, dashboard data thật, Excel, notifications. Xem ROADMAP Phase 2–6.
 

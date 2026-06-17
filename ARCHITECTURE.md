@@ -275,7 +275,8 @@ Cron/scheduler chạy phía server (PM2 + node-cron hoặc systemd timer) đối
 
 - **App shell production (real mobile):** không còn khung iPhone giả / viền đen / status bar giả. App dùng **full viewport** (`100dvh`, `100vw`), hỗ trợ `env(safe-area-inset-*)`, bottom nav chừa safe-area iOS. Desktop: cột rộng tối đa 480px căn giữa (không bezel). Khung thiết bị giả CHỉ bật ở **dev preview** (`NEXT_PUBLIC_DEVICE_PREVIEW=true`).
 - **Camera secure-context:** `getUserMedia` cần HTTPS hoặc localhost. Hook phân biệt 4 trạng thái (insecure / unsupported / denied / no-device) và báo đúng; insecure → hướng dẫn mở `https://she.biahalong.com`. Khi không chụp được vẫn có "ảnh mô phỏng" để test luồng. Xem `docs/CAMERA_TESTING.md`.
-- **Frontend draft model (local/mock):** lần gửi nhiều ảnh được giữ ở client (`SubmissionSession`/`SessionPhoto`, localStorage) tới khi "Xác nhận nộp". Lịch sử lưu mock cục bộ. **Chưa** upload SharePoint (future **Phase 2C**), **chưa** watermark engine thật (future **Phase 2A**).
+- **Local data flow (Phase 2A — DONE):** capture frame thật → GPS snapshot (timeout 5s, không chặn) → **watermark engine Canvas thật** (`src/lib/watermark/`) ghép ảnh ở `/preview` → giữ `original` + `watermarked` vào `SubmissionSession` (store `local-submission-store.ts`, localStorage) → `completeSession()` tạo `CompletedSubmission(status="local-only")` lưu history cục bộ. Types: `src/types/submission.ts`. Xem `docs/LOCAL_DATA_FLOW.md`, `docs/WATERMARK_ENGINE.md`.
+- **Vẫn local-only:** **chưa** upload SharePoint (**Phase 2C**), **chưa** Graph/backend. localStorage là tạm — **IndexedDB ở Phase 2B** cho hàng đợi offline bền vững.
 - **Dev domain:** `https://she.biahalong.com → http://localhost:3002` (Cloudflare Tunnel — cấu hình ngoài phạm vi code). Chạy: `npm run dev:3002`.
 
 ## 7. Liên kết tài liệu

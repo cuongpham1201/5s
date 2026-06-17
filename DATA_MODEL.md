@@ -73,24 +73,30 @@
 
 ---
 
-### 2c. Frontend draft model (Phase 1C — local/mock, chưa backend)
+### 2c. Frontend data model (Phase 2A — local, chưa upload)
 
-Trên client, một lần gửi đang soạn được giữ bằng 2 type (localStorage, chưa upload):
+Nguồn type chuẩn: **`src/types/submission.ts`**. Lưu cục bộ qua
+`src/lib/submissions/local-submission-store.ts` (localStorage, SSR-safe).
 
 ```ts
-SubmissionSession {
-  sessionId, departmentCode, departmentName?, areaCode, areaName,
-  reporterName, reporterEmail, startedAt, photos: SessionPhoto[]
-}
-SessionPhoto {
-  photoId, localUrl, capturedAt, latitude?, longitude?, address?,
-  status: "draft" | "ready"
-}
+SubmissionSession { sessionId, departmentCode, departmentName?, areaCode, areaName,
+  reporterName, reporterEmail, startedAt, photos: SessionPhoto[] }
+
+SessionPhoto { photoId, originalDataUrl, watermarkedDataUrl, capturedAt,
+  watermarkMetadata, latitude, longitude, address, status: "draft"|"ready" }
+
+CompletedSubmission { submissionId, departmentCode, departmentName?, areaCode, areaName,
+  reporterName, reporterEmail, startedAt, submittedAt, photoCount, photos, status: UploadStatus }
+
+WatermarkMetadata { time, date, weekday, address, department, area, reporter, gps, verifiedText }
+GeoLocationSnapshot { latitude, longitude, accuracy, capturedAt, status, address }
+UploadStatus = "local-only" | "pending-upload" | "uploading" | "uploaded" | "failed"
 ```
 
-- `localUrl` = data URL ảnh thật (chụp được) hoặc ảnh mô phỏng (khi insecure/không camera).
-- Khi "Xác nhận nộp" → tạo `SubmittedSummary` lưu vào history cục bộ; **chưa** ghi `5SSubmissions`/`5SSubmissionPhotos` thật.
-- Ánh xạ sang backend (Phase 2C): `SubmissionSession` → 1 header `5SSubmissions`; mỗi `SessionPhoto` → 1 line `5SSubmissionPhotos`. Watermark ghép ảnh là **Phase 2A**.
+- **Watermark ghép thật** (Canvas) ở `/preview`; mỗi ảnh giữ cả `originalDataUrl` + `watermarkedDataUrl`.
+- `completeSession()` → `CompletedSubmission` (`status="local-only"`) lưu vào history cục bộ. **Chưa** ghi `5SSubmissions`/`5SSubmissionPhotos` thật.
+- **Quota:** history strip `originalDataUrl`, giữ watermarked cho thumbnail; vượt quota → trim entry cũ. localStorage **không** phải lưu trữ cuối → **IndexedDB ở Phase 2B**, upload SharePoint ở **Phase 2C**.
+- **Ánh xạ backend (2C):** `SubmissionSession` → 1 header `5SSubmissions`; mỗi `SessionPhoto` → 1 line `5SSubmissionPhotos` (kèm `watermarkMetadata`, GPS, URL).
 
 ## 3. Dashboard Data Model — công thức KPI
 
