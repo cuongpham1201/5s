@@ -5,8 +5,9 @@ import { usePathname } from "next/navigation";
 
 const ITEMS = [
   { href: "/", label: "Trang chủ", icon: "🏠" },
+  { href: "/my-unit", label: "Phòng ban", icon: "🏢" },
+  { href: "/overview", label: "Toàn cảnh", icon: "📊" },
   { href: "/history", label: "Lịch sử", icon: "🕘" },
-  { href: "/me", label: "Hồ sơ", icon: "👤" },
 ];
 
 export function BottomNav() {
@@ -14,7 +15,7 @@ export function BottomNav() {
   return (
     <nav className="bottom-nav">
       {ITEMS.map((it) => {
-        const active = pathname === it.href;
+        const active = it.href === "/" ? pathname === "/" : pathname.startsWith(it.href);
         return (
           <Link
             key={it.href}

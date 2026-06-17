@@ -1,97 +1,93 @@
-import Link from "next/link";
-import { auth } from "@/auth";
-import { AppShell } from "@/components/layout/AppShell";
-import { Card, InfoRow } from "@/components/ui/Card";
-import { InstallPrompt } from "@/components/pwa/InstallPrompt";
-import { QueueStatusCard } from "@/components/home/QueueStatusCard";
-import { CURRENT_USER } from "@/lib/mock-data";
+"use client";
 
-export default async function HomePage() {
-  const session = await auth();
-  const name = session?.user?.name ?? CURRENT_USER.name;
-  const department = session?.user?.department ?? CURRENT_USER.department;
-  // Phase 1A mock: today's status is "chưa gửi".
-  const submittedToday = false;
+import Link from "next/link";
+import { useState } from "react";
+import { AppShell } from "@/components/layout/AppShell";
+import { AppHeader } from "@/components/layout/AppHeader";
+import { DeptGalleryModal } from "@/components/overview/DeptGalleryModal";
+import { latestFeed, missingDepartments, todayKpi } from "@/lib/mock-overview";
+
+export default function HomePage() {
+  const kpi = todayKpi();
+  const missing = missingDepartments();
+  const feed = latestFeed(8);
+  const [openDept, setOpenDept] = useState<string | null>(null);
 
   return (
     <AppShell>
-      <div className="flex items-center gap-3 px-5 pt-2 pb-3">
-        <span className="w-9 h-9 rounded-pill grid place-items-center text-white text-sm font-bold bg-gradient-to-br from-[#7aa6d6] to-[#4f7fb5]">
-          {name.slice(0, 2).toUpperCase()}
-        </span>
-        <div className="flex-1">
-          <div className="text-[18px] font-semibold">Xin chào, {name} 👋</div>
-          <div className="text-[13px] text-ink-muted">Thứ Hai · 15/06/2026</div>
-        </div>
-        <Link
-          href="/me"
-          aria-label="Cài đặt"
-          className="w-10 h-10 rounded-pill grid place-items-center text-xl bg-surface text-ink"
-        >
-          ⚙
-        </Link>
-      </div>
-
-      <InstallPrompt />
-
+      <AppHeader />
       <div className="px-5 pb-6">
-        {/* Status card */}
-        <div
-          className={`rounded-lg p-5 flex items-center gap-4 shadow-e4 text-white ${
-            submittedToday
-              ? "bg-gradient-to-br from-[#0E700E] to-[#0a5c0a]"
-              : "bg-gradient-to-br from-[#BC4B09] to-[#9c3e07]"
-          }`}
-        >
-          <span className="w-14 h-14 rounded-pill grid place-items-center text-3xl bg-white/20">
-            {submittedToday ? "✓" : "⚠"}
-          </span>
-          <div>
-            <div className="text-[20px] font-bold">
-              {submittedToday ? "Đã gửi hôm nay" : "Chưa gửi hôm nay"}
-            </div>
-            <div className="text-[13px] opacity-90">
-              {submittedToday ? "Cảm ơn bạn!" : "Hãy chụp ảnh 5S trước 18:00"}
-            </div>
+        {/* KPI hôm nay */}
+        <div className="rounded-lg p-5 shadow-e4 text-white bg-gradient-to-br from-[#1480d4] to-[#115EA3]">
+          <div className="text-[13px] opacity-90">Hôm nay · Thứ Ba 17/06/2026</div>
+          <div className="text-[30px] font-bold mt-1 leading-none">
+            {kpi.shot} / {kpi.total} <span className="text-[16px] font-semibold opacity-90">phòng ban đã chụp</span>
           </div>
+          <div className="mt-3 h-2.5 rounded-pill bg-white/25 overflow-hidden">
+            <i className="block h-full rounded-pill bg-white" style={{ width: `${kpi.pct}%` }} />
+          </div>
+          <div className="text-[13px] font-semibold mt-2">{kpi.pct}% hoàn thành</div>
         </div>
 
-        <QueueStatusCard />
-
-        <Card className="mt-4">
-          <InfoRow label="Đơn vị" value={department} />
-          <InfoRow label="Lần gửi gần nhất" value="15/06/2026 17:20" />
-          <InfoRow label="Khu vực" value="Văn phòng" />
-          <InfoRow label="Tuần này" value="3 / 5 ngày" />
-        </Card>
-
-        {/* Big CTA — largest element */}
+        {/* Big CTA */}
         <Link
           href="/capture"
-          className="block mt-6 w-full rounded-xl text-white text-center shadow-e8 bg-gradient-to-b from-[#1480d4] via-[#0F6CBD] to-[#115EA3]"
+          className="block mt-5 w-full rounded-xl text-white text-center shadow-e8 bg-gradient-to-b from-[#0E700E] to-[#0a5c0a]"
         >
-          <span className="flex flex-col items-center justify-center gap-2.5 min-h-[188px]">
-            <span className="text-[54px] leading-none">📷</span>
-            <span className="text-[22px] font-bold tracking-wide">CHỤP ẢNH</span>
-            <span className="text-[13px] opacity-90">Gửi ảnh 5S trong dưới 30 giây</span>
+          <span className="flex flex-col items-center justify-center gap-1.5 min-h-[120px]">
+            <span className="text-[40px] leading-none">📷</span>
+            <span className="text-[20px] font-bold tracking-wide">CHỤP ẢNH 5S</span>
           </span>
         </Link>
 
+        {/* Chưa chụp */}
         <div className="flex items-center justify-between mt-6 mb-2">
-          <span className="text-[16px] font-semibold">Gần đây</span>
-          <a className="text-[13px] font-semibold text-primary-600" href="/history">
-            Xem tất cả
-          </a>
+          <span className="text-[16px] font-semibold">Chưa chụp hôm nay</span>
+          <span className="badge badge-danger">{missing.length}</span>
         </div>
-        <div className="grid grid-cols-4 gap-2">
-          {[0, 1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className="aspect-square rounded-sm bg-gradient-to-br from-[#cdd7e0] to-[#8fa0b0]"
-            />
+        <div className="flex flex-wrap gap-2">
+          {missing.map((d) => (
+            <button
+              key={d.code}
+              onClick={() => setOpenDept(d.code)}
+              className="badge badge-warning text-[13px]"
+            >
+              {d.code}
+            </button>
+          ))}
+        </div>
+
+        {/* Feed ảnh mới nhất */}
+        <div className="flex items-center justify-between mt-6 mb-2">
+          <span className="text-[16px] font-semibold">Ảnh mới nhất</span>
+          <Link href="/overview" className="text-[13px] font-semibold text-primary-600">
+            Toàn cảnh →
+          </Link>
+        </div>
+        <div className="flex flex-col gap-2.5">
+          {feed.map((f) => (
+            <button
+              key={f.id}
+              onClick={() => setOpenDept(f.code)}
+              className="card-flat p-2.5 flex items-center gap-3 text-left"
+            >
+              <span
+                className="w-12 h-12 rounded-md grid place-items-center text-white text-[11px] font-extrabold flex-none"
+                style={{ background: `linear-gradient(135deg, hsl(${f.hue} 34% 70%), hsl(${f.hue} 30% 48%))` }}
+              >
+                5S
+              </span>
+              <span className="flex-1 min-w-0">
+                <span className="block font-semibold text-[15px]">{f.code}</span>
+                <span className="block text-[13px] text-ink-muted truncate">{f.name}</span>
+              </span>
+              <span className="text-[13px] text-ink-muted">{f.time}</span>
+            </button>
           ))}
         </div>
       </div>
+
+      <DeptGalleryModal code={openDept} onClose={() => setOpenDept(null)} />
     </AppShell>
   );
 }

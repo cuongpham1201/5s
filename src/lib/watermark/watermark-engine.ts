@@ -82,29 +82,22 @@ export async function generateWatermarkedImage(input: WatermarkInput): Promise<W
   const fontSize = Math.max(13, Math.min(34, Math.round(h * 0.024)));
   const lineHeight = Math.round(fontSize * 1.34);
   const pad = Math.round(fontSize * 0.7);
-  const margin = Math.round(fontSize * 0.8);
   ctx.font = `${fontSize}px "Segoe UI", system-ui, Arial, sans-serif`;
   ctx.textBaseline = "top";
 
-  const textWidth = Math.max(...lines.map((l) => ctx.measureText(l).width));
-  const boxW = Math.min(textWidth + pad * 2, w - margin * 2);
+  // TimeMark-style full-width FOOTER band anchored at the bottom (not a corner box).
+  const boxX = 0;
+  const boxW = w;
   const boxH = lines.length * lineHeight + pad * 2;
-  const boxX = margin;
-  const boxY = h - boxH - margin;
+  const boxY = h - boxH;
 
-  // Semi-transparent black rounded background.
+  // Semi-transparent black footer + a thin top accent line.
   ctx.fillStyle = "rgba(0,0,0,0.55)";
-  const r = Math.round(fontSize * 0.4);
-  ctx.beginPath();
-  ctx.moveTo(boxX + r, boxY);
-  ctx.arcTo(boxX + boxW, boxY, boxX + boxW, boxY + boxH, r);
-  ctx.arcTo(boxX + boxW, boxY + boxH, boxX, boxY + boxH, r);
-  ctx.arcTo(boxX, boxY + boxH, boxX, boxY, r);
-  ctx.arcTo(boxX, boxY, boxX + boxW, boxY, r);
-  ctx.closePath();
-  ctx.fill();
+  ctx.fillRect(boxX, boxY, boxW, boxH);
+  ctx.fillStyle = "rgba(255,255,255,0.18)";
+  ctx.fillRect(boxX, boxY, boxW, Math.max(1, Math.round(fontSize * 0.06)));
 
-  // Text lines (last line = verified, green).
+  // Text lines (first line bold; last line = verified, green).
   lines.forEach((line, i) => {
     ctx.fillStyle = i === lines.length - 1 ? "#6FE26F" : "#FFFFFF";
     ctx.font =

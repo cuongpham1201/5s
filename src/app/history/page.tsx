@@ -2,87 +2,36 @@
 
 import { useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
-import { StatusBadge } from "@/components/ui/StatusBadge";
-import { useSessionCapture } from "@/features/capture/session-context";
-import { useQueue } from "@/hooks/useQueue";
-import type { QueueStatus } from "@/lib/queue/queue-types";
+import { AppHeader } from "@/components/layout/AppHeader";
+import { DeptGalleryModal } from "@/components/overview/DeptGalleryModal";
+import { ALL_DEPARTMENTS, historyByDate, last7Days, todayKpi } from "@/lib/mock-overview";
 
-const TABS = ["Hôm nay", "Tuần", "Tháng"] as const;
-
-type SyncTone = "success" | "warning" | "danger" | "neutral";
-interface Row {
-  date: string;
-  department: string;
-  area: string;
-  photoCount: number;
-  hue: number;
-  syncLabel: string;
-  syncTone: SyncTone;
-}
-
-function syncFromStatus(status?: QueueStatus): { label: string; tone: SyncTone } {
-  switch (status) {
-    case "uploaded":
-      return { label: "Đã đồng bộ", tone: "success" };
-    case "uploading":
-      return { label: "Đang đồng bộ…", tone: "warning" };
-    case "failed":
-      return { label: "Lỗi đồng bộ", tone: "danger" };
-    case "queued":
-    case "ready":
-    case "draft":
-      return { label: "Đang chờ đồng bộ", tone: "warning" };
-    case "cancelled":
-      return { label: "Đã huỷ", tone: "neutral" };
-    default:
-      return { label: "Đã đồng bộ", tone: "success" };
-  }
-}
-
-const DEMO: Row[] = [
-  { date: "15/06/2026", department: "PMKT", area: "Văn phòng", photoCount: 3, hue: 210, syncLabel: "Đã đồng bộ", syncTone: "success" },
-  { date: "15/06/2026", department: "PMKT", area: "Kho POSM", photoCount: 2, hue: 150, syncLabel: "Đang chờ đồng bộ", syncTone: "warning" },
-  { date: "14/06/2026", department: "PMKT", area: "Phòng họp", photoCount: 1, hue: 280, syncLabel: "Đã đồng bộ", syncTone: "success" },
-];
-
-function dmy(iso: string): string {
-  const d = new Date(iso);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()}`;
-}
+const TABS = ["Ngày", "Tuần", "Tháng"] as const;
 
 export default function HistoryPage() {
-  const [tab, setTab] = useState<(typeof TABS)[number]>("Hôm nay");
-  const { history } = useSessionCapture();
-  const { items } = useQueue();
+  const [tab, setTab] = useState<(typeof TABS)[number]>("Ngày");
+  const [openDept, setOpenDept] = useState<string | null>(null);
 
-  const statusBySubmission = new Map(items.map((q) => [q.submissionId, q.status]));
+  // Tuần: số ngày đã chụp trong 7 ngày, theo phòng ban.
+  const weekly = ALL_DEPARTMENTS.map((d) => ({
+    code: d.code,
+    name: d.name,
+    days: last7Days(d.code).filter((x) => x.ok).length,
+  })).sort((a, b) => b.days - a.days);
 
-  const rows: Row[] =
-    history.length > 0
-      ? history.map((h, i) => {
-          const sync = syncFromStatus(statusBySubmission.get(h.submissionId));
-          return {
-            date: dmy(h.submittedAt),
-            department: h.departmentCode,
-            area: h.areaName,
-            photoCount: h.photoCount,
-            hue: (i * 47 + 200) % 360,
-            syncLabel: sync.label,
-            syncTone: sync.tone,
-          };
-        })
-      : DEMO;
+  // Tháng (mock): tỷ lệ hoàn thành theo phòng ban.
+  const monthly = ALL_DEPARTMENTS.map((d, i) => ({
+    code: d.code,
+    name: d.name,
+    pct: Math.max(40, 100 - ((i * 7) % 55)),
+  })).sort((a, b) => b.pct - a.pct);
+  const top = monthly.slice(0, 3);
+  const under = monthly.filter((m) => m.pct < 70);
+  const kpi = todayKpi();
 
   return (
     <AppShell>
-      <div className="px-5 pt-3 pb-3">
-        <div className="text-[22px] font-semibold">Lịch sử của tôi</div>
-        <div className="text-[13px] text-ink-muted">
-          {history.length > 0 ? `${history.length} lần gửi đã lưu (cục bộ)` : "Chưa có lần gửi — đang xem ví dụ"}
-        </div>
-      </div>
-
+      <AppHeader title="Lịch sử" subtitle="Xem lại ảnh theo thời gian" />
       <div className="px-5 pb-6">
         <div className="segmented">
           {TABS.map((t) => (
@@ -92,31 +41,80 @@ export default function HistoryPage() {
           ))}
         </div>
 
-        <div className="flex flex-col gap-2.5 mt-[18px]">
-          {rows.map((r, i) => (
-            <div key={i} className="card-flat p-3 flex items-center gap-3">
-              <div className="flex -space-x-2">
-                {Array.from({ length: Math.min(r.photoCount, 3) }).map((_, k) => (
-                  <span
-                    key={k}
-                    className="w-10 h-10 rounded-md border-2 border-white"
-                    style={{ background: `linear-gradient(135deg, hsl(${r.hue + k * 15} 32% 74%), hsl(${r.hue + k * 15} 28% 52%))` }}
-                  />
+        {tab === "Ngày" && (
+          <div className="flex flex-col gap-4 mt-4">
+            {historyByDate().map((day) => (
+              <div key={day.date}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-semibold">{day.date} · {day.weekday}</span>
+                  <span className="badge badge-success">{day.depts.length} phòng</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {day.depts.map((code) => (
+                    <button key={code} onClick={() => setOpenDept(code)} className="badge badge-neutral text-[13px]">
+                      {code}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {tab === "Tuần" && (
+          <div className="card-flat mt-4 divide-y divide-line">
+            {weekly.map((w) => (
+              <div key={w.code} className="flex items-center gap-3 px-4 py-3">
+                <span className="flex-1 min-w-0">
+                  <span className="block font-semibold text-[15px]">{w.code}</span>
+                  <span className="block text-[12px] text-ink-muted truncate">{w.name}</span>
+                </span>
+                <span className={`font-semibold ${w.days >= 6 ? "text-success" : w.days >= 4 ? "text-warning" : "text-danger"}`}>
+                  {w.days}/7 ngày
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {tab === "Tháng" && (
+          <div className="mt-4 flex flex-col gap-4">
+            <div className="card-flat p-4">
+              <div className="text-[13px] text-ink-muted">Tỷ lệ hoàn thành tháng 06/2026 (mẫu)</div>
+              <div className="text-[28px] font-bold mt-1">{kpi.pct}%</div>
+            </div>
+            <div>
+              <div className="text-[15px] font-semibold mb-2">🏆 Top phòng ban</div>
+              <div className="card-flat divide-y divide-line">
+                {top.map((m, i) => (
+                  <div key={m.code} className="flex items-center gap-3 px-4 py-3">
+                    <span className="text-[18px] w-6 text-center">{["🥇", "🥈", "🥉"][i]}</span>
+                    <span className="flex-1 font-semibold">{m.code}</span>
+                    <span className="font-bold text-success">{m.pct}%</span>
+                  </div>
                 ))}
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="font-semibold text-[15px]">
-                  {r.department} · {r.area}
-                </div>
-                <div className="text-[13px] text-ink-muted">
-                  {r.date} · {r.photoCount} ảnh
-                </div>
-              </div>
-              <StatusBadge tone={r.syncTone}>{r.syncLabel}</StatusBadge>
             </div>
-          ))}
-        </div>
+            <div>
+              <div className="text-[15px] font-semibold mb-2">⚠ Phòng ban chưa đạt (&lt;70%)</div>
+              <div className="card-flat divide-y divide-line">
+                {under.length === 0 ? (
+                  <div className="px-4 py-3 text-ink-muted text-[14px]">Tất cả đều đạt 👍</div>
+                ) : (
+                  under.map((m) => (
+                    <div key={m.code} className="flex items-center gap-3 px-4 py-3">
+                      <span className="flex-1 font-semibold">{m.code}</span>
+                      <span className="font-bold text-danger">{m.pct}%</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
+
+      <DeptGalleryModal code={openDept} onClose={() => setOpenDept(null)} />
     </AppShell>
   );
 }
