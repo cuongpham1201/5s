@@ -89,6 +89,7 @@ body {
   .btn-secondary { @apply text-ink; background: var(--surface); box-shadow: inset 0 0 0 1px var(--border-strong); }
   .btn-ghost { background: transparent; color: var(--primary-600); }
   .btn-ghost:hover { background: var(--primary-100); }
+  .btn-danger { @apply text-white; background: var(--danger); }
   .btn-lg { min-height: 56px; font-size: 17px; border-radius: 16px; }
   .btn-block { @apply w-full; }
   .btn[disabled] { background: var(--surface); color: var(--text-disabled); pointer-events: none; }

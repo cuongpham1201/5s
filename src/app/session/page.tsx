@@ -72,7 +72,7 @@ export default function SessionPage() {
               {photos.map((p, i) => (
                 <div key={p.photoId} className="relative rounded-md overflow-hidden shadow-e2 bg-surface">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={p.watermarkedDataUrl} alt={`Ảnh ${i + 1}`} className="aspect-square w-full object-cover" />
+                  <img src={p.thumbnailDataUrl} alt={`Ảnh ${i + 1}`} className="aspect-square w-full object-cover" />
                   <span className="absolute left-1.5 top-1.5 bg-black/50 text-white text-[10px] px-1.5 py-0.5 rounded">
                     #{i + 1}
                   </span>

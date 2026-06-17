@@ -422,3 +422,70 @@ Local-only: chưa upload/SharePoint/Graph (2C), chưa IndexedDB (2B → localSto
 Xem cuối báo cáo (commit local sau khi viết xong). **Không push.**
 
 **Trạng thái:** Phase 2A HOÀN THÀNH — local data flow + watermark engine thật, gates PASS. **Dừng.**
+
+---
+---
+
+# 5S Daily — Phase 2A.1 + 2B Run Report (Photo-count fix + IndexedDB + Offline queue)
+
+> Ngày: 2026-06-17 · Branch `feature/phase1-foundation` · Base `fda3b0f`. Không SharePoint/Graph/upload thật/deploy/push.
+
+## Preflight
+pwd `/data/dev/5s-app` · branch `feature/phase1-foundation` · working tree **clean** · log `fda3b0f/e735723/20b776c/82efde5/6acf855` · tag `phase-1b5-ui-review` · node v20.20.2 / npm 10.8.2. (Đã dừng dev server 3002 để build sạch, **bật lại** cuối phiên.)
+
+## Bug root cause (Part A)
+Confirm "2 ảnh" nhưng Success "1 ảnh". **Gốc:** ảnh lưu dưới dạng **data URL base64 trong localStorage**. Mỗi `SessionPhoto` mang `originalDataUrl` + `watermarkedDataUrl` (~100–300KB/ảnh). Khi thêm ảnh thứ 2, `saveCurrentSession()` gọi `localStorage.setItem` **vượt quota → ném lỗi, `writeJSON` trả false (âm thầm)**. Nhưng React state vẫn nhận `[photo1, photo2]` (confirm = 2), trong khi localStorage chỉ còn `[photo1]`. `completeSession()` đọc localStorage → `photoCount = 1` → Success/history sai.
+
+## Bug fix (Part A)
+Tách lưu trữ: **ảnh nhị phân → IndexedDB**, **metadata (nhỏ) → localStorage**. `SessionPhoto` bỏ data URL nặng, chỉ giữ `thumbnailDataUrl` nhỏ + `photoId`/`submissionId`. → `saveCurrentSession` không còn vượt quota → **count đồng nhất** giữa confirm (state), success, history, metadata lưu trữ. `completeSession` dùng `session.sessionId` làm `submissionId` (khớp IndexedDB + queue). Regression test runner: dự án **chưa cấu hình** test framework → không thêm (tránh scope creep); thay bằng invariant `photoCount = photos.length` + checklist thủ công.
+
+## Files created
+- `src/lib/storage/{indexeddb.ts, photo-store.ts, storage-types.ts, queue-store.ts, image-utils.ts}`
+- `src/lib/queue/{queue-types.ts, offline-queue.ts, sync-engine.ts}`
+- `src/hooks/{useOnlineStatus.ts, useQueue.ts}`
+- `src/components/system/{SyncRunner.tsx, OfflineBanner.tsx}`, `src/components/home/QueueStatusCard.tsx`
+- `src/app/debug/storage/page.tsx`
+- `docs/INDEXEDDB_STORAGE.md`, `docs/OFFLINE_QUEUE.md`
+
+## Files modified
+- `src/types/submission.ts` (SessionPhoto → thumbnailDataUrl + submissionId)
+- `src/lib/submissions/local-submission-store.ts` (submissionId=sessionId, bỏ field nặng)
+- `src/features/capture/session-context.tsx` (IndexedDB cleanup + enqueue + mock sync)
+- `src/app/{preview,session,camera,history,page}.tsx`, `src/components/providers/Providers.tsx`, `src/app/globals.css` (btn-danger)
+- `ARCHITECTURE.md`, `DATA_MODEL.md`, `ROADMAP.md`, `TASK_QUEUE.md`, `RUN_REPORT.md`
+
+## IndexedDB architecture summary
+DB `5s-daily`, store `photos` (keyPath `photoId`, index `by_submission`). `StoredPhoto{photoId, submissionId, originalBlob, watermarkedBlob, thumbnailBlob, createdAt, status}`. SSR-safe. Ghi ở `/preview → Giữ ảnh` (dataURL→Blob + thumbnail). Xoá ảnh/huỷ session → xoá blob. Metadata + thumbnail nhỏ ở localStorage.
+
+## Offline queue summary
+`QueueItem{queueId, submissionId, createdAt, lastAttemptAt?, attemptCount, status}` (localStorage). State: draft/ready/queued/uploading/uploaded/failed/cancelled. `completeSession` → enqueue `queued` → `processQueue()` **mock** (queued→uploading→uploaded, delay 500ms, **không network**). `SyncRunner` chạy khi mount(online)+sự kiện `online`. `useOnlineStatus`/`useQueue` phản ứng qua sự kiện `5s-queue-changed`.
+
+## Home status updates
+Thẻ trạng thái đồng bộ: "✓ Đã đồng bộ" / "⚠ N lần gửi đang chờ đồng bộ" / "❌ N lần gửi lỗi" + chỉ báo 🟢 Online/🔴 Offline. Banner đỏ khi offline (toàn app).
+
+## History updates
+Mỗi lần gửi có badge: Đã đồng bộ / Đang chờ đồng bộ / Đang đồng bộ… / Lỗi đồng bộ (join theo `submissionId` với queue).
+
+## Debug page summary
+`/debug/storage` (dev-only, không có trong nav): Current Session, Completed Submissions, Queue Items, số ảnh IndexedDB, dung lượng/quota (navigator.storage.estimate), nút Clear Session / Clear Queue / Clear IndexedDB. Production → "chỉ khả dụng ở dev".
+
+## Build / Lint / TypeScript — ✅ PASS (vòng 1)
+`tsc --noEmit` 0 lỗi · `lint` no warnings · `build` **19 routes** (thêm `/debug/storage`).
+
+## Manual test checklist
+1. https://she.biahalong.com → đăng nhập → `/capture` → Bắt đầu chụp.
+2. Chụp **2–3 ảnh** (Giữ ảnh từng tấm). 3. `/session` đếm đúng số ảnh.
+4. Hoàn tất → Xác nhận nộp → **Success hiển thị ĐÚNG số ảnh** (bug đã hết).
+5. Home: thẻ "Đã đồng bộ" (mock sync chạy khi online); History badge "Đã đồng bộ".
+6. **Bật chế độ offline** (DevTools/airplane): banner đỏ; nộp → History "Đang chờ đồng bộ"; bật online lại → tự "Đã đồng bộ".
+7. `/debug/storage`: thấy số ảnh IndexedDB tăng theo số đã chụp; thử Clear.
+
+## Known limitations
+- Sync là **mock** (không network/SharePoint) — Phase 2C. Mock luôn thành công (chưa mô phỏng lỗi/retry thật).
+- Chưa migrate ảnh cũ (nếu có) từ localStorage sang IndexedDB — phiên mới mới áp dụng.
+- Reverse geocoding chưa có. Test runner chưa cấu hình (không có unit test tự động).
+
+## Git status / Commit hash
+Xem cuối (commit local sau báo cáo). **Không push.**
+
+**Trạng thái:** Phase 2A.1 + 2B HOÀN THÀNH — bug đếm ảnh đã sửa, IndexedDB + offline queue (mock) hoạt động, gates PASS. **Dừng.** Phase kế: 2C SharePoint Upload Engine.

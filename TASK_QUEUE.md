@@ -94,6 +94,22 @@
 
 > Vẫn local-only: chưa IndexedDB (2B), chưa SharePoint upload (2C).
 
+## Phase 2A.1 + 2B — Photo-count fix + IndexedDB + Offline queue (DONE)
+
+| ID | Task | Status |
+|---|---|---|
+| P2A1 | Fix bug đếm ảnh (gốc: localStorage quota khi nhồi data URL) → ảnh sang IndexedDB, metadata nhỏ, count đáng tin | DONE |
+| P2B-IDB | `lib/storage/` indexeddb.ts/photo-store.ts/storage-types.ts/queue-store.ts/image-utils.ts | DONE |
+| P2B-Q | `lib/queue/` queue-types.ts/offline-queue.ts/sync-engine.ts (mock upload, no network) | DONE |
+| P2B-ON | `hooks/useOnlineStatus.ts` + `useQueue.ts` + SyncRunner + OfflineBanner | DONE |
+| P2B-HOME | Home queue-status card (đã đồng bộ / đang chờ / lỗi + online) | DONE |
+| P2B-HIST | History badge trạng thái đồng bộ | DONE |
+| P2B-DBG | `/debug/storage` (dev-only): session/history/queue/IndexedDB count/usage + clear buttons | DONE |
+| P2B-DOC | docs INDEXEDDB_STORAGE.md + OFFLINE_QUEUE.md + cập nhật ARCHITECTURE/DATA_MODEL/ROADMAP/TASK_QUEUE/RUN_REPORT | DONE |
+| P2B-QG | Quality gate tsc + lint + build PASS | DONE |
+
+> Sync là **mock** (không network/SharePoint). Upload thật = **Phase 2C**.
+
 ## Phase 2+ (TODO — chờ phê duyệt)
 SharePoint thật (Library + `5SSubmissions`/`5SSubmissionPhotos`), Graph app-only, watermark ghép ảnh, upload N ảnh/lần gửi + offline queue, dashboard data thật, Excel, notifications. Xem ROADMAP Phase 2–6.
 

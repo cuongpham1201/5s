@@ -15,6 +15,9 @@ import type {
   SubmissionSession,
 } from "@/types/submission";
 import * as store from "@/lib/submissions/local-submission-store";
+import { deletePhoto, deletePhotosBySubmission } from "@/lib/storage/photo-store";
+import { enqueueSubmission } from "@/lib/queue/offline-queue";
+import { processQueue } from "@/lib/queue/sync-engine";
 
 /**
  * Capture session context (Phase 2A) — React state mirror over the local store.
@@ -61,7 +64,8 @@ export function SessionCaptureProvider({ children }: { children: ReactNode }) {
 
   const startSession = useCallback((args: StartArgs) => {
     const next: SubmissionSession = {
-      sessionId: `s-${Date.now()}`,
+      // sessionId doubles as the submissionId (and IndexedDB grouping key).
+      sessionId: `sub-${Date.now()}`,
       ...args,
       startedAt: new Date().toISOString(),
       photos: [],
@@ -79,12 +83,15 @@ export function SessionCaptureProvider({ children }: { children: ReactNode }) {
   const removePhoto = useCallback((photoId: string) => {
     const updated = store.removePhotoFromSession(photoId);
     setSession(updated);
+    void deletePhoto(photoId); // drop the binary from IndexedDB too
   }, []);
 
   const clearSession = useCallback(() => {
+    const current = store.getCurrentSession();
     store.clearCurrentSession();
     setSession(null);
     setPendingCapture(null);
+    if (current) void deletePhotosBySubmission(current.sessionId);
   }, []);
 
   const completeSession = useCallback((): CompletedSubmission | null => {
@@ -94,6 +101,9 @@ export function SessionCaptureProvider({ children }: { children: ReactNode }) {
       setPendingCapture(null);
       setHistory(store.listCompletedSubmissions());
       setLastCompleted(completed);
+      // Create an offline queue item, then mock-sync if online (no network/SharePoint).
+      enqueueSubmission(completed.submissionId);
+      void processQueue();
     }
     return completed;
   }, []);

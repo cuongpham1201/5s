@@ -7,6 +7,8 @@ import { Card, InfoRow } from "@/components/ui/Card";
 import { useSessionCapture } from "@/features/capture/session-context";
 import { generateWatermarkedImage } from "@/lib/watermark/watermark-engine";
 import { buildWatermarkMetadata } from "@/lib/submissions/metadata";
+import { dataUrlToBlob, makeThumbnailDataUrl } from "@/lib/storage/image-utils";
+import { putPhoto } from "@/lib/storage/photo-store";
 import type { SessionPhoto, WatermarkMetadata } from "@/types/submission";
 
 export default function PreviewPage() {
@@ -17,6 +19,7 @@ export default function PreviewPage() {
   const [originalUrl, setOriginalUrl] = useState<string | null>(null);
   const [meta, setMeta] = useState<WatermarkMetadata | null>(null);
   const [busy, setBusy] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Guard: missing session/pending → restart appropriately.
@@ -54,22 +57,47 @@ export default function PreviewPage() {
     router.push("/camera");
   };
 
-  const keep = () => {
-    if (!watermarkedUrl || !originalUrl || !meta) return;
-    const photo: SessionPhoto = {
-      photoId: `p-${Date.now()}`,
-      originalDataUrl: originalUrl,
-      watermarkedDataUrl: watermarkedUrl,
-      capturedAt: pendingCapture.capturedAt,
-      watermarkMetadata: meta,
-      latitude: pendingCapture.geo.latitude,
-      longitude: pendingCapture.geo.longitude,
-      address: pendingCapture.geo.address,
-      status: "ready",
-    };
-    addPhoto(photo);
-    setPendingCapture(null);
-    router.push("/session");
+  const keep = async () => {
+    if (!watermarkedUrl || !originalUrl || !meta || saving) return;
+    setSaving(true);
+    try {
+      const photoId = `p-${Date.now()}`;
+      const submissionId = session.sessionId;
+      const thumbnailDataUrl = await makeThumbnailDataUrl(watermarkedUrl);
+      // Heavy binaries → IndexedDB (NOT localStorage).
+      const [originalBlob, watermarkedBlob, thumbnailBlob] = await Promise.all([
+        dataUrlToBlob(originalUrl),
+        dataUrlToBlob(watermarkedUrl),
+        dataUrlToBlob(thumbnailDataUrl),
+      ]);
+      await putPhoto({
+        photoId,
+        submissionId,
+        originalBlob,
+        watermarkedBlob,
+        thumbnailBlob,
+        createdAt: new Date().toISOString(),
+        status: "ready",
+      });
+      // Light metadata (with a small thumbnail) → session in localStorage.
+      const photo: SessionPhoto = {
+        photoId,
+        submissionId,
+        thumbnailDataUrl,
+        capturedAt: pendingCapture.capturedAt,
+        watermarkMetadata: meta,
+        latitude: pendingCapture.geo.latitude,
+        longitude: pendingCapture.geo.longitude,
+        address: pendingCapture.geo.address,
+        status: "ready",
+      };
+      addPhoto(photo);
+      setPendingCapture(null);
+      router.push("/session");
+    } catch (e) {
+      setError((e as Error)?.message ?? "Không lưu được ảnh.");
+      setSaving(false);
+    }
   };
 
   const gpsLabel =
@@ -113,10 +141,10 @@ export default function PreviewPage() {
         </button>
         <button
           onClick={keep}
-          disabled={busy || !!error || !watermarkedUrl}
-          className={`btn btn-primary btn-lg flex-1 ${busy || error || !watermarkedUrl ? "opacity-50 pointer-events-none" : ""}`}
+          disabled={busy || saving || !!error || !watermarkedUrl}
+          className={`btn btn-primary btn-lg flex-1 ${busy || saving || error || !watermarkedUrl ? "opacity-50 pointer-events-none" : ""}`}
         >
-          ✓ Giữ ảnh
+          {saving ? "Đang lưu…" : "✓ Giữ ảnh"}
         </button>
       </div>
     </AppShell>

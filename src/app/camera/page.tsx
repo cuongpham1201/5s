@@ -108,7 +108,7 @@ export default function CameraPage() {
           {count > 0 ? (
             <Link href="/session" className="w-12 h-12 rounded-[10px] overflow-hidden border-2 border-white/50">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={session.photos[count - 1].watermarkedDataUrl} alt="ảnh gần nhất" className="w-full h-full object-cover" />
+              <img src={session.photos[count - 1].thumbnailDataUrl} alt="ảnh gần nhất" className="w-full h-full object-cover" />
             </Link>
           ) : (
             <div className="w-12 h-12 rounded-[10px] border-2 border-white/30" />

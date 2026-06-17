@@ -24,8 +24,9 @@
 
 > **Tách Phase 2 cho rõ:**
 > - **2A = Local data flow + Watermark engine — ✅ DONE:** capture frame thật, GPS snapshot (`useGeolocation`), watermark Canvas (`src/lib/watermark`), local store (`local-submission-store`, localStorage), types `src/types/submission.ts`, history cục bộ. Vẫn local-only.
-> - **2B** = IndexedDB offline queue (thay localStorage cho ảnh) + SharePoint Library/List + Graph app-only.
-> - **2C** = Upload N ảnh/lần gửi (header + lines) + retry/đồng bộ.
+> - **2A.1 = Fix bug đếm ảnh — ✅ DONE:** gốc do localStorage quota; chuyển ảnh sang IndexedDB → count đáng tin.
+> - **2B = IndexedDB + Offline queue — ✅ DONE (mock):** ảnh ở IndexedDB (`src/lib/storage`), queue + sync-engine mock (`src/lib/queue`), online detection, Home/History/banner/`/debug/storage`. Không network.
+> - **2C** = SharePoint Upload Engine: Graph app-only + Library/List thật, upload N ảnh (header + lines), retry/backoff, đánh dấu uploaded/failed (thay `mockUploadOne`).
 **Mục tiêu:** Khung app chạy được, đăng nhập M365, cài PWA, mở camera & chụp (chưa upload thật).
 
 - Next.js + TS + Tailwind scaffold; cấu trúc thư mục (xem ARCHITECTURE).

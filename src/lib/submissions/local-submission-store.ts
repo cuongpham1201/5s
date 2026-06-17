@@ -85,11 +85,6 @@ export function getCompletedSubmissionById(id: string): CompletedSubmission | nu
   return listCompletedSubmissions().find((s) => s.submissionId === id) ?? null;
 }
 
-/** Strip heavy originals for persisted history (keep watermarked for thumbnails). */
-function slimForHistory(photos: SessionPhoto[]): SessionPhoto[] {
-  return photos.map((p) => ({ ...p, originalDataUrl: "" }));
-}
-
 /** Persist history, trimming oldest entries if the quota is exceeded. */
 function persistHistory(list: CompletedSubmission[]): void {
   let working = [...list];
@@ -97,9 +92,9 @@ function persistHistory(list: CompletedSubmission[]): void {
     if (writeJSON(HISTORY_KEY, working)) return;
     working = working.slice(0, working.length - 1); // drop oldest (list is newest-first)
   }
-  // Last resort: keep newest entry as metadata-only (no images).
+  // Last resort: keep newest entry with thumbnails stripped (metadata only).
   if (list.length > 0) {
-    const meta = { ...list[0], photos: list[0].photos.map((p) => ({ ...p, originalDataUrl: "", watermarkedDataUrl: "" })) };
+    const meta = { ...list[0], photos: list[0].photos.map((p) => ({ ...p, thumbnailDataUrl: "" })) };
     writeJSON(HISTORY_KEY, [meta]);
   }
 }
@@ -110,7 +105,9 @@ export function completeCurrentSession(): CompletedSubmission | null {
 
   const now = new Date().toISOString();
   const completed: CompletedSubmission = {
-    submissionId: `sub-${Date.now()}`,
+    // Reuse the sessionId as the submissionId so it matches the IndexedDB
+    // photo records (which were stored under sessionId) and the queue item.
+    submissionId: session.sessionId,
     departmentCode: session.departmentCode,
     departmentName: session.departmentName,
     areaCode: session.areaCode,
@@ -119,8 +116,8 @@ export function completeCurrentSession(): CompletedSubmission | null {
     reporterEmail: session.reporterEmail,
     startedAt: session.startedAt,
     submittedAt: now,
-    photoCount: session.photos.length,
-    photos: slimForHistory(session.photos),
+    photoCount: session.photos.length, // photos are tiny metadata now → reliable count
+    photos: session.photos,
     status: "local-only",
   };
 

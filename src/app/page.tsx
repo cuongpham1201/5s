@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { AppShell } from "@/components/layout/AppShell";
 import { Card, InfoRow } from "@/components/ui/Card";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
+import { QueueStatusCard } from "@/components/home/QueueStatusCard";
 import { CURRENT_USER } from "@/lib/mock-data";
 
 export default async function HomePage() {
@@ -54,6 +55,8 @@ export default async function HomePage() {
             </div>
           </div>
         </div>
+
+        <QueueStatusCard />
 
         <Card className="mt-4">
           <InfoRow label="Đơn vị" value={department} />

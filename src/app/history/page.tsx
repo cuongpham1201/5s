@@ -4,22 +4,45 @@ import { useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useSessionCapture } from "@/features/capture/session-context";
+import { useQueue } from "@/hooks/useQueue";
+import type { QueueStatus } from "@/lib/queue/queue-types";
 
 const TABS = ["Hôm nay", "Tuần", "Tháng"] as const;
 
+type SyncTone = "success" | "warning" | "danger" | "neutral";
 interface Row {
   date: string;
   department: string;
   area: string;
   photoCount: number;
   hue: number;
+  syncLabel: string;
+  syncTone: SyncTone;
 }
 
-// Static demo rows (shown when local history is empty) so the format is visible.
+function syncFromStatus(status?: QueueStatus): { label: string; tone: SyncTone } {
+  switch (status) {
+    case "uploaded":
+      return { label: "Đã đồng bộ", tone: "success" };
+    case "uploading":
+      return { label: "Đang đồng bộ…", tone: "warning" };
+    case "failed":
+      return { label: "Lỗi đồng bộ", tone: "danger" };
+    case "queued":
+    case "ready":
+    case "draft":
+      return { label: "Đang chờ đồng bộ", tone: "warning" };
+    case "cancelled":
+      return { label: "Đã huỷ", tone: "neutral" };
+    default:
+      return { label: "Đã đồng bộ", tone: "success" };
+  }
+}
+
 const DEMO: Row[] = [
-  { date: "15/06/2026", department: "PMKT", area: "Văn phòng", photoCount: 3, hue: 210 },
-  { date: "15/06/2026", department: "PMKT", area: "Kho POSM", photoCount: 2, hue: 150 },
-  { date: "14/06/2026", department: "PMKT", area: "Phòng họp", photoCount: 1, hue: 280 },
+  { date: "15/06/2026", department: "PMKT", area: "Văn phòng", photoCount: 3, hue: 210, syncLabel: "Đã đồng bộ", syncTone: "success" },
+  { date: "15/06/2026", department: "PMKT", area: "Kho POSM", photoCount: 2, hue: 150, syncLabel: "Đang chờ đồng bộ", syncTone: "warning" },
+  { date: "14/06/2026", department: "PMKT", area: "Phòng họp", photoCount: 1, hue: 280, syncLabel: "Đã đồng bộ", syncTone: "success" },
 ];
 
 function dmy(iso: string): string {
@@ -31,16 +54,24 @@ function dmy(iso: string): string {
 export default function HistoryPage() {
   const [tab, setTab] = useState<(typeof TABS)[number]>("Hôm nay");
   const { history } = useSessionCapture();
+  const { items } = useQueue();
+
+  const statusBySubmission = new Map(items.map((q) => [q.submissionId, q.status]));
 
   const rows: Row[] =
     history.length > 0
-      ? history.map((h, i) => ({
-          date: dmy(h.submittedAt),
-          department: h.departmentCode,
-          area: h.areaName,
-          photoCount: h.photoCount,
-          hue: (i * 47 + 200) % 360,
-        }))
+      ? history.map((h, i) => {
+          const sync = syncFromStatus(statusBySubmission.get(h.submissionId));
+          return {
+            date: dmy(h.submittedAt),
+            department: h.departmentCode,
+            area: h.areaName,
+            photoCount: h.photoCount,
+            hue: (i * 47 + 200) % 360,
+            syncLabel: sync.label,
+            syncTone: sync.tone,
+          };
+        })
       : DEMO;
 
   return (
@@ -81,7 +112,7 @@ export default function HistoryPage() {
                   {r.date} · {r.photoCount} ảnh
                 </div>
               </div>
-              <StatusBadge tone="success">Đã nộp</StatusBadge>
+              <StatusBadge tone={r.syncTone}>{r.syncLabel}</StatusBadge>
             </div>
           ))}
         </div>

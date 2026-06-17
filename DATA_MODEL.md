@@ -78,25 +78,29 @@
 Nguồn type chuẩn: **`src/types/submission.ts`**. Lưu cục bộ qua
 `src/lib/submissions/local-submission-store.ts` (localStorage, SSR-safe).
 
+**Tách lưu trữ (Phase 2B):** metadata ở **localStorage**, ảnh nhị phân ở **IndexedDB**.
+
 ```ts
-SubmissionSession { sessionId, departmentCode, departmentName?, areaCode, areaName,
-  reporterName, reporterEmail, startedAt, photos: SessionPhoto[] }
-
-SessionPhoto { photoId, originalDataUrl, watermarkedDataUrl, capturedAt,
+// localStorage (nhỏ)
+SessionPhoto { photoId, submissionId, thumbnailDataUrl, capturedAt,
   watermarkMetadata, latitude, longitude, address, status: "draft"|"ready" }
+SubmissionSession { sessionId, ...header, photos: SessionPhoto[] }       // sessionId = submissionId
+CompletedSubmission { submissionId, ...header, submittedAt, photoCount, photos, status: UploadStatus }
+QueueItem { queueId, submissionId, createdAt, lastAttemptAt?, attemptCount, status: QueueStatus }
 
-CompletedSubmission { submissionId, departmentCode, departmentName?, areaCode, areaName,
-  reporterName, reporterEmail, startedAt, submittedAt, photoCount, photos, status: UploadStatus }
+// IndexedDB (nặng) — src/lib/storage/photo-store.ts
+StoredPhoto { photoId, submissionId, originalBlob, watermarkedBlob, thumbnailBlob, createdAt, status }
 
 WatermarkMetadata { time, date, weekday, address, department, area, reporter, gps, verifiedText }
 GeoLocationSnapshot { latitude, longitude, accuracy, capturedAt, status, address }
 UploadStatus = "local-only" | "pending-upload" | "uploading" | "uploaded" | "failed"
+QueueStatus  = "draft" | "ready" | "queued" | "uploading" | "uploaded" | "failed" | "cancelled"
 ```
 
-- **Watermark ghép thật** (Canvas) ở `/preview`; mỗi ảnh giữ cả `originalDataUrl` + `watermarkedDataUrl`.
-- `completeSession()` → `CompletedSubmission` (`status="local-only"`) lưu vào history cục bộ. **Chưa** ghi `5SSubmissions`/`5SSubmissionPhotos` thật.
-- **Quota:** history strip `originalDataUrl`, giữ watermarked cho thumbnail; vượt quota → trim entry cũ. localStorage **không** phải lưu trữ cuối → **IndexedDB ở Phase 2B**, upload SharePoint ở **Phase 2C**.
-- **Ánh xạ backend (2C):** `SubmissionSession` → 1 header `5SSubmissions`; mỗi `SessionPhoto` → 1 line `5SSubmissionPhotos` (kèm `watermarkMetadata`, GPS, URL).
+- **Bug đếm ảnh (Phase 2A.1) đã sửa:** trước đây data URL nặng được nhồi vào localStorage → vượt quota → save thất bại âm thầm → số ảnh lệch. Nay ảnh ở IndexedDB, session metadata nhỏ → `photoCount = photos.length` đáng tin. Xem RUN_REPORT.
+- **Watermark ghép thật** (Canvas) ở `/preview`; blob `original`+`watermarked`+`thumbnail` ghi IndexedDB, metadata giữ `thumbnailDataUrl` nhỏ.
+- `completeSession()` → `CompletedSubmission(status="local-only")` + tạo `QueueItem(queued)`; mock sync → `uploaded`. **Chưa** ghi SharePoint thật.
+- **Ánh xạ backend (2C):** `SubmissionSession` → 1 header `5SSubmissions`; mỗi `SessionPhoto`/`StoredPhoto` → 1 line `5SSubmissionPhotos` (kèm `watermarkMetadata`, GPS, URL).
 
 ## 3. Dashboard Data Model — công thức KPI
 
