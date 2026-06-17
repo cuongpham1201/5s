@@ -81,8 +81,8 @@ Nguồn type chuẩn: **`src/types/submission.ts`**. Lưu cục bộ qua
 **Tách lưu trữ (Phase 2B):** metadata ở **localStorage**, ảnh nhị phân ở **IndexedDB**.
 
 ```ts
-// localStorage (nhỏ)
-SessionPhoto { photoId, submissionId, thumbnailDataUrl, capturedAt,
+// localStorage (metadata-only — KHÔNG image payload, Phase 2B.1)
+SessionPhoto { photoId, submissionId, capturedAt,
   watermarkMetadata, latitude, longitude, address, status: "draft"|"ready" }
 SubmissionSession { sessionId, ...header, photos: SessionPhoto[] }       // sessionId = submissionId
 CompletedSubmission { submissionId, ...header, submittedAt, photoCount, photos, status: UploadStatus }
@@ -98,7 +98,7 @@ QueueStatus  = "draft" | "ready" | "queued" | "uploading" | "uploaded" | "failed
 ```
 
 - **Bug đếm ảnh (Phase 2A.1) đã sửa:** trước đây data URL nặng được nhồi vào localStorage → vượt quota → save thất bại âm thầm → số ảnh lệch. Nay ảnh ở IndexedDB, session metadata nhỏ → `photoCount = photos.length` đáng tin. Xem RUN_REPORT.
-- **Watermark ghép thật** (Canvas) ở `/preview`; blob `original`+`watermarked`+`thumbnail` ghi IndexedDB, metadata giữ `thumbnailDataUrl` nhỏ.
+- **Watermark ghép thật** (Canvas) ở `/preview`; blob `original`+`watermarked`+`thumbnail` ghi IndexedDB. Thumbnail hiển thị qua object URL (`<PhotoThumb>`), **không** lưu base64 trong localStorage (Phase 2B.1 — localStorage metadata-only).
 - `completeSession()` → `CompletedSubmission(status="local-only")` + tạo `QueueItem(queued)`; mock sync → `uploaded`. **Chưa** ghi SharePoint thật.
 - **Ánh xạ backend (2C):** `SubmissionSession` → 1 header `5SSubmissions`; mỗi `SessionPhoto`/`StoredPhoto` → 1 line `5SSubmissionPhotos` (kèm `watermarkMetadata`, GPS, URL).
 

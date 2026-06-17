@@ -44,20 +44,17 @@ export interface WatermarkMetadata {
 
 export interface SessionPhoto {
   photoId: string;
-  /** Owning submission id (= sessionId; used as IndexedDB index key). */
+  /** Owning submission id (= sessionId; IndexedDB index key). */
   submissionId: string;
-  /**
-   * Small thumbnail data URL kept in metadata for instant display.
-   * Full original + watermarked binaries live in IndexedDB (photo-store),
-   * keyed by photoId — NOT in localStorage (Phase 2B; fixes quota/count bug).
-   */
-  thumbnailDataUrl: string;
   capturedAt: string; // ISO
   watermarkMetadata: WatermarkMetadata;
   latitude: number | null;
   longitude: number | null;
   address: string;
   status: PhotoStatus;
+  // NOTE (Phase 2B.1): NO image payload here. All binaries (original /
+  // watermarked / thumbnail) live in IndexedDB (photo-store) keyed by photoId.
+  // localStorage holds metadata only.
 }
 
 /** The in-progress submission being captured (draft). */

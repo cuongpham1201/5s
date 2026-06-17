@@ -79,11 +79,10 @@ export default function PreviewPage() {
         createdAt: new Date().toISOString(),
         status: "ready",
       });
-      // Light metadata (with a small thumbnail) → session in localStorage.
+      // Light metadata ONLY (no image payload) → session in localStorage.
       const photo: SessionPhoto = {
         photoId,
         submissionId,
-        thumbnailDataUrl,
         capturedAt: pendingCapture.capturedAt,
         watermarkMetadata: meta,
         latitude: pendingCapture.geo.latitude,

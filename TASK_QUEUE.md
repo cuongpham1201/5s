@@ -110,6 +110,19 @@
 
 > Sync là **mock** (không network/SharePoint). Upload thật = **Phase 2C**.
 
+## Phase 2B.1 — Storage validation & stress test (DONE)
+
+| ID | Task | Status |
+|---|---|---|
+| P2B1-A | Audit storage; phát hiện thumbnail base64 còn trong localStorage → **fix**: chuyển thumbnail sang IndexedDB, hiển thị qua object URL (`PhotoThumb`); localStorage metadata-only | DONE |
+| P2B1-B | Mở rộng `/debug/storage`: PASS/WARNING indicators, localStorage size, IndexedDB count/usage, counts | DONE |
+| P2B1-C | Validate session/refresh survival (đọc lại localStorage + thumbnail từ IndexedDB) | DONE |
+| P2B1-D | Validate queue/session/history persist qua refresh + restart (localStorage bền vững) | DONE |
+| P2B1-E | Stress tool `stress-test.ts` + nút +5/+10/+20 ảnh trong debug | DONE |
+| P2B1-F | `storage-audit.ts` + Safari review + `docs/STORAGE_VALIDATION.md` | DONE |
+| P2B1-G | Phase 2C readiness checklist → **READY** | DONE |
+| P2B1-QG | Quality gate tsc + lint + build PASS | DONE |
+
 ## Phase 2+ (TODO — chờ phê duyệt)
 SharePoint thật (Library + `5SSubmissions`/`5SSubmissionPhotos`), Graph app-only, watermark ghép ảnh, upload N ảnh/lần gửi + offline queue, dashboard data thật, Excel, notifications. Xem ROADMAP Phase 2–6.
 

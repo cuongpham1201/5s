@@ -92,11 +92,8 @@ function persistHistory(list: CompletedSubmission[]): void {
     if (writeJSON(HISTORY_KEY, working)) return;
     working = working.slice(0, working.length - 1); // drop oldest (list is newest-first)
   }
-  // Last resort: keep newest entry with thumbnails stripped (metadata only).
-  if (list.length > 0) {
-    const meta = { ...list[0], photos: list[0].photos.map((p) => ({ ...p, thumbnailDataUrl: "" })) };
-    writeJSON(HISTORY_KEY, [meta]);
-  }
+  // Last resort: keep only the newest entry (metadata is already image-free).
+  if (list.length > 0) writeJSON(HISTORY_KEY, [list[0]]);
 }
 
 export function completeCurrentSession(): CompletedSubmission | null {

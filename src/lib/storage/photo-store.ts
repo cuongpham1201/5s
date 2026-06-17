@@ -82,6 +82,29 @@ export async function clearAllPhotos(): Promise<void> {
   }
 }
 
+export type PhotoKind = "original" | "watermarked" | "thumbnail";
+
+/** Create an object URL for a stored photo blob. Caller must URL.revokeObjectURL. */
+export async function getObjectUrl(
+  photoId: string,
+  kind: PhotoKind = "thumbnail",
+): Promise<string | null> {
+  const photo = await getPhoto(photoId);
+  if (!photo) return null;
+  const blob =
+    kind === "original"
+      ? photo.originalBlob
+      : kind === "watermarked"
+        ? photo.watermarkedBlob
+        : photo.thumbnailBlob;
+  if (!blob) return null;
+  try {
+    return URL.createObjectURL(blob);
+  } catch {
+    return null;
+  }
+}
+
 export async function getStorageUsage(): Promise<StorageUsage> {
   const photoCount = await countPhotos();
   let usageBytes = 0;

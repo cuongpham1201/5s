@@ -7,6 +7,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { useCamera, makeSimulatedPhoto } from "@/hooks/useCamera";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { useSessionCapture } from "@/features/capture/session-context";
+import { PhotoThumb } from "@/components/media/PhotoThumb";
 
 export default function CameraPage() {
   const router = useRouter();
@@ -107,8 +108,7 @@ export default function CameraPage() {
         <div className="absolute left-0 right-0 bottom-0 z-10 h-[150px] flex items-center justify-around pb-[calc(18px+env(safe-area-inset-bottom))] bg-gradient-to-t from-black/60 to-transparent">
           {count > 0 ? (
             <Link href="/session" className="w-12 h-12 rounded-[10px] overflow-hidden border-2 border-white/50">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={session.photos[count - 1].thumbnailDataUrl} alt="ảnh gần nhất" className="w-full h-full object-cover" />
+              <PhotoThumb photoId={session.photos[count - 1].photoId} alt="ảnh gần nhất" className="w-full h-full object-cover" />
             </Link>
           ) : (
             <div className="w-12 h-12 rounded-[10px] border-2 border-white/30" />

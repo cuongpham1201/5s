@@ -489,3 +489,62 @@ Mỗi lần gửi có badge: Đã đồng bộ / Đang chờ đồng bộ / Đan
 Xem cuối (commit local sau báo cáo). **Không push.**
 
 **Trạng thái:** Phase 2A.1 + 2B HOÀN THÀNH — bug đếm ảnh đã sửa, IndexedDB + offline queue (mock) hoạt động, gates PASS. **Dừng.** Phase kế: 2C SharePoint Upload Engine.
+
+---
+---
+
+# 5S Daily — Phase 2B.1 Run Report (Storage Validation & Stress Test)
+
+> Ngày: 2026-06-17 · Branch `feature/phase1-foundation` · Base `9ed6e0f`. Validation/audit — không SharePoint/Graph/deploy/push.
+
+## Preflight
+pwd `/data/dev/5s-app` · branch `feature/phase1-foundation` · working tree **clean** · log `9ed6e0f/fda3b0f/e735723/20b776c/82efde5` · node v20.20.2 / npm 10.8.2.
+
+## Storage audit findings (Part A)
+- IndexedDB `StoredPhoto`: original / watermarked / thumbnail đều là **Blob** ✅.
+- Queue (`5s.queue.v1`) = metadata ✅.
+- **Phát hiện:** `SessionPhoto.thumbnailDataUrl` (base64 nhỏ) vẫn nằm trong localStorage (session + history) → vi phạm "metadata-only".
+
+## Blob validation result
+original/watermarked/thumbnail = Blob trong IndexedDB (ghi ở `/preview` qua `dataUrlToBlob`). ✅
+
+## localStorage validation result
+**Đã fix:** bỏ `thumbnailDataUrl` khỏi `SessionPhoto`; thumbnail đọc từ IndexedDB qua object URL (`<PhotoThumb>`). Thêm `auditLocalStorage()` quét chuỗi `data:image` → `/debug/storage` báo "Không có image payload trong localStorage". ✅ **localStorage = metadata-only.**
+
+## Queue persistence result
+Queue ở localStorage (`5s.queue.v1`), KHÔNG phải React-only → **sống qua refresh + restart trình duyệt**. SyncRunner xử lý lại khi `online`. ✅
+
+## Session persistence result
+Session draft ở localStorage; context hydrate khi mount; thumbnail tải lại từ IndexedDB theo `photoId` → số ảnh đúng, không vỡ tham chiếu sau refresh. ✅
+
+## Stress test result
+`/debug/storage` → nút +5/+10/+20 (`generateMockPhotos` tạo ảnh ~1280×960 vào IndexedDB + queue item). Quan sát: **localStorage gần như không đổi**, **IndexedDB usage tăng tuyến tính** theo số ảnh → ảnh không vào localStorage; vượt xa giới hạn ~5 ảnh của cách cũ. ✅
+
+## Safari review result
+Object URL có revoke; IndexedDB OK iOS14+ (Private Mode suy biến an toàn); **rủi ro ITP eviction ~7 ngày** → cần upload 2C làm nguồn bền vững; localStorage Private Mode try/catch; getUserMedia cần HTTPS. Chi tiết: `docs/STORAGE_VALIDATION.md`.
+
+## Files created
+- `src/lib/storage/storage-audit.ts`, `src/lib/storage/stress-test.ts`
+- `src/components/media/PhotoThumb.tsx`
+- `docs/STORAGE_VALIDATION.md`
+
+## Files modified
+- `src/lib/storage/photo-store.ts` (getObjectUrl)
+- `src/types/submission.ts` (bỏ thumbnailDataUrl), `src/lib/submissions/local-submission-store.ts`
+- `src/app/preview/page.tsx`, `src/app/session/page.tsx`, `src/app/camera/page.tsx`, `src/app/debug/storage/page.tsx`
+- `DATA_MODEL.md`, `TASK_QUEUE.md`, `RUN_REPORT.md`
+
+## Build / Lint / TypeScript — ✅ PASS (vòng 1)
+`tsc` 0 lỗi · `lint` no warnings · `build` 19 routes.
+
+## Phase 2C readiness verdict
+**✅ READY** — tất cả 8 mục checklist đạt: binary storage solved · queue survives restart · session/history survive refresh · IndexedDB validated · localStorage metadata-only · stress passed · debug visibility.
+
+## Known risks
+- Safari ITP có thể evict storage sau ~7 ngày không dùng → 2C upload là nguồn bền vững (offline queue chỉ là đệm). Khuyến khích Add-to-Home-Screen.
+- Sync vẫn **mock** (không network). Stress numbers là origin-wide estimate. Chưa có unit test tự động.
+
+## Git status / Commit hash
+Xem cuối (commit local sau báo cáo). **Không push.**
+
+**Trạng thái:** Phase 2B.1 HOÀN THÀNH — storage validated, localStorage metadata-only, READY cho 2C. **Dừng.**
