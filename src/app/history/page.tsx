@@ -4,8 +4,7 @@ import { useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { DeptGalleryModal } from "@/components/overview/DeptGalleryModal";
-import { MockPhoto } from "@/components/ui/MockPhoto";
-import { ALL_DEPARTMENTS, findDept, historyByDate, last7Days, todayKpi } from "@/lib/mock-overview";
+import { ALL_DEPARTMENTS, historyByDate, last7Days, todayKpi } from "@/lib/mock-overview";
 
 const TABS = ["Ngày", "Tuần", "Tháng"] as const;
 
@@ -42,30 +41,30 @@ export default function HistoryPage() {
 
         {tab === "Ngày" &&
           historyByDate().map((day) => (
-            <div key={day.date} className="card p-4">
-              <div className="flex items-center justify-between mb-3">
+            <div key={day.date} className="card">
+              <div className="flex items-center justify-between mb-2.5">
                 <div>
-                  <div className="font-bold text-[15px]">{day.date}</div>
+                  <div className="font-bold text-[14.5px]">{day.date}</div>
                   <div className="text-[12px] text-ink-muted">{day.weekday}</div>
                 </div>
-                <span className="text-[12px] font-semibold px-2.5 h-7 rounded-pill grid place-items-center bg-success-bg text-success">
+                <span className="text-[12px] font-semibold px-2.5 h-6 rounded-pill grid place-items-center bg-success-bg text-success">
                   {day.depts.length} phòng
                 </span>
               </div>
-              <div className="grid grid-cols-4 gap-2">
+              <div className="flex flex-wrap gap-1.5">
                 {day.depts.slice(0, 8).map((code) => (
-                  <button key={code} onClick={() => setOpenDept(code)}>
-                    <MockPhoto hue={findDept(code)?.hue ?? 210} className="aspect-square">
-                      <span className="absolute left-1 top-1 px-1.5 h-5 rounded-pill grid place-items-center text-[9px] font-bold bg-black/45 text-white">
-                        {code}
-                      </span>
-                    </MockPhoto>
+                  <button
+                    key={code}
+                    onClick={() => setOpenDept(code)}
+                    className="px-2.5 h-7 rounded-pill text-[12px] font-semibold bg-surface text-ink"
+                  >
+                    {code}
                   </button>
                 ))}
                 {day.depts.length > 8 && (
-                  <div className="aspect-square rounded-[16px] bg-surface grid place-items-center text-[13px] font-bold text-ink-muted">
+                  <span className="px-2.5 h-7 rounded-pill grid place-items-center text-[12px] font-semibold text-ink-muted bg-surface">
                     +{day.depts.length - 8}
-                  </div>
+                  </span>
                 )}
               </div>
             </div>

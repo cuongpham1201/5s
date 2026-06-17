@@ -37,10 +37,10 @@ export function DeptGalleryModal({ code, onClose }: { code: string | null; onClo
         ) : (
           <div className="grid grid-cols-2 gap-3">
             {photos.map((p) => (
-              <MockPhoto key={p.id} hue={p.hue} className="aspect-square">
-                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/65 to-transparent px-2.5 pt-5 pb-2 text-white text-[11px] font-semibold">
+              <MockPhoto key={p.id} className="aspect-square">
+                <span className="absolute left-2 bottom-2 text-[11px] font-semibold text-ink-muted bg-white/85 px-2 h-5 grid place-items-center rounded-pill">
                   {dept?.code} · {p.time}
-                </div>
+                </span>
               </MockPhoto>
             ))}
           </div>

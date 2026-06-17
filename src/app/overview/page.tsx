@@ -37,7 +37,7 @@ export default function OverviewPage() {
         </div>
 
         {/* Search */}
-        <div className="flex items-center gap-2.5 rounded-[14px] bg-white border border-line px-3.5 h-11 shadow-e2">
+        <div className="flex items-center gap-2.5 rounded-[14px] bg-white border border-line px-3.5 h-12 shadow-e2">
           <Icon name="search" size={18} className="text-ink-muted" />
           <input
             value={q}

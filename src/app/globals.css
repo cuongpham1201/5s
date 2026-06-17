@@ -7,16 +7,16 @@
    Tailwind references these via tailwind.config.ts.
    ============================================================ */
 :root {
-  /* Brand / Primary (BAN5S MVP polish) */
-  --primary-600: #0A74DA;
-  --primary-700: #0860B5;
+  /* Brand / Primary (BAN5S MVP — pass 2, calmer) */
+  --primary-600: #0B74D1;
+  --primary-700: #0960AD;
   --primary-800: #064a8c;
-  --primary-100: #E7F1FD;
-  --primary-50: #F2F8FE;
+  --primary-100: #E7F1FB;
+  --primary-50: #F2F8FD;
 
   /* Neutral */
   --bg: #FFFFFF;
-  --app-bg: #F6F8FB;
+  --app-bg: #F8FAFC;
   --surface: #F1F4F9;
   --surface-2: #F8FAFC;
   --border: #E5E7EB;
@@ -94,9 +94,9 @@ body {
   .btn-block { @apply w-full; }
   .btn[disabled] { background: var(--surface); color: var(--text-disabled); pointer-events: none; }
 
-  /* Cards */
-  .card { @apply bg-white p-4 shadow-e4; border-radius: 20px; }
-  .card-flat { @apply bg-white; border-radius: 20px; border: 1px solid var(--border); }
+  /* Cards — thin, near-flat (border + a whisper of shadow) */
+  .card { @apply bg-white p-4; border-radius: 16px; border: 1px solid var(--border); box-shadow: 0 1px 2px rgba(15, 23, 42, .04); }
+  .card-flat { @apply bg-white; border-radius: 16px; border: 1px solid var(--border); }
 
   /* Badges */
   .badge { @apply inline-flex items-center gap-1.5 text-xs font-semibold rounded-pill; padding: 4px 10px; }
@@ -106,12 +106,12 @@ body {
   .badge-info { background: var(--info-bg); color: var(--info); }
   .badge-neutral { background: var(--surface); color: var(--text-muted); }
 
-  /* Bottom nav */
+  /* Bottom nav — slim */
   .bottom-nav {
     @apply flex bg-white;
     flex: none;
     border-top: 1px solid var(--border);
-    padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+    padding: 5px 6px calc(5px + env(safe-area-inset-bottom));
   }
 
   /* Admin sidebar */

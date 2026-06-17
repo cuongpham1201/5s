@@ -21,16 +21,16 @@ export function BottomNav() {
           <Link
             key={it.href}
             href={it.href}
-            className="flex-1 flex flex-col items-center gap-1 py-1.5"
+            className="flex-1 flex flex-col items-center gap-0.5 py-1"
           >
             <span
-              className={`flex items-center justify-center h-7 px-4 rounded-pill transition-colors ${
+              className={`flex items-center justify-center h-6 px-3.5 rounded-pill transition-colors ${
                 active ? "bg-primary-100 text-primary-600" : "text-ink-muted"
               }`}
             >
-              <Icon name={it.icon} size={21} strokeWidth={active ? 2.1 : 1.8} />
+              <Icon name={it.icon} size={22} strokeWidth={active ? 2.1 : 1.7} />
             </span>
-            <span className={`text-[11px] font-semibold ${active ? "text-primary-600" : "text-ink-muted"}`}>
+            <span className={`text-[11px] font-medium ${active ? "text-primary-600" : "text-ink-muted"}`}>
               {it.label}
             </span>
           </Link>
