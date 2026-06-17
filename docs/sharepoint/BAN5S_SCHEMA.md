@@ -1,13 +1,17 @@
-# Ban5S — Final SharePoint Schema (Phase 2C.1)
+# Ban5S — Final SharePoint Schema (Phase 2C.1, corrected 2C.1A)
 
 > Site: **https://biahalong.sharepoint.com/sites/Ban5S**
-> Containers (đã chốt, không thêm mới): **ListConfig**, **ListData**, **img**.
+> Document Library: **5S** (đã tồn tại).
+> Bên trong "5S" có **3 thư mục THẬT đã tạo sẵn** (không phải nhãn khái niệm,
+> không phải SharePoint List, KHÔNG được xoá/đổi tên/tạo trùng chữ thường):
+> - `5S/img` → thư mục ảnh
+> - `5S/ListConfig` → artifact cấu hình / seed / export
+> - `5S/ListData` → artifact vận hành / data export / log
 >
-> **Quyết định/giả định:** SharePoint **lists không lồng nhau** (flat tại site).
-> Vì vậy `ListConfig`/`ListData` được hiện thực bằng **tiền tố internal name**
-> (`Config_*` / `Data_*`) — đóng vai trò namespace logic. `img` là **Document
-> Library** thật (hỗ trợ folder). Nếu tổ chức muốn cách khác (vd 1 list gộp),
-> xem Open Question trong BAN5S_PROVISION_PLAN.md.
+> **Dữ liệu có cấu trúc** vẫn nằm trong **SharePoint Lists cấp site** (SharePoint
+> KHÔNG lồng được List vào thư mục thư viện). Lists đặt tiền tố `Config_`/`Data_`
+> để map rõ ràng về nhóm **ListConfig**/**ListData**. Đây là **fact đã chốt**
+> (không còn là open question).
 
 Quy ước chung:
 - Mọi list có cột hệ thống **Title** (bắt buộc). Với mỗi list, Title = khóa nghiệp vụ (đặt = mã/khóa để dễ đọc); cột canonical vẫn được khai báo riêng và indexed.
@@ -106,18 +110,24 @@ Quy ước chung:
 
 ---
 
-## img (Document Library) — cấu trúc thư mục
+## img — thư mục ảnh (bên trong Document Library "5S")
+
+> `img` là **thư mục THẬT** trong thư viện "5S" (cùng cấp với `ListConfig`, `ListData`).
+> KHÔNG tạo thư viện ảnh khác.
 
 ```
-img/
-└── 2026/                         ← YYYY
-    └── 06/                       ← MM
-        └── PMKT/                 ← DepartmentCode
-            └── SUB-20260617-0001/   ← SubmissionId (1 thư mục/lần gửi)
-                ├── original-01.jpg
-                ├── watermarked-01.jpg
-                ├── original-02.jpg
-                └── watermarked-02.jpg
+5S/ (Document Library)
+├── img/                              ← thư mục ảnh (đã tồn tại)
+│   └── 2026/                         ← YYYY
+│       └── 06/                       ← MM
+│           └── PMKT/                 ← DepartmentCode
+│               └── SUB-20260617-0001/   ← SubmissionId (1 thư mục/lần gửi)
+│                   ├── original-01.jpg
+│                   ├── watermarked-01.jpg
+│                   ├── original-02.jpg
+│                   └── watermarked-02.jpg
+├── ListConfig/                       ← artifact cấu hình / seed / export (đã tồn tại)
+└── ListData/                         ← artifact vận hành / export / log (đã tồn tại)
 ```
 
 **Naming rules:**

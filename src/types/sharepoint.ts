@@ -6,7 +6,9 @@
  * (Phase 2C.2) will read/write. Strict typing, no `any`.
  *
  * Site: https://biahalong.sharepoint.com/sites/Ban5S
- * Containers: ListConfig (config lists), ListData (operational lists), img (library)
+ * Library "5S" with REAL folders: img / ListConfig / ListData.
+ * Structured data lives in site-level Lists (Config_ and Data_ prefixed) grouped
+ * logically to ListConfig/ListData (SharePoint cannot nest Lists inside folders).
  */
 
 export type AppRole = "employee" | "environment" | "admin";

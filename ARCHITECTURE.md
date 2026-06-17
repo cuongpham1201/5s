@@ -278,7 +278,7 @@ Cron/scheduler chạy phía server (PM2 + node-cron hoặc systemd timer) đối
 - **Local data flow (Phase 2A — DONE):** capture frame thật → GPS snapshot (timeout 5s, không chặn) → **watermark engine Canvas thật** (`src/lib/watermark/`) ghép ảnh ở `/preview` → giữ `original` + `watermarked` vào `SubmissionSession` (store `local-submission-store.ts`, localStorage) → `completeSession()` tạo `CompletedSubmission(status="local-only")` lưu history cục bộ. Types: `src/types/submission.ts`. Xem `docs/LOCAL_DATA_FLOW.md`, `docs/WATERMARK_ENGINE.md`.
 - **Storage tách lớp (Phase 2B — DONE):** metadata (session/history/queue + thumbnail nhỏ) ở **localStorage**; ảnh nhị phân (`original`/`watermarked`/`thumbnail` blob) ở **IndexedDB** (`src/lib/storage/`). Sửa được **bug đếm ảnh** (localStorage quota). Xem `docs/INDEXEDDB_STORAGE.md`.
 - **Offline queue + sync (Phase 2B — DONE, MOCK):** `completeSession()` → `QueueItem(queued)` → `processQueue()` mock (queued→uploading→uploaded, **không network**). `useOnlineStatus`/`useQueue`, banner offline, Home queue-status, History sync-status, `/debug/storage` (dev). Xem `docs/OFFLINE_QUEUE.md`.
-- **Vẫn chưa upload thật:** SharePoint/Graph là **Phase 2C** — thay `mockUploadOne()` bằng upload Document Library + ghi `5SSubmissions`/`5SSubmissionPhotos`.
+- **Vẫn chưa upload thật:** SharePoint/Graph là **Phase 2C** — upload vào Document Library **"5S"** (thư mục thật `img`/`ListConfig`/`ListData`) + ghi Lists `Config_*`/`Data_*`. Schema chuẩn: `docs/sharepoint/` (xem 2C.1A). Thay `mockUploadOne()` bằng upload thật.
 - **Dev domain:** `https://she.biahalong.com → http://localhost:3002` (Cloudflare Tunnel — cấu hình ngoài phạm vi code). Chạy: `npm run dev:3002`.
 
 ## 7. Liên kết tài liệu

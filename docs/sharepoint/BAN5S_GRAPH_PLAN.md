@@ -10,12 +10,22 @@
 - `getAppOnlyToken()` (graph-client.ts) hiện ném 501 — 2C.2 cài MSAL `ConfidentialClientApplication`.
 - Token chỉ ở **server (BFF)**, không lộ client (đúng SECURITY_MODEL).
 
-## Resolve site & lists (đã có foundation read-only)
+## Phase 2C.2A — Reality check BẮT BUỘC trước khi upload
+Engine phải xác minh cấu trúc đã tồn tại trước khi ghi bất cứ gì:
 ```
-GET /sites/{hostname}:{/sites/Ban5S}            → siteId          (siteLookupPath)
-GET /sites/{siteId}/lists?$select=id,name       → tìm listId      (findListId)
-GET /sites/{siteId}/drives?$select=id,name      → driveId của img (resolveImgDrive)
+GET /sites/{hostname}:{/sites/Ban5S}             → siteId           (siteLookupPath)
+GET /sites/{siteId}/drives?$select=id,name       → tìm drive "5S"   (resolveLibraryDrive)
+GET /drives/{driveId}/root/children?$select=name → verify có: img, ListConfig, ListData
+                                                   (listLibraryRootChildren / verifyExpectedFolders)
+GET /sites/{siteId}/lists?$select=id,name        → verify/tạo Config_* & Data_*  (findListId)
 ```
+- Nếu thiếu thư mục `img`/`ListConfig`/`ListData` → **DỪNG**, báo người dùng (không tự tạo trùng/đổi tên).
+- Chỉ khi health check PASS mới chạy upload.
+
+## Resolve (foundation read-only đã có)
+- `resolveLibraryDrive(client, siteId)` → drive của Document Library **"5S"** (img là **thư mục** bên trong, KHÔNG phải drive).
+- `verifyExpectedFolders(client, driveId)` → {present, missing} cho img/ListConfig/ListData.
+- `findListId(client, siteId, "Data_Submissions")` → listId.
 
 ## Upload flow (2C.2) — cho mỗi lần gửi (N ảnh)
 ```
@@ -23,12 +33,12 @@ GET /sites/{siteId}/drives?$select=id,name      → driveId của img (resolveIm
    POST /sites/{siteId}/lists/{Data_Submissions}/items
    { fields: { Title, SubmissionId, DepartmentCode, ... SyncStatus: "uploading" } }
 
-2. Đảm bảo cây thư mục img: 2026/06/PMKT/SUB-...   (ensure-folder)
-   PUT /sites/{siteId}/drives/{imgDriveId}/root:/2026/06/PMKT/SUB-XXXX:/...
+2. Đảm bảo cây thư mục trong drive "5S": img/2026/06/PMKT/SUB-...  (ensure-folder)
+   (driveId = drive của library "5S"; img là thư mục gốc đã tồn tại)
 
-3. Với mỗi ảnh (đọc Blob từ IndexedDB photo-store):
-   - ≤4MB:  PUT  /drives/{imgDriveId}/root:/{path}/original-01.jpg:/content
-            PUT  .../watermarked-01.jpg:/content
+3. Với mỗi ảnh (đọc Blob từ IndexedDB photo-store); đường dẫn = imgFilePath(...):
+   - ≤4MB:  PUT  /drives/{driveId}/root:/img/2026/06/PMKT/SUB-XXXX/original-01.jpg:/content
+            PUT  /drives/{driveId}/root:/img/2026/06/PMKT/SUB-XXXX/watermarked-01.jpg:/content
    - >4MB:  createUploadSession (chunked)
    - POST line: /lists/{Data_SubmissionPhotos}/items
             { fields: { Title:PhotoId, SubmissionId, SeqNo, OriginalPhotoUrl, WatermarkedPhotoUrl, CaptureTime, ... } }

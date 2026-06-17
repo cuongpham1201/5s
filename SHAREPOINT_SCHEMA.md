@@ -1,9 +1,10 @@
 # 5S Daily — SharePoint Architecture (Phase 0)
 
-> ⚠️ **SUPERSEDED (Phase 2C.1):** Schema cuối cùng dùng cho triển khai là
-> **`docs/sharepoint/BAN5S_SCHEMA.md`** (site Ban5S; lists `Config_*`/`Data_*`;
-> library `img`). Tài liệu Phase 0 này (tên `5SSubmissions`...) giữ làm **bối cảnh
-> lịch sử/lý do thiết kế**; khi mâu thuẫn, lấy BAN5S_SCHEMA.md làm chuẩn.
+> ⚠️ **SUPERSEDED (Phase 2C.1 / sửa 2C.1A):** Schema cuối cùng dùng cho triển khai là
+> **`docs/sharepoint/BAN5S_SCHEMA.md`** — site Ban5S; Document Library **"5S"** chứa
+> **3 thư mục THẬT** `img`/`ListConfig`/`ListData`; dữ liệu có cấu trúc ở Lists cấp
+> site `Config_*`/`Data_*`. Tài liệu Phase 0 này (tên `5SSubmissions`...) giữ làm
+> **bối cảnh lịch sử**; khi mâu thuẫn, lấy BAN5S_SCHEMA.md làm chuẩn.
 
 > Thiết kế lưu trữ trên SharePoint Online. Không tạo SharePoint thật ở phase này.
 > Nguyên tắc: **không mặc định đúng — phân tích rồi đề xuất.**

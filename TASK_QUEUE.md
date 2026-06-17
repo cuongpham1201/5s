@@ -138,8 +138,19 @@
 
 > Không upload/write/seed/provision thật trong 2C.1. `getAppOnlyToken()` = 501 stub.
 
+## Phase 2C.1A — Ban5S structure correction & realignment (DONE)
+
+| ID | Task | Status |
+|---|---|---|
+| P2C1A-A | Sửa docs: ListConfig/ListData/img là **thư mục THẬT** trong Document Library "5S" (bỏ wording "namespace giả định / flat / open question / optional") | DONE |
+| P2C1A-B | Document model nguồn-sự-thật: library "5S" + 3 folder + Lists cấp site `Config_*`/`Data_*` (nói rõ SP không lồng List vào folder) | DONE |
+| P2C1A-C | Code: `sharePointConfig` (documentLibraryName "5S", folders, lists); `site-context` resolve drive "5S" + verify folders + img path | DONE |
+| P2C1A-D | Provisioning plan: verify site/library/folders tồn tại; không xoá/đổi tên/tạo trùng | DONE |
+| P2C1A-E | Graph plan: reality check (GET drives → "5S" → root children → verify img/ListConfig/ListData → lists) trước upload | DONE |
+| P2C1A-QG | Quality gate tsc + lint + build PASS (fix `*/`-trong-comment, 2 vòng) | DONE |
+
 ## Phase 2C.2+ (TODO — chờ phê duyệt)
-Upload Engine thật (token app-only, create item, upload `img`, PATCH, SyncLogs, retry), rồi dashboard data thật, Excel, notifications. Xem ROADMAP.
+Upload Engine thật (token app-only, reality check, create item, upload vào `5S/img`, PATCH, SyncLogs, retry), rồi dashboard data thật, Excel, notifications. Xem ROADMAP.
 
 ---
 

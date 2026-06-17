@@ -597,3 +597,54 @@ Site Ban5S, 3 container đã chốt: **ListConfig**/**ListData** (namespace bằ
 Xem cuối (commit local sau báo cáo). **Không push.**
 
 **Trạng thái:** Phase 2C.1 HOÀN THÀNH — schema Ban5S + types + Graph foundation read-only + provisioning package; gates PASS; không write/upload. Verdict **READY cho 2C.2 Upload Engine**. **Dừng.**
+
+---
+---
+
+# 5S Daily — Phase 2C.1A Run Report (Ban5S Structure Correction)
+
+> Ngày: 2026-06-17 · Branch `feature/phase1-foundation` · Base `d4f5a6f`. Doc/code realignment — không write/upload/push.
+
+## Preflight
+pwd `/data/dev/5s-app` · branch `feature/phase1-foundation` · working tree **clean** · log `d4f5a6f/b6b92c6/9ed6e0f/fda3b0f/e735723` · node v20.20.2 / npm 10.8.2.
+
+## Hiểu lầm đã sửa & vì sao sai
+- **Trước (2C.1):** coi `ListConfig`/`ListData` là **namespace khái niệm** (chỉ tiền tố `Config_*`/`Data_*`), `img` là Document Library, và để ngỏ "open question".
+- **Sai vì:** thực tế site Ban5S đã có **Document Library "5S"** chứa **3 thư mục THẬT** `img`/`ListConfig`/`ListData` do người dùng cố ý tạo để tách ảnh / cấu hình / dữ liệu. Chúng không phải nhãn, không phải List, không được thay thế.
+
+## Final source of truth (Ban5S)
+- Site: `https://biahalong.sharepoint.com/sites/Ban5S`
+- Document Library: **"5S"**
+- Thư mục THẬT trong "5S": `img` (ảnh) · `ListConfig` (artifact cấu hình/seed/export) · `ListData` (artifact vận hành/export/log)
+- Dữ liệu có cấu trúc: **Lists cấp site** `Config_Departments/Areas/Settings/RoleMapping`, `Data_Submissions/SubmissionPhotos/SyncLogs` — nhóm logic về ListConfig/ListData (SharePoint không lồng List vào folder — nói rõ trong docs).
+
+## Docs updated
+`docs/sharepoint/{BAN5S_SCHEMA, BAN5S_FIELD_MAPPING, BAN5S_PROVISION_PLAN, BAN5S_GRAPH_PLAN}.md` + `SHAREPOINT_SCHEMA.md`, `ARCHITECTURE.md`, `DATA_MODEL.md`, `ROADMAP.md`, `TASK_QUEUE.md`, `RUN_REPORT.md`. Gỡ bỏ wording "namespace giả định / flat-only / open question / folder optional"; thay bằng "thư mục thật, phải giữ & dùng".
+
+## Code config updated
+- `sharepoint-config.ts`: thêm `sharePointConfig { siteUrl, documentLibraryName:"5S", folders{img,listConfig,listData}, lists{...} }` (+ re-export tương thích).
+- `site-context.ts`: `resolveLibraryDrive` (tìm drive **"5S"**), `listLibraryRootChildren`, `verifyExpectedFolders` (img/ListConfig/ListData), `imgFilePath`, `driveUploadPath`.
+- `types/sharepoint.ts`: sửa comment cấu trúc.
+
+## Provisioning plan changes
+Verify-first: kiểm tra site → library "5S" → 3 thư mục tồn tại (KHÔNG xoá/đổi tên/tạo trùng/tạo thư viện ảnh khác) → tạo/verify 7 List + index → dùng `5S/img` để upload, `5S/ListConfig`/`5S/ListData` cho artifact. Bỏ open question.
+
+## Graph readiness changes
+Thêm **reality check bắt buộc** trước upload (2C.2A): GET drives → drive "5S" → root children → verify `img/ListConfig/ListData` → GET lists verify `Config_*`/`Data_*`. Thiếu → DỪNG, không tự tạo trùng.
+
+## Build / Lint / TypeScript — ✅ PASS (2 vòng)
+Vòng 1 fail do `*/` (chuỗi `Config_*/Data_*`) nằm trong block comment làm đóng comment sớm → đã sửa wording. Vòng 2: `tsc` 0 lỗi · `lint` clean · `build` 19 routes.
+
+## Cái gì KHÔNG đổi
+Toàn bộ app logic (capture/watermark/IndexedDB/offline queue/UI), routes, và field schema của các record giữ nguyên. Chỉ chỉnh cách hiểu & mô tả cấu trúc SharePoint + code config + plan.
+
+## Phase 2C.2 implications
+Upload Engine phải: (1) chạy reality check trước; (2) upload ảnh vào **drive "5S" → thư mục `img/...`** (không tạo thư viện riêng); (3) ghi Lists `Config_*`/`Data_*`; (4) có thể dùng `ListConfig`/`ListData` cho export/log. Auth app-only `Sites.Selected` vẫn cần secret/grant thật → sẽ dừng hỏi khi tới 2C.2.
+
+## Known risks
+Cần xác nhận tên Document Library đúng là **"5S"** (nếu khác, chỉnh `documentLibraryName`). `getAppOnlyToken` vẫn 501 (2C.2). SubmissionId cần format `SUB-YYYYMMDD-####`.
+
+## Git status / Commit hash
+Xem cuối (commit local sau báo cáo). **Không push.**
+
+**Trạng thái:** Phase 2C.1A HOÀN THÀNH — cấu trúc Ban5S đã chỉnh đúng (library "5S" + thư mục thật img/ListConfig/ListData), docs/code/plan realigned, gates PASS. **Dừng.**

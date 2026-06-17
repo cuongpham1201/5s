@@ -3,6 +3,10 @@
 > Đối chiếu model frontend hiện tại (Phase 2A/2B) với schema SharePoint (BAN5S_SCHEMA.md).
 > Frontend types: `src/types/submission.ts`, `src/lib/storage/storage-types.ts`, `src/lib/queue/queue-types.ts`.
 > SharePoint types: `src/types/sharepoint.ts`.
+>
+> **Cấu trúc (2C.1A):** Document Library **"5S"** chứa 3 thư mục THẬT `img` /
+> `ListConfig` / `ListData`. Ảnh → `5S/img/...`. Dữ liệu có cấu trúc → Lists cấp
+> site `Config_*`/`Data_*` (nhóm logic về ListConfig/ListData).
 
 ## Entity mapping
 

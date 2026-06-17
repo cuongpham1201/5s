@@ -100,7 +100,7 @@ QueueStatus  = "draft" | "ready" | "queued" | "uploading" | "uploaded" | "failed
 - **Bug đếm ảnh (Phase 2A.1) đã sửa:** trước đây data URL nặng được nhồi vào localStorage → vượt quota → save thất bại âm thầm → số ảnh lệch. Nay ảnh ở IndexedDB, session metadata nhỏ → `photoCount = photos.length` đáng tin. Xem RUN_REPORT.
 - **Watermark ghép thật** (Canvas) ở `/preview`; blob `original`+`watermarked`+`thumbnail` ghi IndexedDB. Thumbnail hiển thị qua object URL (`<PhotoThumb>`), **không** lưu base64 trong localStorage (Phase 2B.1 — localStorage metadata-only).
 - `completeSession()` → `CompletedSubmission(status="local-only")` + tạo `QueueItem(queued)`; mock sync → `uploaded`. **Chưa** ghi SharePoint thật.
-- **Ánh xạ backend (2C):** `SubmissionSession` → 1 header `5SSubmissions`; mỗi `SessionPhoto`/`StoredPhoto` → 1 line `5SSubmissionPhotos` (kèm `watermarkMetadata`, GPS, URL).
+- **Ánh xạ backend (2C):** `CompletedSubmission` → 1 header list **`Data_Submissions`**; mỗi `SessionPhoto`/`StoredPhoto` → 1 line **`Data_SubmissionPhotos`** + 2 file trong Document Library **"5S"** thư mục `img/YYYY/MM/Dept/SubmissionId/`. Schema chuẩn: `docs/sharepoint/BAN5S_SCHEMA.md` (đã sửa 2C.1A: img/ListConfig/ListData là **thư mục thật** trong library "5S").
 
 ## 3. Dashboard Data Model — công thức KPI
 
