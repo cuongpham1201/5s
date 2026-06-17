@@ -10,106 +10,181 @@ import {
 } from "react";
 
 /**
- * Capture session store (Phase 1C — multi-photo submission).
+ * Capture session store (Phase 1C — multi-photo submission, local/mock only).
  *
- * Holds the photos captured for ONE submission before it is "nộp" (submitted).
- * Lives in memory (client) + sessionStorage so it survives navigation and
- * accidental reloads. NO upload / SharePoint / watermark here — a "photo" is a
- * lightweight client record; real image bytes + watermark + upload come later.
- *
- * Model: 1 submission = N photos (see DATA_MODEL.md §2/§2bis).
+ * Model: 1 SubmissionSession = N SessionPhoto. Draft session + a mock submitted
+ * history are persisted in localStorage. NO SharePoint / upload / watermark here
+ * (those are future Phase 2A watermark / Phase 2C upload).
  */
-export interface CapturedPhoto {
-  id: string;
-  area: string;
-  capturedAt: string; // "HH:MM" display time (local, set in a client handler)
-  /** Placeholder hue so each mock thumbnail looks distinct. */
-  hue: number;
+
+export interface SessionPhoto {
+  photoId: string;
+  localUrl: string; // data URL (real captured frame or simulated placeholder)
+  capturedAt: string; // ISO timestamp
+  latitude?: number;
+  longitude?: number;
+  address?: string;
+  status: "draft" | "ready";
+}
+
+export interface SubmissionSession {
+  sessionId: string;
+  departmentCode: string;
+  departmentName?: string;
+  areaCode: string;
+  areaName: string;
+  reporterName: string;
+  reporterEmail: string;
+  startedAt: string; // ISO
+  photos: SessionPhoto[];
+}
+
+export interface SubmittedSummary {
+  sessionId: string;
+  departmentCode: string;
+  departmentName?: string;
+  areaName: string;
+  reporterName: string;
+  photoCount: number;
+  startedAt: string;
+  submittedAt: string; // ISO
+}
+
+interface StartArgs {
+  departmentCode: string;
+  departmentName?: string;
+  areaCode: string;
+  areaName: string;
+  reporterName: string;
+  reporterEmail: string;
+}
+
+interface AddPhotoArgs {
+  localUrl: string;
+  latitude?: number;
+  longitude?: number;
+  address?: string;
 }
 
 interface SessionCaptureValue {
-  area: string | null;
-  photos: CapturedPhoto[];
-  lastSubmittedCount: number | null;
-  setArea: (area: string) => void;
-  addPhoto: () => void;
-  removePhoto: (id: string) => void;
+  session: SubmissionSession | null;
+  history: SubmittedSummary[];
+  lastSubmitted: SubmittedSummary | null;
+  startSession: (args: StartArgs) => void;
+  addPhoto: (photo: AddPhotoArgs) => void;
+  removePhoto: (photoId: string) => void;
   clearSession: () => void;
-  /** Finalize the submission: returns the photo count, then clears the session. */
-  submitSession: () => number;
+  submitSession: () => SubmittedSummary | null;
 }
 
 const SessionCaptureContext = createContext<SessionCaptureValue | null>(null);
-const STORAGE_KEY = "5s.capture.session";
+const SESSION_KEY = "5s.session.v2";
+const HISTORY_KEY = "5s.history.v2";
+
+function nowIso(): string {
+  return new Date().toISOString();
+}
 
 export function SessionCaptureProvider({ children }: { children: ReactNode }) {
-  const [area, setAreaState] = useState<string | null>(null);
-  const [photos, setPhotos] = useState<CapturedPhoto[]>([]);
-  const [lastSubmittedCount, setLastSubmittedCount] = useState<number | null>(null);
+  const [session, setSession] = useState<SubmissionSession | null>(null);
+  const [history, setHistory] = useState<SubmittedSummary[]>([]);
+  const [lastSubmitted, setLastSubmitted] = useState<SubmittedSummary | null>(null);
 
-  // Hydrate from sessionStorage on the client only (avoids SSR hydration mismatch).
+  // Hydrate from localStorage (client only).
   useEffect(() => {
     try {
-      const raw = sessionStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const data = JSON.parse(raw) as { area?: string | null; photos?: CapturedPhoto[] };
-        setAreaState(data.area ?? null);
-        setPhotos(Array.isArray(data.photos) ? data.photos : []);
-      }
+      const s = localStorage.getItem(SESSION_KEY);
+      if (s) setSession(JSON.parse(s) as SubmissionSession);
+      const h = localStorage.getItem(HISTORY_KEY);
+      if (h) setHistory(JSON.parse(h) as SubmittedSummary[]);
     } catch {
       /* ignore corrupt storage */
     }
   }, []);
 
-  // Persist on change.
+  // Persist session.
   useEffect(() => {
     try {
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ area, photos }));
+      if (session) localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+      else localStorage.removeItem(SESSION_KEY);
     } catch {
-      /* storage may be unavailable (private mode) — non-fatal */
+      /* storage may be unavailable / quota exceeded — non-fatal */
     }
-  }, [area, photos]);
+  }, [session]);
 
-  const setArea = useCallback((a: string) => setAreaState(a), []);
+  // Persist history.
+  useEffect(() => {
+    try {
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+    } catch {
+      /* non-fatal */
+    }
+  }, [history]);
 
-  const addPhoto = useCallback(() => {
-    setPhotos((prev) => {
-      const now = new Date();
-      const hh = String(now.getHours()).padStart(2, "0");
-      const mm = String(now.getMinutes()).padStart(2, "0");
-      const id = `${now.getTime()}-${prev.length + 1}`;
-      const hue = (prev.length * 47 + 200) % 360;
-      return [...prev, { id, area: area ?? "—", capturedAt: `${hh}:${mm}`, hue }];
+  const startSession = useCallback((args: StartArgs) => {
+    setSession({
+      sessionId: `s-${Date.now()}`,
+      ...args,
+      startedAt: nowIso(),
+      photos: [],
     });
-  }, [area]);
-
-  const removePhoto = useCallback((id: string) => {
-    setPhotos((prev) => prev.filter((p) => p.id !== id));
   }, []);
 
-  const clearSession = useCallback(() => {
-    setPhotos([]);
-    setAreaState(null);
+  const addPhoto = useCallback((photo: AddPhotoArgs) => {
+    setSession((prev) => {
+      if (!prev) return prev;
+      const seq = prev.photos.length + 1;
+      const next: SessionPhoto = {
+        photoId: `p-${Date.now()}-${seq}`,
+        localUrl: photo.localUrl,
+        capturedAt: nowIso(),
+        latitude: photo.latitude,
+        longitude: photo.longitude,
+        address: photo.address,
+        status: "ready",
+      };
+      return { ...prev, photos: [...prev.photos, next] };
+    });
   }, []);
 
-  const submitSession = useCallback(() => {
-    let count = 0;
-    setPhotos((prev) => {
-      count = prev.length;
-      return [];
+  const removePhoto = useCallback((photoId: string) => {
+    setSession((prev) =>
+      prev ? { ...prev, photos: prev.photos.filter((p) => p.photoId !== photoId) } : prev,
+    );
+  }, []);
+
+  const clearSession = useCallback(() => setSession(null), []);
+
+  const submitSession = useCallback((): SubmittedSummary | null => {
+    let summary: SubmittedSummary | null = null;
+    setSession((prev) => {
+      if (!prev || prev.photos.length === 0) return prev;
+      summary = {
+        sessionId: prev.sessionId,
+        departmentCode: prev.departmentCode,
+        departmentName: prev.departmentName,
+        areaName: prev.areaName,
+        reporterName: prev.reporterName,
+        photoCount: prev.photos.length,
+        startedAt: prev.startedAt,
+        submittedAt: nowIso(),
+      };
+      return null; // clear draft after submit
     });
-    setAreaState(null);
-    setLastSubmittedCount(count);
-    return count;
+    if (summary) {
+      setLastSubmitted(summary);
+      setHistory((prev) => [summary as SubmittedSummary, ...prev]);
+    }
+    return summary;
   }, []);
 
   return (
     <SessionCaptureContext.Provider
       value={{
-        area,
-        photos,
-        lastSubmittedCount,
-        setArea,
+        session,
+        history,
+        lastSubmitted,
+        startSession,
         addPhoto,
         removePhoto,
         clearSession,
@@ -123,8 +198,6 @@ export function SessionCaptureProvider({ children }: { children: ReactNode }) {
 
 export function useSessionCapture(): SessionCaptureValue {
   const ctx = useContext(SessionCaptureContext);
-  if (!ctx) {
-    throw new Error("useSessionCapture must be used within SessionCaptureProvider");
-  }
+  if (!ctx) throw new Error("useSessionCapture must be used within SessionCaptureProvider");
   return ctx;
 }

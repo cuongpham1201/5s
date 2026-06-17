@@ -3,47 +3,53 @@
 import { useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { useSessionCapture } from "@/features/capture/session-context";
 
 const TABS = ["Hôm nay", "Tuần", "Tháng"] as const;
 
-// Mock submissions grouped by day (1 submission = N photos).
-interface MockSubmission {
-  time: string;
+interface Row {
+  date: string;
+  department: string;
   area: string;
-  photos: number;
+  photoCount: number;
   hue: number;
 }
-interface MockDay {
-  date: string;
-  weekday: string;
-  submissions: MockSubmission[];
-}
 
-const DAYS: MockDay[] = [
-  {
-    date: "15/06/2026",
-    weekday: "Thứ Hai",
-    submissions: [
-      { time: "17:20", area: "Văn phòng", photos: 3, hue: 210 },
-      { time: "09:05", area: "Kho POSM", photos: 2, hue: 150 },
-    ],
-  },
-  {
-    date: "14/06/2026",
-    weekday: "Chủ Nhật",
-    submissions: [{ time: "16:40", area: "Phòng họp", photos: 1, hue: 280 }],
-  },
-  { date: "13/06/2026", weekday: "Thứ Bảy", submissions: [] },
+// Static demo rows (shown when local history is empty) so the format is visible.
+const DEMO: Row[] = [
+  { date: "15/06/2026", department: "PMKT", area: "Văn phòng", photoCount: 3, hue: 210 },
+  { date: "15/06/2026", department: "PMKT", area: "Kho POSM", photoCount: 2, hue: 150 },
+  { date: "14/06/2026", department: "PMKT", area: "Phòng họp", photoCount: 1, hue: 280 },
 ];
+
+function dmy(iso: string): string {
+  const d = new Date(iso);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()}`;
+}
 
 export default function HistoryPage() {
   const [tab, setTab] = useState<(typeof TABS)[number]>("Hôm nay");
+  const { history } = useSessionCapture();
+
+  const rows: Row[] =
+    history.length > 0
+      ? history.map((h, i) => ({
+          date: dmy(h.submittedAt),
+          department: h.departmentCode,
+          area: h.areaName,
+          photoCount: h.photoCount,
+          hue: (i * 47 + 200) % 360,
+        }))
+      : DEMO;
 
   return (
     <AppShell>
-      <div className="px-5 pt-2 pb-3">
+      <div className="px-5 pt-3 pb-3">
         <div className="text-[22px] font-semibold">Lịch sử của tôi</div>
-        <div className="text-[13px] text-ink-muted">PMKT · Nguyễn Văn A</div>
+        <div className="text-[13px] text-ink-muted">
+          {history.length > 0 ? `${history.length} lần gửi đã lưu (cục bộ)` : "Chưa có lần gửi — đang xem ví dụ"}
+        </div>
       </div>
 
       <div className="px-5 pb-6">
@@ -55,54 +61,30 @@ export default function HistoryPage() {
           ))}
         </div>
 
-        {DAYS.map((day) => {
-          const totalPhotos = day.submissions.reduce((s, x) => s + x.photos, 0);
-          return (
-            <div key={day.date} className="mt-[18px]">
-              <div className="flex items-center justify-between mb-2.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-[16px] font-semibold">{day.date}</span>
-                  <span className="text-[13px] text-ink-muted">{day.weekday}</span>
-                </div>
-                {day.submissions.length > 0 ? (
-                  <StatusBadge tone="success">
-                    {day.submissions.length} lần · {totalPhotos} ảnh
-                  </StatusBadge>
-                ) : (
-                  <StatusBadge tone="danger">Không gửi</StatusBadge>
-                )}
+        <div className="flex flex-col gap-2.5 mt-[18px]">
+          {rows.map((r, i) => (
+            <div key={i} className="card-flat p-3 flex items-center gap-3">
+              <div className="flex -space-x-2">
+                {Array.from({ length: Math.min(r.photoCount, 3) }).map((_, k) => (
+                  <span
+                    key={k}
+                    className="w-10 h-10 rounded-md border-2 border-white"
+                    style={{ background: `linear-gradient(135deg, hsl(${r.hue + k * 15} 32% 74%), hsl(${r.hue + k * 15} 28% 52%))` }}
+                  />
+                ))}
               </div>
-
-              {day.submissions.length === 0 ? (
-                <div className="rounded-sm bg-danger-bg text-danger text-[14px] font-semibold grid place-items-center p-3.5">
-                  ⚠ Bạn chưa gửi ảnh cho ngày này
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-[15px]">
+                  {r.department} · {r.area}
                 </div>
-              ) : (
-                <div className="flex flex-col gap-2.5">
-                  {day.submissions.map((sub, i) => (
-                    <div key={i} className="card-flat p-3 flex items-center gap-3">
-                      {/* thumbnails (up to 3) */}
-                      <div className="flex -space-x-2">
-                        {Array.from({ length: Math.min(sub.photos, 3) }).map((_, k) => (
-                          <span
-                            key={k}
-                            className="w-10 h-10 rounded-md border-2 border-white"
-                            style={{ background: `linear-gradient(135deg, hsl(${sub.hue + k * 15} 32% 74%), hsl(${sub.hue + k * 15} 28% 52%))` }}
-                          />
-                        ))}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-[15px]">{sub.area}</div>
-                        <div className="text-[13px] text-ink-muted">Lúc {sub.time}</div>
-                      </div>
-                      <StatusBadge tone="neutral">{sub.photos} ảnh</StatusBadge>
-                    </div>
-                  ))}
+                <div className="text-[13px] text-ink-muted">
+                  {r.date} · {r.photoCount} ảnh
                 </div>
-              )}
+              </div>
+              <StatusBadge tone="success">Đã nộp</StatusBadge>
             </div>
-          );
-        })}
+          ))}
+        </div>
       </div>
     </AppShell>
   );

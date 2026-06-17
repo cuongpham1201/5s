@@ -316,3 +316,47 @@ Một "lần gửi" (submission) nay **gom N ảnh** rồi nộp một lần. Th
 - "Ảnh" trong session là bản ghi placeholder (gradient) — chưa có bytes ảnh thật / chưa nén; sẽ nối ở Phase 2.
 
 **Trạng thái:** Phase 1C HOÀN THÀNH — refactor N-photo (UX + data model + state client), gates PASS, route `/session` hoạt động. **Dừng.**
+
+---
+---
+
+# 5S Daily — Phase 1C-ext Run Report (Mobile real-device + Camera HTTPS + Multi-photo)
+
+> Ngày: 2026-06-17 · Branch `feature/phase1-foundation` · Base tag `phase-1b5-ui-review`.
+> Fix lỗi review iPhone thật + sẵn sàng test qua HTTPS dev. Vẫn local/mock — không SharePoint/upload/watermark.
+
+## Preflight
+pwd `/data/dev/5s-app` · branch `feature/phase1-foundation` · working tree **clean** · log `20b776c/82efde5/6acf855` · tag `phase-1b5-ui-review` · node v20.20.2 · npm 10.8.2.
+
+## Part A — Mobile shell fix
+- AppShell production: **bỏ khung iPhone giả + viền đen + status bar giả**. App full-viewport (`100dvh`), `env(safe-area-inset-*)`, bottom nav chừa safe-area iOS. Desktop = cột max-width 480px căn giữa (no bezel). Khung thiết bị giả chỉ ở **dev preview** (`NEXT_PUBLIC_DEVICE_PREVIEW=true`).
+
+## Part B — Camera HTTPS handling
+- `useCamera` phân biệt **insecure / unsupported / denied / no-device**; insecure → *"Camera cần HTTPS hoặc localhost. Hãy mở app qua https://she.biahalong.com để chụp ảnh."* (không còn báo nhầm "không hỗ trợ").
+- Thêm `capture()` (chụp frame thật → JPEG dataURL) + `makeSimulatedPhoto()` (ảnh mô phỏng khi insecure/no-camera để vẫn test được luồng).
+- Doc: `docs/CAMERA_TESTING.md` (iOS/Android/HTTPS/Tailscale, URL test, checklist iPhone).
+
+## Part C — Port 3002 readiness
+- Thêm script **`dev:3002`** (`next dev -p 3002`); không đổi `dev` mặc định. Tunnel doc: `she.biahalong.com → http://localhost:3002` (trong CAMERA_TESTING.md). Không chạm PM2/tunnel config.
+
+## Part D — Multi-photo flow
+- Type model đúng spec: `SubmissionSession` + `SessionPhoto` (localStorage), + `SubmittedSummary` cho history mock.
+- Flow: Home → Capture(**Bắt đầu chụp**, tạo session) → Camera(chụp, real/simulated) → Preview(**Chụp lại/Giữ ảnh**, KHÔNG có "Gửi") → **/session**(grid, xoá, +Chụp thêm, Hoàn tất) → panel **Xác nhận nộp** (Dept/Area/Reporter/PhotoCount/StartedAt/GPS summary) → Success("Đã nộp N ảnh").
+
+## Routes
+Cập nhật: `/`, `/capture`, `/camera`, `/preview`, `/success`, `/history`. Có sẵn: `/session`. (18 routes; `/session/confirm` dùng panel inline thay vì route riêng.)
+
+## Files
+- **Created:** `docs/CAMERA_TESTING.md` (session-context.tsx / session route đã tạo ở 1C trước).
+- **Modified:** `globals.css` (app-shell + safe-area + dev-preview), `components/layout/AppShell.tsx` (rewrite production shell), `features/capture/session-context.tsx` (rewrite theo type model + history), `hooks/useCamera.ts` (secure-context + capture + simulated), `app/{capture,camera,preview,session,success,history}/page.tsx`, `package.json` (dev:3002), docs `ARCHITECTURE.md` `DATA_MODEL.md` `ROADMAP.md` `TASK_QUEUE.md` `RUN_REPORT.md`.
+
+## Quality gate — ✅ PASS (vòng 1)
+`tsc --noEmit` 0 lỗi · `lint` no warnings · `build` 18 routes.
+
+## Known limitations
+- Local/mock: chưa upload/SharePoint/Graph (Phase 2B/2C), chưa watermark ghép ảnh thật (Phase 2A).
+- Camera thật chỉ chạy qua HTTPS/localhost (đúng quy định trình duyệt) — qua Tailscale HTTP sẽ dùng ảnh mô phỏng.
+- GPS chưa thu thập (optional fields = undefined) — bật ở Phase 2.
+- History là mock cục bộ (localStorage), không đồng bộ giữa thiết bị.
+
+**Trạng thái:** Phase 1C-ext HOÀN THÀNH — mobile shell sạch, camera HTTPS-aware, flow N-ảnh đầy đủ; gates PASS. **Dừng.**

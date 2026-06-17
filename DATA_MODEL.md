@@ -73,6 +73,25 @@
 
 ---
 
+### 2c. Frontend draft model (Phase 1C — local/mock, chưa backend)
+
+Trên client, một lần gửi đang soạn được giữ bằng 2 type (localStorage, chưa upload):
+
+```ts
+SubmissionSession {
+  sessionId, departmentCode, departmentName?, areaCode, areaName,
+  reporterName, reporterEmail, startedAt, photos: SessionPhoto[]
+}
+SessionPhoto {
+  photoId, localUrl, capturedAt, latitude?, longitude?, address?,
+  status: "draft" | "ready"
+}
+```
+
+- `localUrl` = data URL ảnh thật (chụp được) hoặc ảnh mô phỏng (khi insecure/không camera).
+- Khi "Xác nhận nộp" → tạo `SubmittedSummary` lưu vào history cục bộ; **chưa** ghi `5SSubmissions`/`5SSubmissionPhotos` thật.
+- Ánh xạ sang backend (Phase 2C): `SubmissionSession` → 1 header `5SSubmissions`; mỗi `SessionPhoto` → 1 line `5SSubmissionPhotos`. Watermark ghép ảnh là **Phase 2A**.
+
 ## 3. Dashboard Data Model — công thức KPI
 
 ### 3.1 Khái niệm nền

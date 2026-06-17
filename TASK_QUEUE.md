@@ -67,6 +67,18 @@
 
 > Không upload / SharePoint / Graph / watermark trong 1C — chỉ UX + data-model + state client.
 
+## Phase 1C-ext — Mobile real-device + Camera HTTPS + dev 3002 (DONE)
+
+| ID | Task | Status |
+|---|---|---|
+| P1Cx-A | Bỏ khung iPhone giả/status bar giả → AppShell production full-viewport, safe-area, desktop max-width, dev-preview behind flag | DONE |
+| P1Cx-B | Camera secure-context: phân biệt insecure/unsupported/denied/no-device + message HTTPS; `makeSimulatedPhoto`; capture frame thật | DONE |
+| P1Cx-C | Script `dev:3002`; docs `CAMERA_TESTING.md` (HTTPS/tunnel/she.biahalong.com) | DONE |
+| P1Cx-D | Multi-photo theo type `SubmissionSession`/`SessionPhoto` (localStorage) + history mock; flow Capture(Bắt đầu chụp)→Camera→Preview(Giữ ảnh)→/session→Xác nhận nộp→Success | DONE |
+| P1Cx-E | Quality gate tsc + lint + build PASS | DONE |
+
+> Vẫn local/mock: chưa watermark (Phase 2A), chưa SharePoint/Graph (2B), chưa upload (2C).
+
 ## Phase 2+ (TODO — chờ phê duyệt)
 SharePoint thật (Library + `5SSubmissions`/`5SSubmissionPhotos`), Graph app-only, watermark ghép ảnh, upload N ảnh/lần gửi + offline queue, dashboard data thật, Excel, notifications. Xem ROADMAP Phase 2–6.
 

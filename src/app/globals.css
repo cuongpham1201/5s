@@ -130,4 +130,36 @@ body {
   .cell.partial { background: var(--warning); color: #fff; }
   .cell.future { background: var(--surface); color: var(--text-disabled); }
   .cell.weekend { background: #eef0f3; color: var(--text-disabled); }
+
+  /* ---- Production app shell (real mobile: full viewport, NO fake frame) ---- */
+  .app-shell {
+    @apply w-full flex flex-col bg-white;
+    min-height: 100dvh;
+  }
+  .app-screen {
+    @apply flex-1 min-h-0 flex flex-col;
+    padding-top: env(safe-area-inset-top);
+  }
+  /* On desktop, employee pages render as a centered phone-width column (no bezel). */
+  @media (min-width: 768px) {
+    .app-shell {
+      max-width: 480px;
+      margin-inline: auto;
+      box-shadow: var(--sh-8);
+    }
+  }
+  /* Dev-only preview frame (enabled via NEXT_PUBLIC_DEVICE_PREVIEW=true). */
+  .device-preview-stage {
+    @apply min-h-screen flex items-center justify-center p-4;
+    background: radial-gradient(1200px 600px at 50% -10%, #e6ecf5, transparent), var(--app-bg);
+  }
+  .device-preview {
+    width: 390px;
+    height: min(844px, 92dvh);
+    overflow: hidden;
+    border-radius: 28px;
+    box-shadow: var(--sh-16), 0 0 0 8px #1b1b1b;
+    display: flex;
+    flex-direction: column;
+  }
 }

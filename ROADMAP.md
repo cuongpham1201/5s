@@ -20,7 +20,9 @@
 ---
 
 ## Phase 1 — Auth · PWA · Camera
-**Trạng thái:** Phase **1A DONE** (scaffold, Auth.js skeleton + dev mock, PWA, UI port, camera). Phase **1B DONE** (Graph foundation `src/lib/graph`, `/api/me`, profile card thật, department mapping, roles/permissions, env + staging docs). Phase **1C DONE** (refactor **1 Submission = N Photos**: session store client + route `/session` Session Gallery; data model header–lines `5SSubmissions`+`5SSubmissionPhotos`). Còn lại của Phase 1: verify PM2 + Cloudflare Tunnel với tenant thật (staging).
+**Trạng thái:** Phase **1A DONE** (scaffold, Auth.js skeleton + dev mock, PWA, UI port, camera). Phase **1B DONE** (Graph foundation `src/lib/graph`, `/api/me`, profile card thật, department mapping, roles/permissions, env + staging docs). Phase **1C DONE** (refactor **1 Submission = N Photos** + fix thiết bị thật: bỏ khung iPhone giả → app full-viewport/safe-area; camera secure-context (HTTPS/localhost) báo đúng + ảnh mô phỏng; session store `SubmissionSession`/`SessionPhoto` (localStorage) + route `/session`; history mock cục bộ; script `dev:3002`; dev domain `https://she.biahalong.com`). Còn lại của Phase 1: verify PM2 + Cloudflare Tunnel với tenant thật (staging).
+
+> **Tách Phase 2 cho rõ:** **2A** = Watermark engine (ghép ảnh thật, Canvas). **2B** = SharePoint Library/List + Graph app-only. **2C** = Upload N ảnh/lần gửi + offline queue (ghi header + lines). Hiện 1C mới chỉ local/mock — chưa 2A/2B/2C.
 **Mục tiêu:** Khung app chạy được, đăng nhập M365, cài PWA, mở camera & chụp (chưa upload thật).
 
 - Next.js + TS + Tailwind scaffold; cấu trúc thư mục (xem ARCHITECTURE).
