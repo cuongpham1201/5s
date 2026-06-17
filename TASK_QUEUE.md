@@ -123,8 +123,23 @@
 | P2B1-G | Phase 2C readiness checklist → **READY** | DONE |
 | P2B1-QG | Quality gate tsc + lint + build PASS | DONE |
 
-## Phase 2+ (TODO — chờ phê duyệt)
-SharePoint thật (Library + `5SSubmissions`/`5SSubmissionPhotos`), Graph app-only, watermark ghép ảnh, upload N ảnh/lần gửi + offline queue, dashboard data thật, Excel, notifications. Xem ROADMAP Phase 2–6.
+## Phase 2C.1 — SharePoint data foundation & schema (DONE — design only)
+
+| ID | Task | Status |
+|---|---|---|
+| P2C1-A | Architecture review + field mapping frontend↔SharePoint (BAN5S_FIELD_MAPPING.md); flag SHAREPOINT_SCHEMA Phase 0 superseded | DONE |
+| P2C1-B | Final schema Ban5S: Config_* (Departments/Areas/Settings/RoleMapping) + Data_* (Submissions/SubmissionPhotos/SyncLogs) | DONE |
+| P2C1-C | img library folder structure + naming/collision/retention rules | DONE |
+| P2C1-D | Types `src/types/sharepoint.ts` (strict, no any) | DONE |
+| P2C1-E | Graph foundation `src/lib/sharepoint/` (config/types/client/site-context/list-helpers) — READ-ONLY, no mutations | DONE |
+| P2C1-F | Provisioning package `docs/sharepoint/` (SCHEMA/FIELD_MAPPING/PROVISION_PLAN/GRAPH_PLAN) | DONE |
+| P2C1-G | Readiness review → **READY cho 2C.2** | DONE |
+| P2C1-QG | Quality gate tsc + lint + build PASS | DONE |
+
+> Không upload/write/seed/provision thật trong 2C.1. `getAppOnlyToken()` = 501 stub.
+
+## Phase 2C.2+ (TODO — chờ phê duyệt)
+Upload Engine thật (token app-only, create item, upload `img`, PATCH, SyncLogs, retry), rồi dashboard data thật, Excel, notifications. Xem ROADMAP.
 
 ---
 

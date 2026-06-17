@@ -548,3 +548,52 @@ Object URL có revoke; IndexedDB OK iOS14+ (Private Mode suy biến an toàn); *
 Xem cuối (commit local sau báo cáo). **Không push.**
 
 **Trạng thái:** Phase 2B.1 HOÀN THÀNH — storage validated, localStorage metadata-only, READY cho 2C. **Dừng.**
+
+---
+---
+
+# 5S Daily — Phase 2C.1 Run Report (SharePoint Data Foundation & Schema)
+
+> Ngày: 2026-06-17 · Branch `feature/phase1-foundation` · Base `b6b92c6`. **DESIGN + FOUNDATION only** — không write/upload/provision/seed/push.
+
+## Preflight
+pwd `/data/dev/5s-app` · branch `feature/phase1-foundation` · working tree **clean** · log `b6b92c6/9ed6e0f/fda3b0f/e735723/20b776c` · node v20.20.2 / npm 10.8.2.
+
+## SharePoint architecture review
+Đối chiếu frontend (Phase 2A/2B) ↔ SharePoint target → `docs/sharepoint/BAN5S_FIELD_MAPPING.md`. Mapping: `CompletedSubmission`→`Data_Submissions`; `SessionPhoto`+`StoredPhoto`→`Data_SubmissionPhotos`+file `img`; `QueueItem`→`Data_SyncLogs`(+`SyncStatus`); mock danh mục→`Config_*`. Mismatch ghi nhận (UploadStatus↔SyncStatus, SubmissionId format, SubmissionDate, GPS header, geocoding, tên list cũ). Đánh dấu SHAREPOINT_SCHEMA.md Phase 0 **superseded** bởi BAN5S_SCHEMA.md.
+
+## Final schema summary
+Site Ban5S, 3 container đã chốt: **ListConfig**/**ListData** (namespace bằng tiền tố `Config_*`/`Data_*` vì SP list flat) + **img** (Document Library). Giả định namespace đã ghi rõ + open question.
+
+## ListConfig design
+`Config_Departments` (DepartmentCode/Name/Manager/Email/IsActive/SortOrder), `Config_Areas` (AreaCode/Name/DepartmentCode/IsActive/SortOrder), `Config_Settings` (Key/Value/Description), `Config_RoleMapping` (Email/Role/DepartmentCode/IsActive). Đầy đủ internal name/display/type/required/indexed trong BAN5S_SCHEMA.md.
+
+## ListData design
+`Data_Submissions` (header: SubmissionId/Dept/Area/Reporter/PhotoCount/SubmissionDate/SubmittedAt/GPS/Status/SyncStatus), `Data_SubmissionPhotos` (lines: PhotoId/SubmissionId/SeqNo/Original+Watermarked Url/CaptureTime/GPS), `Data_SyncLogs` (QueueId/SubmissionId/Status/AttemptCount/Message/Timestamp).
+
+## img library design
+`img/YYYY/MM/DepartmentCode/SubmissionId/{original,watermarked}-NN.jpg`. Naming/collision (đường dẫn tất định + PUT ghi đè khi retry)/retention (watermarked lâu dài, original ≥12 tháng) — BAN5S_SCHEMA.md.
+
+## TypeScript model summary
+`src/types/sharepoint.ts`: `DepartmentRecord/AreaRecord/SettingRecord/RoleMappingRecord/SubmissionRecord/SubmissionPhotoRecord/SyncLogRecord` — internal name khớp SharePoint, **strict, no any**.
+
+## Graph foundation summary
+`src/lib/sharepoint/`: `sharepoint-config.ts` (site/list names, GRAPH_* env names), `sharepoint-types.ts` (Graph wire types), `graph-client.ts` (READ-ONLY GET + `getAppOnlyToken()` 501 stub), `site-context.ts` (resolve site/list/img drive — read GET), `list-helpers.ts` (URL builder + mappers fields→record, no any). **Không mutation, không import vào page nào.**
+
+## Provisioning package summary
+`docs/sharepoint/`: `BAN5S_SCHEMA.md`, `BAN5S_FIELD_MAPPING.md`, `BAN5S_PROVISION_PLAN.md` (PnP + Graph, index checklist, Sites.Selected), `BAN5S_GRAPH_PLAN.md` (auth, upload flow 2C.2, sync). Đủ để provision/worker tương lai không phải nghĩ lại schema.
+
+## Phase 2C.2 readiness verdict
+**✅ READY.** Upload Engine có thể build ngay: schema đầy đủ, types sẵn, foundation read-only + plan rõ. Không thiếu field cốt lõi; mapping rõ (mismatch là việc tầng map của 2C.2). Schema hỗ trợ: offline queue (SyncLogs+SyncStatus), GPS (header+line), nhiều ảnh (header–lines), reporting/dashboard tháng (SubmissionDate/DepartmentCode indexed). Giới hạn SP (5000 threshold, 4MB upload session, throttling) đã ghi và có chiến lược.
+
+## Build / Lint / TypeScript — ✅ PASS (vòng 1)
+`tsc` 0 lỗi · `lint` no warnings · `build` 19 routes (sharepoint lib standalone, không thêm route).
+
+## Known risks
+- Container "ListConfig/ListData" hiểu là namespace 7-list (SP flat) — cần Admin SharePoint xác nhận trước provision thật (open question).
+- `getAppOnlyToken` chưa cài (501) — auth thật ở 2C.2. SubmissionId cần format lại sang `SUB-YYYYMMDD-####`. Reverse geocoding chưa có.
+
+## Git status / Commit hash
+Xem cuối (commit local sau báo cáo). **Không push.**
+
+**Trạng thái:** Phase 2C.1 HOÀN THÀNH — schema Ban5S + types + Graph foundation read-only + provisioning package; gates PASS; không write/upload. Verdict **READY cho 2C.2 Upload Engine**. **Dừng.**
