@@ -7,33 +7,33 @@
    Tailwind references these via tailwind.config.ts.
    ============================================================ */
 :root {
-  /* Brand / Primary */
-  --primary-600: #0F6CBD;
-  --primary-700: #115EA3;
-  --primary-800: #0C3B5E;
-  --primary-100: #EBF3FC;
-  --primary-50: #F6FAFE;
+  /* Brand / Primary (BAN5S MVP polish) */
+  --primary-600: #0A74DA;
+  --primary-700: #0860B5;
+  --primary-800: #064a8c;
+  --primary-100: #E7F1FD;
+  --primary-50: #F2F8FE;
 
   /* Neutral */
   --bg: #FFFFFF;
-  --app-bg: #F0F2F5;
-  --surface: #F5F5F5;
-  --surface-2: #FAFAFA;
-  --border: #E1E1E1;
-  --border-strong: #C7C7C7;
-  --text: #242424;
-  --text-muted: #616161;
-  --text-disabled: #BDBDBD;
+  --app-bg: #F6F8FB;
+  --surface: #F1F4F9;
+  --surface-2: #F8FAFC;
+  --border: #E5E7EB;
+  --border-strong: #D1D5DB;
+  --text: #111827;
+  --text-muted: #6B7280;
+  --text-disabled: #9CA3AF;
 
   /* Semantic */
-  --success: #0E700E;
-  --success-bg: #E7F4E7;
-  --warning: #BC4B09;
-  --warning-bg: #FFF4CE;
-  --danger: #B10E1C;
-  --danger-bg: #FDE7E9;
-  --info: #0F6CBD;
-  --info-bg: #EBF3FC;
+  --success: #16A34A;
+  --success-bg: #E7F6EC;
+  --warning: #F59E0B;
+  --warning-bg: #FEF3DC;
+  --danger: #DC2626;
+  --danger-bg: #FBE7E7;
+  --info: #0A74DA;
+  --info-bg: #E7F1FD;
 
   --gold: #C99700;
   --silver: #8A8886;
@@ -95,8 +95,8 @@ body {
   .btn[disabled] { background: var(--surface); color: var(--text-disabled); pointer-events: none; }
 
   /* Cards */
-  .card { @apply bg-white rounded-lg p-4 shadow-e4; }
-  .card-flat { @apply bg-white rounded-lg; border: 1px solid var(--border); }
+  .card { @apply bg-white p-4 shadow-e4; border-radius: 20px; }
+  .card-flat { @apply bg-white; border-radius: 20px; border: 1px solid var(--border); }
 
   /* Badges */
   .badge { @apply inline-flex items-center gap-1.5 text-xs font-semibold rounded-pill; padding: 4px 10px; }
@@ -120,8 +120,8 @@ body {
   .nav-item.is-active { background: var(--primary-100); color: var(--primary-700); }
 
   /* Segmented control */
-  .segmented { @apply flex rounded-md p-1 gap-1; background: var(--surface); }
-  .segmented button { @apply flex-1 rounded-[9px] text-sm font-semibold; padding: 9px 8px; color: var(--text-muted); }
+  .segmented { @apply flex p-1 gap-1; background: var(--surface); border-radius: 14px; }
+  .segmented button { @apply flex-1 rounded-[11px] text-sm font-semibold transition-colors; padding: 9px 8px; color: var(--text-muted); }
   .segmented button.is-active { @apply bg-white shadow-e2; color: var(--primary-700); }
 
   /* Heatmap cells */
