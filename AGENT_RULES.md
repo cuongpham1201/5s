@@ -4,7 +4,38 @@
 
 ---
 
-## 1. Phạm vi & giới hạn cứng (áp dụng cho Phase 0)
+## 0. Workspace & Deployment Workflow (LUÔN áp dụng — ưu tiên cao nhất)
+
+Hai workspace tách biệt:
+- **DEV (code ở đây):** `/data/dev/5s-app`
+- **PRODUCT/STAGING runtime:** `/data/homelab/apps/5s-app/5s`
+
+Quy tắc cứng:
+- Claude **CHỈ code trong `/data/dev/5s-app`**. **KHÔNG** sửa code trực tiếp trong product folder.
+- Product **chỉ nhận code qua `git pull`** từ GitHub. **PM2 chạy từ product folder.**
+- Cloudflare `she.biahalong.com` → product PM2 **port 3002**.
+
+**Trước MỌI task code:**
+- verify `pwd` = `/data/dev/5s-app`
+- báo `git status` clean / dirty (dirty → báo, không tự ý ghi đè)
+- **KHÔNG bao giờ code trong product folder**
+
+**Trước MỌI task deploy:**
+- verify `pwd` = `/data/homelab/apps/5s-app/5s`
+- chỉ `git pull` — **KHÔNG sửa file thủ công** (trừ `.env.local` khi được yêu cầu rõ)
+
+**Deploy flow (7 bước):**
+1. code/build/test ở dev → 2. commit ở dev → 3. push GitHub → 4. pull ở product →
+5. `npm install` → 6. `npm run build` → 7. `pm2 restart 5s-app --update-env`.
+
+(Chi tiết: `deployment/DEPLOYMENT.md`.)
+
+---
+
+## 1. Phạm vi & giới hạn cứng (lịch sử — Phase 0)
+> Mục này mô tả giới hạn của **Phase 0** (design-only). Các phase sau (1A+) đã mở
+> dần (code/cài package/commit/Graph thật...) — đọc đúng phase hiện tại. §0 ở trên
+> luôn áp dụng bất kể phase.
 
 KHÔNG được, trong phiên Phase 0:
 - ❌ Code Next.js / tạo project / scaffold app.

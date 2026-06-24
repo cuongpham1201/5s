@@ -754,3 +754,16 @@ KHÔNG đổi schema. KHÔNG upload ảnh. Không xoá dữ liệu.
 Cấp app **User.Read.All** (+ consent) rồi đặt `ORG_DEPARTMENT_SOURCE=graph` và gọi `POST /import-departments`; HOẶC cung cấp nguồn org khác để wire provider.
 
 **Trạng thái:** Phase 2C.2C HOÀN THÀNH (code + docs + endpoint + dev-gate). Sync org thật chờ quyền User.Read.All / nguồn org. Không push, không commit photo.
+
+---
+---
+
+# 5S Daily — Workflow Update (2026-06-24)
+
+Chốt quy trình DEV ↔ PRODUCT (chỉ doc, không đổi code app):
+- **DEV (code):** `/data/dev/5s-app`. **PRODUCT/STAGING (runtime):** `/data/homelab/apps/5s-app/5s`.
+- Claude chỉ code ở DEV; product chỉ nhận code qua `git pull`. PM2 chạy từ product. Cloudflare `she.biahalong.com` → product PM2 :3002.
+- **Trước task code:** verify pwd=`/data/dev/5s-app`, báo git status clean/dirty, không code trong product.
+- **Trước task deploy:** verify pwd=`/data/homelab/apps/5s-app/5s`, chỉ `git pull`, không sửa file thủ công (trừ `.env.local` khi yêu cầu rõ).
+- **Deploy flow:** dev build/test → commit → push GitHub → product pull → `npm install` → `npm run build` → `pm2 restart 5s-app --update-env`.
+- Đã cập nhật: AGENT_RULES.md (§0), ROADMAP.md, deployment/DEPLOYMENT.md, RUN_REPORT.md (mục này).

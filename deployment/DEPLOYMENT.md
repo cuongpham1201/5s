@@ -1,14 +1,37 @@
-# 5S Daily — Deployment (Staging) Guide
+# 5S Daily — Deployment Guide
 
-> Ubuntu Homelab → PM2 → Cloudflare Tunnel. **Tài liệu chuẩn bị — KHÔNG deploy ở Phase 1B.**
-> Không có production thật được đụng tới trong phiên làm việc này.
+> Ubuntu Homelab → PM2 → Cloudflare. Workflow chính thức (2026-06-24).
 
 ---
+
+## Workspaces (TÁCH BIỆT — bắt buộc)
+
+| | Đường dẫn | Vai trò |
+|---|---|---|
+| **DEV** | `/data/dev/5s-app` | Nơi code/build/test/commit/push. **Chỉ sửa code ở đây.** |
+| **PRODUCT/STAGING** | `/data/homelab/apps/5s-app/5s` | Runtime. **Chỉ nhận code qua `git pull`.** PM2 chạy từ đây. |
+
+- **KHÔNG** sửa code trực tiếp trong product folder (chỉ `git pull`; ngoại lệ `.env.local` khi được yêu cầu rõ).
+- Cloudflare `she.biahalong.com` → product PM2 **port 3002**.
+
+## Deploy flow (7 bước)
+
+```
+1. (dev)     code + build + test         /data/dev/5s-app
+2. (dev)     git commit
+3. (dev)     git push  → GitHub
+4. (product) git pull                     /data/homelab/apps/5s-app/5s
+5. (product) npm install
+6. (product) npm run build
+7. (product) pm2 restart 5s-app --update-env
+```
+
+Trước task deploy: verify `pwd` = `/data/homelab/apps/5s-app/5s`, chỉ `git pull`, không sửa file thủ công.
 
 ## Topology
 
 ```
-Internet → Cloudflare Tunnel (TLS, no open ports) → Next.js (PM2, :3000) → Microsoft 365 / Graph
+Internet → Cloudflare (she.biahalong.com) → PM2 (product, :3002) → Microsoft 365 / Graph
 ```
 
 ## Prerequisites (trên host staging)

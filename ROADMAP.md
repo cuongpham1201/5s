@@ -1,5 +1,10 @@
 # 5S Daily — Future Roadmap (Phase 0 output)
 
+> **Workflow (2026-06-24):** DEV = `/data/dev/5s-app` (code/build/test/commit/push);
+> PRODUCT = `/data/homelab/apps/5s-app/5s` (chỉ `git pull` + `npm install` + `npm run build`
+> + `pm2 restart 5s-app --update-env`). Không code trong product. Cloudflare
+> `she.biahalong.com` → product PM2 :3002. Chi tiết: AGENT_RULES §0, deployment/DEPLOYMENT.md.
+
 > Lộ trình thực tế, chia phase giao được giá trị tăng dần. Mỗi phase có Definition of Done (DoD).
 > Phase 0 (tài liệu này) = Architecture & Technical Design — **đã hoàn thành**.
 
