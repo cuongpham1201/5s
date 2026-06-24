@@ -9,6 +9,7 @@ import { mapArea, mapDepartment } from "./list-helpers";
 import type { GraphCollection, GraphListItem } from "./sharepoint-types";
 import type { AreaRecord, DepartmentRecord } from "@/types/sharepoint";
 import { AREAS, DEPARTMENTS } from "@/lib/mock-data";
+import { selectOrgDepartmentSource } from "./org-source";
 
 async function ctx(): Promise<{ client: SharePointGraphClient; siteId: string }> {
   const client = await getAppOnlyClient();
@@ -35,6 +36,90 @@ export async function getAreas(): Promise<AreaRecord[]> {
   const { client, siteId } = await ctx();
   const { items } = await readItems(client, siteId, CONFIG_LISTS.areas);
   return items.map((it) => mapArea(it.fields));
+}
+
+export interface ImportDepartmentsResult {
+  source: string;
+  created: string[];
+  updated: string[];
+  deactivated: string[];
+  skipped: string[];
+  note?: string;
+}
+
+/**
+ * Sync Config_Departments from the current org source (upsert by DepartmentCode).
+ * - exists  -> update name/IsActive(true)/SortOrder (never deletes)
+ * - new     -> create
+ * - missing from source -> IsActive=false (deactivate, NOT delete)
+ * DepartmentCode is the primary key. Org source = selectOrgDepartmentSource().
+ */
+export async function importDepartmentsFromOrgSource(): Promise<ImportDepartmentsResult> {
+  const { client, siteId } = await ctx();
+  const source = selectOrgDepartmentSource();
+  const out: ImportDepartmentsResult = { source: source.name, created: [], updated: [], deactivated: [], skipped: [] };
+
+  const listId = await findListId(client, siteId, CONFIG_LISTS.departments);
+  if (!listId) {
+    out.note = "Chưa có list Config_Departments — chạy provision trước.";
+    return out;
+  }
+
+  const srcDepts = await source.list();
+  if (srcDepts.length === 0) {
+    out.note = "Org source trả về 0 phòng ban — KHÔNG thay đổi gì (tránh deactivate nhầm toàn bộ).";
+    return out;
+  }
+
+  // Existing items keyed by DepartmentCode -> { itemId, record }
+  const { items } = await readItems(client, siteId, CONFIG_LISTS.departments);
+  const existing = new Map<string, { itemId: string; rec: DepartmentRecord }>();
+  for (const it of items) {
+    const rec = mapDepartment(it.fields);
+    if (rec.DepartmentCode) existing.set(rec.DepartmentCode, { itemId: it.id, rec });
+  }
+  const srcCodes = new Set(srcDepts.map((d) => d.code));
+
+  // Upsert from source.
+  for (const d of srcDepts) {
+    const cur = existing.get(d.code);
+    if (!cur) {
+      await client.post(`/sites/${siteId}/lists/${listId}/items`, {
+        fields: {
+          Title: d.code,
+          DepartmentCode: d.code,
+          DepartmentName: d.name,
+          IsActive: d.isActive ?? true,
+          SortOrder: d.sortOrder ?? 0,
+        },
+      });
+      out.created.push(d.code);
+    } else {
+      // Update name/active/sort if changed (never touch unrelated fields).
+      const needs =
+        cur.rec.DepartmentName !== d.name || cur.rec.IsActive !== (d.isActive ?? true);
+      if (needs) {
+        await client.patch(`/sites/${siteId}/lists/${listId}/items/${cur.itemId}/fields`, {
+          DepartmentName: d.name,
+          IsActive: d.isActive ?? true,
+          SortOrder: d.sortOrder ?? cur.rec.SortOrder,
+        });
+        out.updated.push(d.code);
+      } else {
+        out.skipped.push(d.code);
+      }
+    }
+  }
+
+  // Deactivate departments that exist locally but are missing from source (no delete).
+  for (const [code, cur] of existing) {
+    if (!srcCodes.has(code) && cur.rec.IsActive) {
+      await client.patch(`/sites/${siteId}/lists/${listId}/items/${cur.itemId}/fields`, { IsActive: false });
+      out.deactivated.push(code);
+    }
+  }
+
+  return out;
 }
 
 export interface SeedResult {

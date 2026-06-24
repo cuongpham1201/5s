@@ -22,6 +22,10 @@ Quy ước chung:
 
 ## ListConfig (cấu hình)
 
+> **Nguồn dữ liệu (2C.2C):** `Config_Departments` là **bản chụp đồng bộ từ org hiện tại** (không nhập tay).
+> Sync = upsert theo `DepartmentCode`; thiếu trong nguồn → `IsActive=false` (không xoá).
+> Endpoint `POST /api/admin/sharepoint/import-departments` (env `ORG_DEPARTMENT_SOURCE`=graph|mock). Mock seed chỉ ở dev.
+
 ### Config_Departments — "Departments"
 | Internal Name | Display | Type | Required | Indexed | Notes |
 |---|---|---|:---:|:---:|---|

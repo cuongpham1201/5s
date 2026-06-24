@@ -102,6 +102,15 @@ QueueStatus  = "draft" | "ready" | "queued" | "uploading" | "uploaded" | "failed
 - `completeSession()` → `CompletedSubmission(status="local-only")` + tạo `QueueItem(queued)`; mock sync → `uploaded`. **Chưa** ghi SharePoint thật.
 - **Ánh xạ backend (2C):** `CompletedSubmission` → 1 header list **`Data_Submissions`**; mỗi `SessionPhoto`/`StoredPhoto` → 1 line **`Data_SubmissionPhotos`** + 2 file trong Document Library **"5S"** thư mục `img/YYYY/MM/Dept/SubmissionId/`. Schema chuẩn: `docs/sharepoint/BAN5S_SCHEMA.md` (đã sửa 2C.1A: img/ListConfig/ListData là **thư mục thật** trong library "5S").
 
+### 2d. Config_Departments = org-synced snapshot (Phase 2C.2C)
+
+`Config_Departments` **KHÔNG** phải dữ liệu nhập tay/mock cố định. Nó là **bản chụp đồng bộ** từ nguồn tổ chức hiện tại ("OG hiện tại") do business/admin cung cấp.
+
+- **Khóa chính:** `DepartmentCode`. **Tên hiển thị:** `DepartmentName`. Giữ `IsActive`, `SortOrder`.
+- **Sync = upsert theo `DepartmentCode`:** tồn tại → cập nhật name/metadata; mới → tạo; **thiếu trong nguồn → đặt `IsActive=false` (KHÔNG xoá).**
+- Nguồn cấu hình qua env `ORG_DEPARTMENT_SOURCE` (`graph` = Entra users' `department`; `mock` = fallback dev). Code: `src/lib/sharepoint/org-source.ts` + `importDepartmentsFromOrgSource()`.
+- Endpoint: `POST /api/admin/sharepoint/import-departments`. Mock seed (`seed-config`) **chỉ chạy ở dev**.
+
 ## 3. Dashboard Data Model — công thức KPI
 
 ### 3.1 Khái niệm nền

@@ -81,6 +81,13 @@ POST /sites/{siteId}/lists
   2. Tên thư mục ảnh là `Img` hay `img`? Có cần tạo `ListConfig`/`ListData` (folder) không?
 - KHÔNG tự ý tạo để tránh trùng/đụng dữ liệu người dùng đã có.
 
+## Config_Departments — nguồn org (2C.2C, KHÔNG seed tay làm final)
+- `Config_Departments` = bản chụp đồng bộ từ **org hiện tại**. Khóa chính `DepartmentCode`.
+- Sync: `POST /api/admin/sharepoint/import-departments` → upsert theo code; mới→tạo; đổi→update name/metadata; thiếu trong nguồn → `IsActive=false` (KHÔNG xoá, trừ khi được yêu cầu rõ).
+- Nguồn chọn qua env `ORG_DEPARTMENT_SOURCE`: `graph` (Entra users.department; cần app perm User.Read.All) hoặc `mock` (fallback dev).
+- `POST /seed-config` (mock PMKT/PXHL/KCS + areas) **chỉ bật ở dev** (`NEXT_PUBLIC_ALLOW_DEV_LOGIN=true`) — chỉ để dev nhanh, KHÔNG phải nguồn thật.
+- **Admin note:** Config_Departments lấy từ OG/org data hiện tại, không duy trì thủ công như nguồn sự thật cuối.
+
 ## Đã chốt (không còn open question)
 - `img` / `ListConfig` / `ListData` là **thư mục THẬT** trong thư viện "5S" — giữ nguyên, chỉ dùng.
 - 7 List cấp site (`Config_*`/`Data_*`) là nơi chứa **dữ liệu có cấu trúc**; thư mục ListConfig/ListData chứa **artifact/export/log**. Không gộp, không thay thế thư mục.

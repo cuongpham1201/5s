@@ -720,3 +720,37 @@ Provider `microsoft-entra-id` registered; callbackUrl `https://she.biahalong.com
 Cấp app `Sites.FullControl.All` (hoặc `Sites.Manage.All`) + admin consent, HOẶC grant role manage cho app trên site Ban5S → rồi chạy lại provision + seed (idempotent, đã sẵn code/endpoint/UI).
 
 **Trạng thái:** Phase 2C.2B — code + casing + health/SSO xong; **provision/seed BỊ CHẶN bởi quyền Graph (403)**, cần admin nâng quyền. STOPPED - waiting for user review.
+
+---
+---
+
+# 5S Daily — Phase 2C.2C Run Report (Config_Departments từ org source)
+
+> Ngày: 2026-06-24 · Branch `feature/phase1-foundation`. Không sửa schema, không upload ảnh.
+
+## Mục tiêu
+`Config_Departments` là **bản chụp đồng bộ từ org hiện tại** (không nhập tay/mock cố định). Mock chỉ là fallback dev.
+
+## Thay đổi code
+- `src/lib/sharepoint/org-source.ts` (mới): `OrgDepartmentSource` + provider `graph` (Entra users.department → map sang code qua department-mapping) và `mock` (fallback dev); chọn qua env `ORG_DEPARTMENT_SOURCE` (default `mock`).
+- `config-service.ts`: thêm `importDepartmentsFromOrgSource()` — **upsert theo `DepartmentCode`**: mới→tạo, tồn tại→update name/IsActive/SortOrder, **thiếu trong nguồn→IsActive=false (KHÔNG xoá)**.
+- Route mới `POST /api/admin/sharepoint/import-departments`.
+- `seed-config` route: **gate dev-only** (`NEXT_PUBLIC_ALLOW_DEV_LOGIN=true`) — mock seed chỉ ở dev.
+- UI `/admin/sharepoint-health`: thêm nút "Import departments (org)".
+
+## Docs cập nhật
+DATA_MODEL §2d, SHAREPOINT_SCHEMA, BAN5S_SCHEMA, BAN5S_PROVISION_PLAN, RUN_REPORT — đều ghi admin note: Config_Departments lấy từ OG/org, upsert theo code, deactivate thiếu, không xoá.
+
+## Trạng thái nguồn org
+- `graph` source (Entra users): **chưa khả dụng** — `GET /users` trả **403 Authorization_RequestDenied** (cần app permission **User.Read.All** + admin consent). Hoặc admin cung cấp nguồn org theo cách khác → wire thêm provider.
+- `mock` source (dev): sẵn sàng. Chưa chạy import lên prod (tránh ghi thêm mock vào Config_Departments — hiện vẫn 3 item dev-seed PMKT/PXHL/KCS).
+
+## Schema / SharePoint
+KHÔNG đổi schema. KHÔNG upload ảnh. Không xoá dữ liệu.
+
+## Gates: tsc / lint / build = PASS.
+
+## Cần admin để bật sync org thật
+Cấp app **User.Read.All** (+ consent) rồi đặt `ORG_DEPARTMENT_SOURCE=graph` và gọi `POST /import-departments`; HOẶC cung cấp nguồn org khác để wire provider.
+
+**Trạng thái:** Phase 2C.2C HOÀN THÀNH (code + docs + endpoint + dev-gate). Sync org thật chờ quyền User.Read.All / nguồn org. Không push, không commit photo.

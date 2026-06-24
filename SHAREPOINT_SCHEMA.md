@@ -103,6 +103,7 @@ Danh sách đơn vị tham gia 5S.
 | SortOrder | Number | Thứ tự hiển thị |
 
 - **Vì sao cần:** "Expected Units" của KPI = đơn vị `IsActive=true`. Không hardcode danh sách đơn vị trong code.
+- **Nguồn (2C.2C):** đồng bộ từ **org hiện tại** (không nhập tay) — upsert theo `DepartmentCode`, thiếu trong nguồn → `IsActive=false` (không xoá). Xem DATA_MODEL §2d / `import-departments`.
 
 ### 3.3 `5SAreas` (danh mục — bắt buộc)
 Khu vực thuộc từng đơn vị (danh sách động cho màn Capture).

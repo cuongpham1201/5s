@@ -122,10 +122,17 @@ export default function SharePointHealthPage() {
             </button>
             <button
               disabled={!!action}
+              onClick={() => run("/api/admin/sharepoint/import-departments", "import")}
+              className="btn btn-secondary flex-1"
+            >
+              {action === "import" ? "Đang đồng bộ…" : "Import departments (org)"}
+            </button>
+            <button
+              disabled={!!action}
               onClick={() => run("/api/admin/sharepoint/seed-config", "seed")}
               className="btn btn-secondary flex-1"
             >
-              {action === "seed" ? "Đang seed…" : "Seed config"}
+              {action === "seed" ? "Đang seed…" : "Seed (dev)"}
             </button>
           </div>
 
