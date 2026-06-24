@@ -76,3 +76,12 @@ NEXT_PUBLIC_ALLOW_DEV_LOGIN="true"
 | `AUTH_AZURE_AD_CLIENT_ID` + `_SECRET` có | Hiện nút **Đăng nhập với Microsoft 365**; `/api/me` đọc Graph thật |
 | Thiếu Entra + `NEXT_PUBLIC_ALLOW_DEV_LOGIN=true` | Chỉ có **Dev mock login**; `/api/me` trả hồ sơ mock từ session |
 | Có cả hai | Hiện cả hai (tiện test) |
+
+## Phase 2C.2 — SSO + Graph app-only (đã wire)
+
+- **SSO redirect URI (QUAN TRỌNG):** provider Auth.js v5 là **`microsoft-entra-id`**, nên Redirect URI phải đăng ký đúng:
+  `https://she.biahalong.com/api/auth/callback/microsoft-entra-id`
+  (KHÔNG phải `/callback/azure-ad`). Delegated scope: `openid profile email offline_access User.Read`.
+- **Graph app-only** (`getAppOnlyToken`, client-credentials, scope `.default`): hiện cần application permission **`Sites.ReadWrite.All`** (đã admin-consent) để tạo list + ghi item. **Hardening tương lai:** chuyển sang **`Sites.Selected`** chỉ cấp trên site Ban5S.
+- `AUTH_SECRET` phải là chuỗi ngẫu nhiên thật (`npx auth secret`) — KHÔNG để placeholder.
+- Health check: `GET /api/admin/sharepoint/health` · Provision: `POST /api/admin/sharepoint/provision` · Seed: `POST /api/admin/sharepoint/seed-config` (đều gated dev/admin).

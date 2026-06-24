@@ -28,7 +28,8 @@
 > - **2B = IndexedDB + Offline queue — ✅ DONE (mock):** ảnh ở IndexedDB (`src/lib/storage`), queue + sync-engine mock (`src/lib/queue`), online detection, Home/History/banner/`/debug/storage`. Không network.
 > - **2C.1 = SharePoint Data Foundation & Schema — ✅ DONE (design/foundation):** schema cuối Ban5S (`docs/sharepoint/`), types `src/types/sharepoint.ts`, Graph foundation read-only `src/lib/sharepoint/`, field mapping, provisioning + Graph plan. Không write/upload.
 > - **2C.1A = Sửa cấu trúc Ban5S — ✅ DONE:** chốt thực tế — Document Library **"5S"** có **thư mục thật** `img`/`ListConfig`/`ListData` (không phải namespace giả định/open question). Config code (`sharePointConfig`) + docs đã chỉnh; health check trước upload. Verdict: **READY cho 2C.2**.
-> - **2C.2** = SharePoint Upload Engine: token app-only (MSAL), create item, upload `img`, PATCH header, SyncLogs, retry/backoff (thay `mockUploadOne`).
+> - **2C.2 = Graph health + SSO + DB foundation — ✅ DONE (code):** app-only token thật, health check (`/api/admin/sharepoint/health` + UI), provision/seed endpoints, config/submission services, SSO Entra wired (redirect URI `/api/auth/callback/microsoft-entra-id`), `Sites.ReadWrite.All`. **Chưa upload ảnh / chưa sync queue.** Provision **chưa chạy prod** — reality check thấy lệch cấu trúc (chỉ có `Img`, lists hiện là `5S_Config`/`5S_Submissions`) → chờ user quyết định.
+> - **2C.3** = Upload Engine: upload `5S/img`, ghi header + lines, nối offline queue, retry/backoff.
 **Mục tiêu:** Khung app chạy được, đăng nhập M365, cài PWA, mở camera & chụp (chưa upload thật).
 
 - Next.js + TS + Tailwind scaffold; cấu trúc thư mục (xem ARCHITECTURE).

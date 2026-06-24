@@ -648,3 +648,41 @@ Cần xác nhận tên Document Library đúng là **"5S"** (nếu khác, chỉn
 Xem cuối (commit local sau báo cáo). **Không push.**
 
 **Trạng thái:** Phase 2C.1A HOÀN THÀNH — cấu trúc Ban5S đã chỉnh đúng (library "5S" + thư mục thật img/ListConfig/ListData), docs/code/plan realigned, gates PASS. **Dừng.**
+
+---
+---
+
+# 5S Daily — Phase 2C.2 Run Report (Graph health + SSO + SharePoint DB foundation)
+
+> Ngày: 2026-06-24 · Branch `feature/phase1-foundation` · Không upload ảnh / không sync queue / không push / không deploy.
+
+## Preflight
+Working tree clean. Env đủ; AUTH_SECRET ban đầu là placeholder → đã sinh secret thật (gitignored, không in). Node v20.20.2 / npm 10.8.2.
+
+## Graph token (app-only)
+`getAppOnlyToken()` thật (client-credentials, scope `.default`). Verify dev: token acquired = yes · tenant 7e29…94e3 · client `9e9a...10f4`. Không log/in secret.
+
+## Ban5S health check (read-only, đo thật)
+Site FOUND · Library "5S" FOUND. Nhưng: trong "5S" chỉ có thư mục **`Img`** (hoa) — thiếu `img`/`ListConfig`/`ListData` theo plan; lists hiện có là **`5S_Config`**, **`5S_Submissions`** (khác `Config_*`/`Data_*`). → `ready=false`. Endpoint: `GET /api/admin/sharepoint/health` + UI `/admin/sharepoint-health`.
+
+## SSO
+Provider Entra `microsoft-entra-id` đã wire (env có đủ). **Redirect URI cần đăng ký:** `https://she.biahalong.com/api/auth/callback/microsoft-entra-id` (KHÔNG phải azure-ad). `/signin` hiện nút Microsoft khi provider cấu hình; `/api/me` trả displayName/email/department/jobTitle/officeLocation (Graph delegated); dev login còn khi `NEXT_PUBLIC_ALLOW_DEV_LOGIN=true`.
+
+## SharePoint DB provisioning
+Code đầy đủ (`provision-service` tạo 7 list + cột + index; `POST /provision` verify-site-trước). **CHƯA chạy prod** vì reality lệch (tránh tạo trùng với `5S_Config`/`5S_Submissions`). Chờ user chốt: dùng list cũ hay tạo bộ mới.
+
+## Seed config
+`seedConfig()` idempotent (PMKT/PXHL/KCS + 5 khu vực) qua `POST /seed-config`. CHƯA chạy (cần list tồn tại trước).
+
+## Files created
+graph-client (rewrite token thật), health-service, provision-service, config-service, submission-service, admin-guard; routes health/provision/seed-config; UI /admin/sharepoint-health.
+
+## Build/Lint/TSC
+PASS cả 3 (gate vòng 1).
+
+## Known risks
+- Cấu trúc SharePoint thật khác plan (Img / 5S_Config / 5S_Submissions) → provision đang chờ quyết định.
+- `Sites.ReadWrite.All` rộng → nên chuyển `Sites.Selected` (hardening).
+- Chưa verify full OAuth browser flow (cần đăng ký redirect URI + admin consent delegated).
+
+**Trạng thái:** Phase 2C.2 HOÀN THÀNH phần code/foundation; provision/seed chờ user chốt cấu trúc. **STOPPED - waiting for user review.**

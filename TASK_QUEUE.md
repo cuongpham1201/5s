@@ -149,8 +149,23 @@
 | P2C1A-E | Graph plan: reality check (GET drives → "5S" → root children → verify img/ListConfig/ListData → lists) trước upload | DONE |
 | P2C1A-QG | Quality gate tsc + lint + build PASS (fix `*/`-trong-comment, 2 vòng) | DONE |
 
-## Phase 2C.2+ (TODO — chờ phê duyệt)
-Upload Engine thật (token app-only, reality check, create item, upload vào `5S/img`, PATCH, SyncLogs, retry), rồi dashboard data thật, Excel, notifications. Xem ROADMAP.
+## Phase 2C.2 — Graph health + SSO + SharePoint DB foundation (DONE — code; provision chưa chạy prod)
+
+| ID | Task | Status |
+|---|---|---|
+| P2C2-A | `getAppOnlyToken()` thật (client-credentials) + Graph client post/patch | DONE (token verified) |
+| P2C2-B | Health service + `GET /api/admin/sharepoint/health` + UI `/admin/sharepoint-health` | DONE |
+| P2C2-C | Provision service + `POST /provision` (tạo list/cột/index) | DONE (chưa chạy prod) |
+| P2C2-D | Seed config service + `POST /seed-config` (idempotent) | DONE (chưa chạy prod) |
+| P2C2-E | config-service / submission-service (read + create item; KHÔNG upload) | DONE |
+| P2C2-F | SSO Entra wired; redirect URI `/api/auth/callback/microsoft-entra-id`; AUTH_SECRET set | DONE |
+| P2C2-G | Docs: GRAPH_PLAN/PROVISION_PLAN/ENVIRONMENT_SETUP/ROADMAP/TASK_QUEUE/RUN_REPORT | DONE |
+| P2C2-QG | tsc + lint + build PASS | DONE |
+
+> **BLOCKER (provision/seed chưa chạy):** reality check thấy library "5S" chỉ có thư mục `Img`; lists hiện là `5S_Config`/`5S_Submissions` (khác `Config_*`/`Data_*`). Cần user quyết định trước khi tạo list → tránh trùng/đụng dữ liệu. Không upload ảnh / không sync queue ở phase này.
+
+## Phase 2C.3+ (TODO)
+Upload Engine (upload `5S/img` + ghi header/lines + nối offline queue + retry), dashboard data thật, Excel, notifications.
 
 ---
 

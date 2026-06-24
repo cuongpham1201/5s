@@ -63,6 +63,14 @@ POST /sites/{siteId}/lists
 - Graph application permission **`Sites.Selected`** + grant trên **site Ban5S** (least privilege; KHÔNG `Sites.ReadWrite.All`).
 - Lưu `GRAPH_CLIENT_ID/SECRET/TENANT_ID` ở env host (ngoài git).
 
+## Reality check 2C.2 (đo thật qua Graph, read-only) — CẦN QUYẾT ĐỊNH
+- Library "5S": có; root chỉ có thư mục **`Img`** (hoa). Thiếu `ListConfig`/`ListData`.
+- Lists đang tồn tại: **`5S_Config`**, **`5S_Submissions`** (khác `Config_*`/`Data_*`).
+- Trước khi chạy `POST /api/admin/sharepoint/provision`, cần người dùng chốt:
+  1. Dùng lại `5S_Config`/`5S_Submissions` (map sang) HAY tạo bộ `Config_*`/`Data_*` mới?
+  2. Tên thư mục ảnh là `Img` hay `img`? Có cần tạo `ListConfig`/`ListData` (folder) không?
+- KHÔNG tự ý tạo để tránh trùng/đụng dữ liệu người dùng đã có.
+
 ## Đã chốt (không còn open question)
 - `img` / `ListConfig` / `ListData` là **thư mục THẬT** trong thư viện "5S" — giữ nguyên, chỉ dùng.
 - 7 List cấp site (`Config_*`/`Data_*`) là nơi chứa **dữ liệu có cấu trúc**; thư mục ListConfig/ListData chứa **artifact/export/log**. Không gộp, không thay thế thư mục.

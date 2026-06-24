@@ -3,6 +3,19 @@
 > Kế hoạch dùng Microsoft Graph cho upload + ghi metadata + sync. 2C.1 chỉ dựng
 > foundation READ-ONLY (`src/lib/sharepoint/`). Phần WRITE/upload là **2C.2**.
 
+## Phase 2C.2 status (đã làm)
+- `getAppOnlyToken()` THẬT (client-credentials) — đã xác minh lấy token OK trên môi trường dev.
+- Health check read-only: `GET /api/admin/sharepoint/health` (+ UI `/admin/sharepoint-health`).
+- Provision/seed: `POST /api/admin/sharepoint/provision`, `POST /api/admin/sharepoint/seed-config` (gated dev/admin) — **đã code, CHƯA chạy trên prod** (xem reality finding).
+- Permission: hiện dùng **`Sites.ReadWrite.All`** (app-only). Hardening tương lai → **`Sites.Selected`** trên site Ban5S.
+- SSO redirect URI: `https://she.biahalong.com/api/auth/callback/microsoft-entra-id` (provider id `microsoft-entra-id`, KHÔNG phải `azure-ad`).
+
+## Reality finding (2C.2, read-only health check)
+- Site Ban5S: FOUND. Library **"5S"**: FOUND.
+- Trong library "5S" chỉ có thư mục **`Img`** (viết hoa I); **KHÔNG** có `ListConfig`/`ListData`.
+- Lists hiện có: **`5S_Config`**, **`5S_Submissions`** (do người dùng tạo) — KHÁC bộ tên `Config_*`/`Data_*` trong kế hoạch.
+- => Provision tự động sẽ TẠO bộ list mới `Config_*`/`Data_*`, có thể trùng mục đích với `5S_Config`/`5S_Submissions`. **STOP, cần người dùng quyết định** (adopt list cũ hay tạo bộ mới; xác nhận tên thư mục img vs Img, có cần ListConfig/ListData không).
+
 ## Auth (app-only, client credentials)
 - App registration với Graph application permission **`Sites.Selected`** (grant trên site Ban5S).
 - Env: `GRAPH_CLIENT_ID`, `GRAPH_CLIENT_SECRET`, `GRAPH_TENANT_ID`.
