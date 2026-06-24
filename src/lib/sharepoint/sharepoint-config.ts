@@ -24,9 +24,9 @@ export const sharePointConfig = {
   sitePath: SHAREPOINT_SITE_PATH,
   /** The Document Library that holds the real folders below. */
   documentLibraryName: "5S",
-  /** REAL existing folders inside the "5S" library. */
+  /** REAL existing folders inside the "5S" library (note: "Img" is capitalized). */
   folders: {
-    img: "img",
+    img: "Img",
     listConfig: "ListConfig",
     listData: "ListData",
   },

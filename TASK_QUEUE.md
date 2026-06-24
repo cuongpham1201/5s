@@ -164,6 +164,19 @@
 
 > **BLOCKER (provision/seed chưa chạy):** reality check thấy library "5S" chỉ có thư mục `Img`; lists hiện là `5S_Config`/`5S_Submissions` (khác `Config_*`/`Data_*`). Cần user quyết định trước khi tạo list → tránh trùng/đụng dữ liệu. Không upload ảnh / không sync queue ở phase này.
 
+## Phase 2C.2B — Provision attempt (kiến trúc đã chốt; BLOCKED bởi quyền)
+
+| ID | Task | Status |
+|---|---|---|
+| P2C2B-A | Health cập nhật: thư mục `Img` (hoa); bỏ qua legacy `5S_Config`/`5S_Submissions` (đã xoá) | DONE |
+| P2C2B-B | Verify site/library/Img qua health | DONE (FOUND) |
+| P2C2B-C | Chạy `POST /provision` tạo 7 list | **BLOCKED — 403 accessDenied** |
+| P2C2B-D | Seed Departments/Areas | BLOCKED (chờ list) |
+| P2C2B-E | Verify SSO provider (microsoft-entra-id) | DONE |
+| P2C2B-QG | tsc + lint + build PASS | DONE |
+
+> **BLOCKER:** token app-only có `Sites.ReadWrite.All` nhưng tạo list/column bị 403 — cần admin cấp `Sites.Manage.All`/`Sites.FullControl.All` (hoặc grant role manage cho app trên site Ban5S khi dùng Sites.Selected). Sau khi cấp → chạy lại provision + seed (code idempotent đã sẵn).
+
 ## Phase 2C.3+ (TODO)
 Upload Engine (upload `5S/img` + ghi header/lines + nối offline queue + retry), dashboard data thật, Excel, notifications.
 

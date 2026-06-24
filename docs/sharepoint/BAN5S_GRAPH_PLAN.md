@@ -16,6 +16,20 @@
 - Lists hiện có: **`5S_Config`**, **`5S_Submissions`** (do người dùng tạo) — KHÁC bộ tên `Config_*`/`Data_*` trong kế hoạch.
 - => Provision tự động sẽ TẠO bộ list mới `Config_*`/`Data_*`, có thể trùng mục đích với `5S_Config`/`5S_Submissions`. **STOP, cần người dùng quyết định** (adopt list cũ hay tạo bộ mới; xác nhận tên thư mục img vs Img, có cần ListConfig/ListData không).
 
+## Phase 2C.2B — provisioning BLOCKED by permission (action cần admin)
+- Token app-only roles thực tế: **`["Sites.Selected","Sites.ReadWrite.All"]`** (đọc OK).
+- `POST /sites/{id}/lists` (tạo list) → **403 accessDenied** cho cả 7 list.
+- Nguyên nhân: tạo **list/column (thay đổi cấu trúc)** cần quyền cao hơn ReadWrite —
+  **`Sites.Manage.All`** hoặc **`Sites.FullControl.All`** (application) + admin consent;
+  ngoài ra `Sites.Selected` đang có thể chặn trừ khi app được cấp role write/manage
+  TRÊN site Ban5S.
+- **Cần admin làm 1 trong 2:**
+  1. Cấp app `Sites.FullControl.All` (hoặc `Sites.Manage.All`) application permission + admin consent; hoặc
+  2. Giữ `Sites.Selected` và cấp role `manage`/`fullcontrol` cho app trên site Ban5S
+     (`POST /sites/{id}/permissions` do admin).
+- Sau khi cấp quyền → chạy lại `POST /api/admin/sharepoint/provision` rồi `seed-config`.
+- Đọc (health) hoạt động bình thường; chỉ thao tác tạo cấu trúc bị chặn.
+
 ## Auth (app-only, client credentials)
 - App registration với Graph application permission **`Sites.Selected`** (grant trên site Ban5S).
 - Env: `GRAPH_CLIENT_ID`, `GRAPH_CLIENT_SECRET`, `GRAPH_TENANT_ID`.

@@ -63,7 +63,17 @@ POST /sites/{siteId}/lists
 - Graph application permission **`Sites.Selected`** + grant trên **site Ban5S** (least privilege; KHÔNG `Sites.ReadWrite.All`).
 - Lưu `GRAPH_CLIENT_ID/SECRET/TENANT_ID` ở env host (ngoài git).
 
-## Reality check 2C.2 (đo thật qua Graph, read-only) — CẦN QUYẾT ĐỊNH
+## Cập nhật 2C.2B (kiến trúc đã chốt + thử provision thật)
+- Legacy `5S_Config` / `5S_Submissions` đã bị XOÁ (không còn trong kiến trúc). Bỏ qua.
+- Kiến trúc cuối: library `5S` + thư mục `Img`/`ListConfig`/`ListData`; lists
+  `Config_*` (4) + `Data_*` (3). Health: site/library/Img = FOUND;
+  ListConfig/ListData (folder) MISSING; 7 list MISSING.
+- Đã chạy `POST /provision` → **403 accessDenied** khi tạo list (xem BAN5S_GRAPH_PLAN
+  "2C.2B blocked"): cần admin cấp `Sites.Manage.All`/`Sites.FullControl.All`
+  (hoặc grant role manage cho app trên site qua Sites.Selected). Provision + seed
+  sẽ chạy được ngay sau khi có quyền — code đã sẵn sàng, idempotent.
+
+## Reality check 2C.2 (đo thật qua Graph, read-only) — lịch sử
 - Library "5S": có; root chỉ có thư mục **`Img`** (hoa). Thiếu `ListConfig`/`ListData`.
 - Lists đang tồn tại: **`5S_Config`**, **`5S_Submissions`** (khác `Config_*`/`Data_*`).
 - Trước khi chạy `POST /api/admin/sharepoint/provision`, cần người dùng chốt:

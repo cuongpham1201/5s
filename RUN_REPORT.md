@@ -686,3 +686,37 @@ PASS cả 3 (gate vòng 1).
 - Chưa verify full OAuth browser flow (cần đăng ký redirect URI + admin consent delegated).
 
 **Trạng thái:** Phase 2C.2 HOÀN THÀNH phần code/foundation; provision/seed chờ user chốt cấu trúc. **STOPPED - waiting for user review.**
+
+---
+---
+
+# 5S Daily — Phase 2C.2B Run Report (Provision attempt — blocked by permission)
+
+> Ngày: 2026-06-24 · Branch `feature/phase1-foundation`. Không upload ảnh / không sync queue / không push.
+
+## Bối cảnh
+User xác nhận kiến trúc cuối + đã xoá legacy `5S_Config`/`5S_Submissions`, cho phép tạo lists.
+
+## Thay đổi
+- `sharepoint-config.ts`: thư mục ảnh = **`Img`** (đúng casing thật).
+- Health bỏ qua legacy lists (chỉ kiểm 7 list Config_/Data_ mục tiêu).
+
+## Health (đo thật)
+site FOUND · library "5S" FOUND · folder **Img FOUND** · ListConfig/ListData (folder) MISSING · 7 list MISSING · ready=false.
+
+## Provision — BLOCKED
+Chạy `POST /api/admin/sharepoint/provision`: cả 7 list → **403 accessDenied** khi `POST /sites/{id}/lists`.
+Token app-only roles thực tế: `["Sites.Selected","Sites.ReadWrite.All"]` (đọc OK).
+=> Tạo **list/column** cần quyền cao hơn: **`Sites.Manage.All`** hoặc **`Sites.FullControl.All`** (application + admin consent); hoặc nếu giữ `Sites.Selected` thì admin phải grant role `manage`/`fullcontrol` cho app TRÊN site Ban5S.
+
+## Seed — chưa chạy (phụ thuộc list)
+
+## SSO — OK
+Provider `microsoft-entra-id` registered; callbackUrl `https://she.biahalong.com/api/auth/callback/microsoft-entra-id`. Dev login còn.
+
+## Gates: tsc / lint / build PASS.
+
+## Cần admin làm để mở khoá
+Cấp app `Sites.FullControl.All` (hoặc `Sites.Manage.All`) + admin consent, HOẶC grant role manage cho app trên site Ban5S → rồi chạy lại provision + seed (idempotent, đã sẵn code/endpoint/UI).
+
+**Trạng thái:** Phase 2C.2B — code + casing + health/SSO xong; **provision/seed BỊ CHẶN bởi quyền Graph (403)**, cần admin nâng quyền. STOPPED - waiting for user review.
