@@ -2,19 +2,15 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { auth } from "@/auth";
 import { getMe } from "@/lib/graph/graph-user";
-import type { MeProfile } from "@/lib/graph/graph-types";
+import { resolveDepartmentFromGraphValue } from "@/lib/sharepoint/department-service";
+import type { MeResponse } from "@/lib/graph/graph-types";
 
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/me — returns the signed-in user's profile.
- *
- * - When a real Microsoft Graph access token is present (Entra login), reads the
- *   live profile via GET /me.
- * - Otherwise (dev mock login), builds the profile from the session so the app
- *   stays runnable locally without a real tenant.
- *
- * Missing fields are returned as null (per spec).
+ * GET /api/me — signed-in profile with department resolved against
+ * Config_Departments. Real M365 → Graph /me (delegated) for raw fields + app-only
+ * read of Config for resolution. Dev login → session-derived. No tokens exposed.
  */
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -22,9 +18,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  // Read the access token from the encrypted JWT, server-side only (never sent
-  // to the client). The salt must equal the session cookie name, which is the
-  // secure-prefixed variant over HTTPS.
   const useSecure = (process.env.NEXTAUTH_URL ?? "").startsWith("https://");
   const cookieName = useSecure ? "__Secure-authjs.session-token" : "authjs.session-token";
   let accessToken: string | undefined;
@@ -41,32 +34,52 @@ export async function GET(req: NextRequest) {
     accessToken = undefined;
   }
 
+  // Real M365 identity.
   if (accessToken) {
     try {
-      const profile = await getMe(accessToken);
-      return NextResponse.json(profile);
+      const me = await getMe(accessToken);
+      const dep = await resolveDepartmentFromGraphValue(me.entraDepartment);
+      const res: MeResponse = {
+        displayName: me.displayName,
+        email: me.email,
+        departmentRaw: dep.departmentRaw,
+        departmentCode: dep.departmentCode,
+        departmentName: dep.departmentName,
+        departmentResolved: dep.departmentResolved,
+        departmentSource: dep.departmentSource,
+        departmentWarning: dep.departmentWarning,
+        jobTitle: me.jobTitle,
+        officeLocation: me.officeLocation,
+        employeeId: me.employeeId,
+        id: me.id,
+        source: "microsoft-entra-id",
+      };
+      return NextResponse.json(res);
     } catch {
-      // Graph failure → fall back to session-derived profile below.
+      // fall through to session-derived (dev) below
     }
   }
 
+  // Dev login (or Graph failure): resolve the mock department code too.
+  const rawDept = session.user.department ?? null;
+  const dep = await resolveDepartmentFromGraphValue(rawDept).catch(() => null);
   const role = session.user.role;
   const jobTitle =
-    role === "admin"
-      ? "Quản trị viên"
-      : role === "environment"
-        ? "Ban Môi trường đời sống"
-        : "Nhân viên";
-
-  const profile: MeProfile = {
+    role === "admin" ? "Quản trị viên" : role === "environment" ? "Ban Môi trường đời sống" : "Nhân viên";
+  const res: MeResponse = {
     displayName: session.user.name ?? null,
     email: session.user.email ?? null,
-    entraDepartment: null,
-    department: session.user.department ?? null,
+    departmentRaw: rawDept,
+    departmentCode: dep?.departmentCode ?? rawDept,
+    departmentName: dep?.departmentName ?? null,
+    departmentResolved: dep?.departmentResolved ?? !!rawDept,
+    departmentSource: dep?.departmentSource ?? "dev-mock",
+    departmentWarning: dep?.departmentWarning ?? (rawDept ? null : "Tài khoản chưa có thông tin phòng ban. Vui lòng liên hệ quản trị."),
     jobTitle,
     officeLocation: null,
     employeeId: null,
+    id: null,
     source: "dev",
   };
-  return NextResponse.json(profile);
+  return NextResponse.json(res);
 }

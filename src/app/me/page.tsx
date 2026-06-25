@@ -5,37 +5,31 @@ import { useEffect, useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Card, InfoRow } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { departmentName } from "@/lib/department-mapping";
-import type { MeProfile } from "@/lib/graph/graph-types";
+import type { MeResponse } from "@/lib/graph/graph-types";
 
 function initials(name?: string | null): string {
   if (!name) return "?";
   const parts = name.trim().split(/\s+/);
-  const last = parts[parts.length - 1]?.[0] ?? "";
-  const first = parts[0]?.[0] ?? "";
-  return (first + last).toUpperCase() || "?";
+  return ((parts[0]?.[0] ?? "") + (parts[parts.length - 1]?.[0] ?? "")).toUpperCase() || "?";
 }
 
 export default function MePage() {
-  const [profile, setProfile] = useState<MeProfile | null>(null);
+  const [profile, setProfile] = useState<MeResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
     fetch("/api/me")
       .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (active) setProfile(data);
-      })
+      .then((data) => active && setProfile(data))
       .finally(() => active && setLoading(false));
     return () => {
       active = false;
     };
   }, []);
 
-  const deptCode = profile?.department ?? null;
-  const deptLabel = deptCode
-    ? `${deptCode}${departmentName(deptCode) ? " · " + departmentName(deptCode) : ""}`
+  const dept5s = profile?.departmentResolved
+    ? `${profile.departmentCode}${profile.departmentName ? " · " + profile.departmentName : ""}`
     : "Chưa xác định";
 
   return (
@@ -56,17 +50,26 @@ export default function MePage() {
         <div className="text-[18px] font-semibold mt-3">
           {loading ? "Đang tải hồ sơ…" : profile?.displayName ?? "Người dùng"}
         </div>
-        {!loading && profile?.jobTitle && (
-          <div className="text-[13px] text-ink-muted">{profile.jobTitle}</div>
+        {!loading && profile?.jobTitle && <div className="text-[13px] text-ink-muted">{profile.jobTitle}</div>}
+
+        {profile && !profile.departmentResolved && (
+          <div className="w-full mt-4 flex items-start gap-2.5 rounded-md bg-warning-bg text-warning p-3.5">
+            <span className="text-lg">⚠</span>
+            <span className="text-[13px] font-medium">
+              {profile.departmentWarning ?? "Phòng ban chưa xác định. Vui lòng liên hệ quản trị."}
+            </span>
+          </div>
         )}
 
         <Card className="w-full mt-5">
           <InfoRow label="Tên hiển thị" value={profile?.displayName ?? "—"} />
           <InfoRow label="Email" value={profile?.email ?? "—"} />
-          <InfoRow label="Phòng ban (5S)" value={loading ? "…" : deptLabel} />
+          <InfoRow label="Phòng ban (M365)" value={profile?.departmentRaw ?? "—"} />
+          <InfoRow label="Phòng ban (5S)" value={loading ? "…" : dept5s} />
+          <InfoRow label="DepartmentCode" value={profile?.departmentCode ?? "—"} />
           <InfoRow label="Chức danh" value={profile?.jobTitle ?? "—"} />
           <InfoRow label="Vị trí văn phòng" value={profile?.officeLocation ?? "—"} />
-          <InfoRow label="Mã nhân viên" value={profile?.employeeId ?? "—"} />
+          {profile?.employeeId && <InfoRow label="Mã nhân viên" value={profile.employeeId} />}
         </Card>
 
         <button className="btn btn-secondary btn-block mt-6" onClick={() => signOut({ callbackUrl: "/signin" })}>
@@ -74,8 +77,8 @@ export default function MePage() {
         </button>
         <p className="text-[12px] text-ink-disabled mt-4 text-center">
           {profile?.source === "microsoft-entra-id"
-            ? "Dữ liệu lấy trực tiếp từ Microsoft 365 (Graph /me)."
-            : "Đang dùng đăng nhập thử (dev). Khi cấu hình Entra App thật, hồ sơ sẽ tự lấy từ Microsoft 365."}
+            ? "Hồ sơ lấy từ Microsoft 365. Phòng ban 5S khớp từ danh mục Config_Departments."
+            : "Đăng nhập thử (dev). Khi đăng nhập M365 thật, hồ sơ + phòng ban lấy từ Microsoft 365."}
         </p>
       </div>
     </AppShell>

@@ -29,8 +29,10 @@ export async function getMe(accessToken: string): Promise<MeProfile> {
 export function normalizeGraphUser(raw: GraphUserRaw): MeProfile {
   const entraDepartment = raw.department ?? null;
   return {
+    id: raw.id ?? null,
     displayName: raw.displayName ?? null,
     email: raw.mail ?? raw.userPrincipalName ?? null,
+    userPrincipalName: raw.userPrincipalName ?? null,
     entraDepartment,
     department: mapEntraDepartment(entraDepartment) ?? null,
     jobTitle: raw.jobTitle ?? null,

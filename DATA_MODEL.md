@@ -111,6 +111,12 @@ QueueStatus  = "draft" | "ready" | "queued" | "uploading" | "uploaded" | "failed
 - Nguồn cấu hình qua env `ORG_DEPARTMENT_SOURCE` (`graph` = Entra users' `department`; `mock` = fallback dev). Code: `src/lib/sharepoint/org-source.ts` + `importDepartmentsFromOrgSource()`.
 - Endpoint: `POST /api/admin/sharepoint/import-departments`. Mock seed (`seed-config`) **chỉ chạy ở dev**.
 
+**Resolution pipeline (department mapping):** `Microsoft Graph /me .department` (raw) →
+`resolveDepartmentFromGraphValue()` khớp **Config_Departments** (theo `DepartmentCode` exact → `DepartmentName` accent-insensitive → alias) → `departmentCode`/`departmentName`.
+- `department` từ Graph **null/rỗng** → `Chưa xác định` → **chặn nộp** (capture disable + cảnh báo).
+- Có giá trị nhưng **không khớp Config** → cảnh báo "chưa khớp danh mục 5S" → chặn nộp.
+- `/api/me` trả `departmentRaw`, `departmentCode`, `departmentName`, `departmentResolved`, `departmentSource`, `departmentWarning`. Debug: `GET /api/debug/me`, UI `/admin/department-debug`.
+
 ## 3. Dashboard Data Model — công thức KPI
 
 ### 3.1 Khái niệm nền

@@ -767,3 +767,25 @@ Chốt quy trình DEV ↔ PRODUCT (chỉ doc, không đổi code app):
 - **Trước task deploy:** verify pwd=`/data/homelab/apps/5s-app/5s`, chỉ `git pull`, không sửa file thủ công (trừ `.env.local` khi yêu cầu rõ).
 - **Deploy flow:** dev build/test → commit → push GitHub → product pull → `npm install` → `npm run build` → `pm2 restart 5s-app --update-env`.
 - Đã cập nhật: AGENT_RULES.md (§0), ROADMAP.md, deployment/DEPLOYMENT.md, RUN_REPORT.md (mục này).
+
+---
+---
+
+# 5S Daily — Department Mapping Fix (2026-06-25)
+
+> Lỗi: /me hiện "Phòng ban (5S): Chưa xác định" dù displayName/email/jobTitle/officeLocation đúng.
+
+## Phân tích
+Pipeline cũ: Graph /me `.department` → `mapEntraDepartment()` (alias hardcode hẹp) → null nếu không khớp. Hai khả năng: (A) Graph department null, hoặc (B) có giá trị nhưng alias hardcode không khớp. Không xem được giá trị thật của user từ sandbox (cần delegated token của họ) → thêm `/api/debug/me` để user/admin tự xem raw.
+
+## Fix
+- `department-service.ts`: `resolveDepartmentFromGraphValue()` khớp **Config_Departments thật** (DepartmentCode exact → DepartmentName accent-insensitive/normalize → alias → unresolved). Fallback mock chỉ ở dev.
+- `/api/me` mở rộng: departmentRaw/Code/Name/Resolved/Source/Warning + id.
+- `/me`: hiển thị Phòng ban (M365 raw) + Phòng ban (5S) + code + warning card khi chưa resolve.
+- `/capture`: lấy department resolved từ /api/me; chưa resolve → cảnh báo + **khóa "Bắt đầu chụp"**.
+- `/api/debug/me` (raw Graph fields) + `/admin/department-debug` + `GET /api/admin/sharepoint/departments`.
+
+## Xử lý 4 case
+A (null) → "Chưa xác định" + chặn nộp. B (giá trị, mapper fail) → giờ khớp Config theo name/accent-insensitive/alias. C (mapper ra code nhưng Config thiếu) → cảnh báo "chưa có trong Config, đồng bộ danh mục". D (Config có nhưng UI sai) → /api/me trả resolved + UI dùng đúng.
+
+## Gates: tsc/lint/build PASS. Không đổi schema, không xoá data.

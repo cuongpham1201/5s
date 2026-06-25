@@ -14,10 +14,12 @@ export interface GraphUserRaw {
   employeeId?: string | null;
 }
 
-/** Normalized profile used by the app (/api/me response). */
+/** Normalized profile from Graph /me. */
 export interface MeProfile {
+  id: string | null;
   displayName: string | null;
   email: string | null;
+  userPrincipalName: string | null;
   /** Raw Entra department string (before 5S mapping). */
   entraDepartment: string | null;
   /** Mapped 5S department code, or null when unmapped. */
@@ -26,6 +28,23 @@ export interface MeProfile {
   officeLocation: string | null;
   employeeId: string | null;
   /** Identity source: real M365 (Entra/Graph) vs dev mock login. */
+  source: "microsoft-entra-id" | "dev";
+}
+
+/** The /api/me response (department resolved against Config_Departments). */
+export interface MeResponse {
+  displayName: string | null;
+  email: string | null;
+  departmentRaw: string | null;
+  departmentCode: string | null;
+  departmentName: string | null;
+  departmentResolved: boolean;
+  departmentSource: string;
+  departmentWarning: string | null;
+  jobTitle: string | null;
+  officeLocation: string | null;
+  employeeId: string | null;
+  id: string | null;
   source: "microsoft-entra-id" | "dev";
 }
 

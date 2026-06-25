@@ -97,8 +97,12 @@ AUTH_AZURE_AD_TENANT_ID=<tenant id>
 NEXT_PUBLIC_ALLOW_DEV_LOGIN=false   # product: tắt dev login
 ```
 - Dev login panel chỉ hiện khi `NEXT_PUBLIC_ALLOW_DEV_LOGIN=true` (dev). Product đặt `false`.
-- `/api/me` trả `{ displayName, email, department, jobTitle, officeLocation, source }`
-  (`source` = `microsoft-entra-id` | `dev`).
+- `/api/me` trả `{ displayName, email, departmentRaw, departmentCode, departmentName,
+  departmentResolved, departmentSource, departmentWarning, jobTitle, officeLocation,
+  employeeId, id, source }` (`source` = `microsoft-entra-id` | `dev`).
+- **Department source = Graph /me `.department`**, resolve qua **Config_Departments**
+  (đồng bộ từ org). Null/không khớp → chặn nộp ở capture + cảnh báo. Debug:
+  `GET /api/debug/me`, `/admin/department-debug` (dev/admin).
 
 ## Phase 2C.2 — SSO + Graph app-only (đã wire)
 

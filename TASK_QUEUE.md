@@ -177,8 +177,22 @@
 
 > **BLOCKER:** token app-only có `Sites.ReadWrite.All` nhưng tạo list/column bị 403 — cần admin cấp `Sites.Manage.All`/`Sites.FullControl.All` (hoặc grant role manage cho app trên site Ban5S khi dùng Sites.Selected). Sau khi cấp → chạy lại provision + seed (code idempotent đã sẵn).
 
+## Department Mapping Fix (DONE)
+
+| ID | Task | Status |
+|---|---|---|
+| DM-A | `/api/debug/me` (raw Graph fields, dev/admin) | DONE |
+| DM-B | `department-service.ts`: listActiveDepartments + resolveDepartmentFromGraphValue (code→name accent-insensitive→alias) | DONE |
+| DM-C | `/api/me` mở rộng: departmentRaw/Code/Name/Resolved/Source/Warning | DONE |
+| DM-D | `/me` + `/capture` hiển thị raw + 5S + cảnh báo; capture chặn nộp khi chưa resolve | DONE |
+| DM-E | `/admin/department-debug` + `GET /api/admin/sharepoint/departments` | DONE |
+| DM-F | Docs (DATA_MODEL/ENVIRONMENT_SETUP/RUN_REPORT/TASK_QUEUE) | DONE |
+| DM-QG | tsc + lint + build PASS | DONE |
+
+> Root cause cần xác nhận từ thiết bị user qua `/api/debug/me` (department NULL vs giá trị không khớp Config). Code đã robust cho cả 4 case. Không đổi schema, không xoá data.
+
 ## Phase 2C.3+ (TODO)
-Upload Engine (upload `5S/img` + ghi header/lines + nối offline queue + retry), dashboard data thật, Excel, notifications.
+Upload Engine (upload `5S/img` + ghi header/lines + nối offline queue + retry), dashboard data thật, Excel, notifications. Đồng bộ Config_Departments từ org (cần User.Read.All).
 
 ---
 
