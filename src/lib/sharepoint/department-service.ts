@@ -51,6 +51,28 @@ export async function listActiveDepartments(): Promise<DeptOption[]> {
     .map((d) => ({ code: d.DepartmentCode, name: d.DepartmentName, sortOrder: d.SortOrder }));
 }
 
+export interface DeptRow {
+  code: string;
+  name: string;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+/** Read ALL departments (active + inactive) from Config_Departments. */
+export async function listAllDepartments(): Promise<DeptRow[]> {
+  const client = await getAppOnlyClient();
+  const site = await resolveSite(client);
+  const listId = await findListId(client, site.id, CONFIG_LISTS.departments);
+  if (!listId) return [];
+  const res = await client.get<GraphCollection<GraphListItem>>(
+    `/sites/${site.id}/lists/${listId}/items?expand=fields&$top=999`,
+  );
+  return res.value
+    .map((it) => mapDepartment(it.fields))
+    .filter((d) => d.DepartmentCode)
+    .map((d) => ({ code: d.DepartmentCode, name: d.DepartmentName, isActive: d.IsActive, sortOrder: d.SortOrder }));
+}
+
 const devAllowed = () => process.env.NEXT_PUBLIC_ALLOW_DEV_LOGIN === "true";
 
 /** Dev fallback options when SharePoint read fails (dev only). */

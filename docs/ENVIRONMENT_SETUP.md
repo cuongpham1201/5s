@@ -109,6 +109,10 @@ NEXT_PUBLIC_ALLOW_DEV_LOGIN=false   # product: tắt dev login
   upsert theo `DepartmentCode`, thiếu→IsActive=false (không xoá).
   Lưu ý: **resolution KHÔNG cần** `ORG_DEPARTMENT_SOURCE` (chỉ cần Config đã có dữ liệu);
   biến này chỉ dùng khi chạy import.
+- **Lọc nguồn:** chỉ user `accountEnabled=true` + `userType=Member` + `@biahalong.com` + có department.
+- **deactivateMissing=false** mặc định (chỉ deactivate khi `?deactivateMissing=true`).
+- Báo cáo: `GET /api/admin/sharepoint/departments?includeInactive=true` (active/inactive/duplicates).
+  `POST /api/admin/sharepoint/departments/cleanup-inactive-duplicates` = **report-only, không xoá**.
 
 ## Phase 2C.2 — SSO + Graph app-only (đã wire)
 

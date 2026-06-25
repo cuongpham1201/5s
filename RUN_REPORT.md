@@ -817,3 +817,31 @@ Manual verify trên thiết bị đã đăng nhập: https://she.biahalong.com/a
 - Resolution KHÔNG phụ thuộc ORG_DEPARTMENT_SOURCE (chỉ cần Config có dữ liệu) — product /me resolve TCKS ngay.
 - Config_Areas vẫn mock → capture cho TCKS hiện chưa có khu vực ("liên hệ quản trị") — đồng bộ areas là task sau.
 - Vài cặp gần-trùng còn active (KHVT/PKHVT, KCS/PKSCLKNM) — admin gộp/sửa code sau.
+
+---
+---
+
+# 5S Daily — Org Import Filter: active members only (2026-06-25)
+
+## Old issue
+Import quét TẤT CẢ /users (gồm disabled/guest/legacy) → nhiều biến thể phòng ban cũ.
+
+## Filter (active members only)
+Chỉ lấy: `accountEnabled=true` + `userType="Member"` + email/UPN `@biahalong.com` + có department.
+Stats (live): total 1011 · disabled 105 · guests 659 · active members 247 · external 1 ·
+no-dept 11 · active-with-dept 235 · distinct ALL 49 → filtered 25.
+
+## Import behavior change
+`importDepartmentsFromOrgSource({deactivateMissing})` mặc định **false** (không deactivate).
+Override: `?deactivateMissing=true` hoặc body `{deactivateMissing:true}`.
+Đã chạy lại (default): created 0, updated 1, **deactivated 0**, skipped 21.
+
+## Duplicates (an toàn, không xoá)
+`GET /departments?includeInactive=true`: total 36, active 25, inactive 11, duplicateCodes [].
+`POST /departments/cleanup-inactive-duplicates` = **report-only** (deleted 0), liệt kê
+inactive trùng tên với active (PMKT, TTĐH2) để admin xử lý thủ công.
+
+## TCKS verify
+Active=true, DepartmentName "Ban Tài chính - Kiểm soát nội bộ". /api/me sẽ resolve TCKS.
+
+## Gates: tsc/lint/build PASS. Không xoá data, không đổi schema.

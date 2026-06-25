@@ -40,10 +40,12 @@ export async function getAreas(): Promise<AreaRecord[]> {
 
 export interface ImportDepartmentsResult {
   source: string;
+  deactivateMissing: boolean;
   created: string[];
   updated: string[];
   deactivated: string[];
   skipped: string[];
+  stats?: import("./org-source").OrgScanStats;
   note?: string;
 }
 
@@ -54,10 +56,20 @@ export interface ImportDepartmentsResult {
  * - missing from source -> IsActive=false (deactivate, NOT delete)
  * DepartmentCode is the primary key. Org source = selectOrgDepartmentSource().
  */
-export async function importDepartmentsFromOrgSource(): Promise<ImportDepartmentsResult> {
+export async function importDepartmentsFromOrgSource(
+  opts?: { deactivateMissing?: boolean },
+): Promise<ImportDepartmentsResult> {
+  const deactivateMissing = opts?.deactivateMissing ?? false; // default: do NOT deactivate
   const { client, siteId } = await ctx();
   const source = selectOrgDepartmentSource();
-  const out: ImportDepartmentsResult = { source: source.name, created: [], updated: [], deactivated: [], skipped: [] };
+  const out: ImportDepartmentsResult = {
+    source: source.name,
+    deactivateMissing,
+    created: [],
+    updated: [],
+    deactivated: [],
+    skipped: [],
+  };
 
   const listId = await findListId(client, siteId, CONFIG_LISTS.departments);
   if (!listId) {
@@ -65,7 +77,8 @@ export async function importDepartmentsFromOrgSource(): Promise<ImportDepartment
     return out;
   }
 
-  const srcDepts = await source.list();
+  const { departments: srcDepts, stats } = await source.list();
+  out.stats = stats;
   if (srcDepts.length === 0) {
     out.note = "Org source trả về 0 phòng ban — KHÔNG thay đổi gì (tránh deactivate nhầm toàn bộ).";
     return out;
@@ -111,11 +124,13 @@ export async function importDepartmentsFromOrgSource(): Promise<ImportDepartment
     }
   }
 
-  // Deactivate departments that exist locally but are missing from source (no delete).
-  for (const [code, cur] of existing) {
-    if (!srcCodes.has(code) && cur.rec.IsActive) {
-      await client.patch(`/sites/${siteId}/lists/${listId}/items/${cur.itemId}/fields`, { IsActive: false });
-      out.deactivated.push(code);
+  // Deactivate departments missing from source — ONLY when explicitly requested.
+  if (deactivateMissing) {
+    for (const [code, cur] of existing) {
+      if (!srcCodes.has(code) && cur.rec.IsActive) {
+        await client.patch(`/sites/${siteId}/lists/${listId}/items/${cur.itemId}/fields`, { IsActive: false });
+        out.deactivated.push(code);
+      }
     }
   }
 

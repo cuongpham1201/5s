@@ -205,8 +205,21 @@
 
 > Còn lại: Config_Areas vẫn mock (capture cần areas theo phòng ban) → đồng bộ areas từ org là task sau. Vài cặp gần-trùng (KHVT/PKHVT, KCS/PKSCLKNM) còn active — admin gộp/sửa code sau.
 
+## Org Import Filter — active members only (DONE)
+
+| ID | Task | Status |
+|---|---|---|
+| FLT-A | Lọc Graph users: accountEnabled=true + userType=Member + @biahalong.com + có dept; stats | DONE (1011→235 active-with-dept, distinct 49→25) |
+| FLT-B | importDepartmentsFromOrgSource(deactivateMissing=false mặc định); query/body override | DONE |
+| FLT-C | GET departments?includeInactive=true (active/inactive/dup) + cleanup endpoint report-only | DONE |
+| FLT-D | Verify TCKS active sau import lọc | DONE (active, name intact) |
+| FLT-E | Docs | DONE |
+| FLT-QG | tsc+lint+build PASS | DONE |
+
+> Đã chạy import lọc lên prod: deactivated 0 (default off), TCKS giữ active. Inactive duplicates (PMKT, TTĐH2) chỉ report, không xoá.
+
 ## Phase 2C.3+ (TODO)
-Upload Engine (upload `5S/img` + ghi header/lines + nối offline queue + retry), Config_Areas sync, dashboard data thật, Excel, notifications.
+Upload Engine (upload `5S/img` + ghi header/lines + offline queue + retry), Config_Areas sync, dashboard data thật, Excel, notifications.
 
 ---
 

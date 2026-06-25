@@ -1,13 +1,13 @@
 /**
  * Organization department source (Graph org sync).
  *
- * Config_Departments is a SYNCHRONIZED snapshot of the org. The "graph" source
- * scans Entra users' `department` (app-only, needs User.Read.All):
- *   - DepartmentName = raw Graph value (longest variant per group)
- *   - DepartmentCode = official company code if known, else deterministic
- *   - groups variants by code so each real department is ONE record
- *   - null/empty ignored
- * "mock" = dev fallback only. Select via ORG_DEPARTMENT_SOURCE.
+ * Config_Departments is synced from ACTIVE/CURRENT users only:
+ *   - accountEnabled === true
+ *   - userType === "Member" (exclude guests/external)
+ *   - mail|userPrincipalName ends with @biahalong.com
+ *   - department non-empty
+ * Variants grouped by code (official map or deterministic); name = raw value.
+ * "mock" = dev fallback. Select via ORG_DEPARTMENT_SOURCE.
  */
 import { getAppOnlyClient } from "./graph-client";
 import { deterministicCode, normalizeText, officialCodeForName } from "./org-codes";
@@ -20,39 +20,104 @@ export interface OrgDepartment {
   isActive?: boolean;
   sortOrder?: number;
 }
+
+export interface OrgScanStats {
+  totalScanned: number;
+  excludedDisabled: number;
+  excludedGuests: number;
+  activeMembers: number;
+  excludedExternalDomain: number;
+  excludedNoDepartment: number;
+  activeWithDepartment: number;
+  distinctAll: number;
+  distinctFiltered: number;
+}
+
+export interface OrgSourceResult {
+  departments: OrgDepartment[];
+  stats?: OrgScanStats;
+}
+
 export interface OrgDepartmentSource {
   name: string;
-  list(): Promise<OrgDepartment[]>;
+  list(): Promise<OrgSourceResult>;
 }
+
+const ALLOWED_DOMAIN = "@biahalong.com";
 
 const mockSource: OrgDepartmentSource = {
   name: "mock(dev-fallback)",
   async list() {
-    return DEPARTMENTS.map((d, i) => ({ code: d.code, name: d.name, isActive: d.isActive, sortOrder: i }));
+    return {
+      departments: DEPARTMENTS.map((d, i) => ({ code: d.code, name: d.name, isActive: d.isActive, sortOrder: i })),
+    };
   },
 };
 
+interface GraphUser {
+  department?: string | null;
+  mail?: string | null;
+  userPrincipalName?: string | null;
+  accountEnabled?: boolean | null;
+  userType?: string | null;
+}
+
 const graphUsersSource: OrgDepartmentSource = {
-  name: "graph(entra-users)",
+  name: "graph(active-members)",
   async list() {
     const client = await getAppOnlyClient();
-    // Paginate all users; keep the longest raw name per normalized key.
-    const canonical = new Map<string, string>();
-    let path: string | null = "/users?$select=department&$top=999";
+    const stats: OrgScanStats = {
+      totalScanned: 0,
+      excludedDisabled: 0,
+      excludedGuests: 0,
+      activeMembers: 0,
+      excludedExternalDomain: 0,
+      excludedNoDepartment: 0,
+      activeWithDepartment: 0,
+      distinctAll: 0,
+      distinctFiltered: 0,
+    };
+    const distinctAll = new Set<string>();
+    const canonical = new Map<string, string>(); // normKey -> longest raw (active members only)
+
+    let path: string | null =
+      "/users?$select=mail,userPrincipalName,department,accountEnabled,userType&$top=999";
     while (path) {
-      const res: GraphCollection<{ department?: string | null }> = await client.get(path);
+      const res: GraphCollection<GraphUser> = await client.get(path);
       for (const u of res.value) {
-        const raw = (u.department ?? "").trim();
-        if (!raw) continue;
-        const key = normalizeText(raw);
+        stats.totalScanned++;
+        const dept = (u.department ?? "").trim();
+        if (dept) distinctAll.add(dept);
+        if (u.accountEnabled !== true) {
+          stats.excludedDisabled++;
+          continue;
+        }
+        if (u.userType !== "Member") {
+          stats.excludedGuests++;
+          continue;
+        }
+        stats.activeMembers++;
+        const upn = (u.mail ?? u.userPrincipalName ?? "").toLowerCase();
+        if (!upn.endsWith(ALLOWED_DOMAIN)) {
+          stats.excludedExternalDomain++;
+          continue;
+        }
+        if (!dept) {
+          stats.excludedNoDepartment++;
+          continue;
+        }
+        stats.activeWithDepartment++;
+        const key = normalizeText(dept);
         const cur = canonical.get(key);
-        if (!cur || raw.length > cur.length) canonical.set(key, raw);
+        if (!cur || dept.length > cur.length) canonical.set(key, dept);
       }
       path = res["@odata.nextLink"] ?? null;
     }
+    stats.distinctAll = distinctAll.size;
+    stats.distinctFiltered = canonical.size;
 
     // Group by resolved CODE so official variants merge into one department.
-    const byCode = new Map<string, string>(); // code -> best raw name
+    const byCode = new Map<string, string>();
     const detUsed = new Set<string>();
     for (const raw of canonical.values()) {
       const official = officialCodeForName(raw);
@@ -62,9 +127,8 @@ const graphUsersSource: OrgDepartmentSource = {
       } else {
         code = deterministicCode(raw);
         while (detUsed.has(code) || byCode.has(code)) {
-          // suffix only for deterministic collisions across DIFFERENT departments
           const m = code.match(/^(.*?)(\d*)$/)!;
-          code = `${m[1]}${(parseInt(m[2] || "1", 10) + 1)}`;
+          code = `${m[1]}${parseInt(m[2] || "1", 10) + 1}`;
         }
         detUsed.add(code);
       }
@@ -73,7 +137,8 @@ const graphUsersSource: OrgDepartmentSource = {
     }
 
     let order = 0;
-    return [...byCode.entries()].map(([code, name]) => ({ code, name, isActive: true, sortOrder: order++ }));
+    const departments = [...byCode.entries()].map(([code, name]) => ({ code, name, isActive: true, sortOrder: order++ }));
+    return { departments, stats };
   },
 };
 
