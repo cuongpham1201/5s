@@ -1,25 +1,36 @@
-import { AdminShell } from "@/components/layout/AdminShell";
-import { HEATMAP } from "@/lib/mock-data";
+"use client";
 
-const DAYS = Array.from({ length: 15 }, (_, i) => String(i + 1).padStart(2, "0"));
-const CELL_TEXT: Record<string, string> = { ok: "✓", miss: "✗", partial: "!", weekend: "–", future: "" };
+import { useEffect, useMemo, useState } from "react";
+import { AdminShell } from "@/components/layout/AdminShell";
+
+interface Row { code: string; name: string; days: Record<string, boolean> }
+interface CalResp { month: string; rows: Row[]; hasData: boolean }
 
 const LEGEND = [
-  { c: "bg-success", t: "Đã gửi đủ" },
-  { c: "bg-warning", t: "Gửi thiếu khu vực" },
+  { c: "bg-success", t: "Đã gửi" },
   { c: "bg-danger", t: "Chưa gửi" },
-  { c: "bg-[#eef0f3]", t: "Cuối tuần / nghỉ" },
-  { c: "bg-surface", t: "Chưa tới ngày" },
 ];
 
 export default function CalendarPage() {
+  const [data, setData] = useState<CalResp | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/admin/calendar").then((r) => (r.ok ? r.json() : null)).then(setData).finally(() => setLoading(false));
+  }, []);
+
+  const month = data?.month ?? "";
+  const days = useMemo(() => {
+    if (!month) return [];
+    const [y, m] = month.split("-").map(Number);
+    const n = new Date(y, m, 0).getDate();
+    return Array.from({ length: n }, (_, i) => String(i + 1).padStart(2, "0"));
+  }, [month]);
+
+  const rows = data?.rows ?? [];
+
   return (
-    <AdminShell
-      title="Lịch tổng hợp gửi ảnh"
-      subtitle="Nhìn 5 giây — biết ngay đơn vị nào thiếu ngày nào"
-      actions={<span className="hidden sm:inline-flex items-center gap-2 rounded-md border border-line-strong bg-white px-3.5 py-2 text-sm font-semibold">📅 Tháng 06/2026 ▾</span>}
-    >
-      {/* Legend */}
+    <AdminShell title="Lịch tổng hợp gửi ảnh" subtitle={`Tháng ${month || "…"}`}>
       <div className="bg-white rounded-lg border border-line shadow-e2 px-5 py-3.5 mb-[18px]">
         <div className="flex flex-wrap gap-[18px] items-center text-[13px]">
           {LEGEND.map((l) => (
@@ -30,40 +41,52 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {/* Heatmap */}
       <div className="bg-white rounded-lg border border-line shadow-e2">
         <div className="flex items-center justify-between px-5 py-4 border-b border-line">
-          <span className="text-[16px] font-semibold">Trạng thái theo ngày (01 → 15/06)</span>
-          <span className="text-[13px] text-ink-muted">{HEATMAP.length} đơn vị (mẫu)</span>
+          <span className="text-[16px] font-semibold">Trạng thái theo ngày</span>
+          <span className="text-[13px] text-ink-muted">{rows.length} đơn vị</span>
         </div>
-        <div className="p-5 overflow-x-auto">
-          <table className="border-separate" style={{ borderSpacing: "5px" }}>
-            <thead>
-              <tr>
-                <th className="text-left text-[13px] font-bold whitespace-nowrap px-1">Đơn vị</th>
-                {DAYS.map((d) => (
-                  <th key={d} className="text-[11px] text-ink-muted font-bold p-1 text-center">{d}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {HEATMAP.map((row) => (
-                <tr key={row.code}>
-                  <td className="text-left font-bold text-[13px] whitespace-nowrap pr-2">{row.code}</td>
-                  {row.cells.map((cell) => (
-                    <td key={cell.day} className="text-center">
-                      <span className={`cell ${cell.status}`}>{CELL_TEXT[cell.status]}</span>
-                    </td>
+        {loading ? (
+          <div className="p-8 text-center text-ink-muted text-[14px]">Đang tải…</div>
+        ) : rows.length === 0 ? (
+          <div className="p-8 text-center text-ink-muted text-[14px]">Chưa có phòng ban trong Config_Departments.</div>
+        ) : !data?.hasData ? (
+          <div className="p-10 text-center">
+            <div className="text-[15px] font-semibold text-ink">Chưa có dữ liệu gửi ảnh trong tháng.</div>
+            <div className="text-[13px] text-ink-muted mt-1">Ma trận sẽ hiển thị khi có lần gửi 5S.</div>
+          </div>
+        ) : (
+          <div className="p-5 overflow-x-auto">
+            <table className="border-separate" style={{ borderSpacing: "5px" }}>
+              <thead>
+                <tr>
+                  <th className="text-left text-[13px] font-bold whitespace-nowrap px-1">Đơn vị</th>
+                  {days.map((d) => (
+                    <th key={d} className="text-[11px] text-ink-muted font-bold p-1 text-center">{d}</th>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.code}>
+                    <td className="text-left font-bold text-[13px] whitespace-nowrap pr-2" title={row.name}>{row.code}</td>
+                    {days.map((d) => {
+                      const ok = !!row.days[`${month}-${d}`];
+                      return (
+                        <td key={d} className="text-center">
+                          <span className={`inline-grid place-items-center w-6 h-6 rounded-[5px] text-white text-[11px] ${ok ? "bg-success" : "bg-danger/70"}`}>
+                            {ok ? "✓" : ""}
+                          </span>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
-      <p className="text-[13px] text-ink-muted mt-4">
-        Mẹo: cột dọc nhiều ô đỏ = ngày có sự cố chung. Hàng ngang nhiều đỏ = đơn vị cần nhắc nhở.
-      </p>
     </AdminShell>
   );
 }

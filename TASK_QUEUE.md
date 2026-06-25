@@ -218,8 +218,18 @@
 
 > Đã chạy import lọc lên prod: deactivated 0 (default off), TCKS giữ active. Inactive duplicates (PMKT, TTĐH2) chỉ report, không xoá.
 
+## Phase 2C.2C — Connect UI pages to SharePoint READ data (DONE)
+Data services (department/area/report) + read API routes (config/departments, config/areas,
+reports/today, history/mine, admin/dashboard, admin/calendar). UI (Home, Capture, History,
+My-unit, Overview, Admin dashboard/pending/gallery/calendar/ranking) đọc dữ liệu thật, empty
+states đúng nghĩa. Bỏ mock UI (DeptGalleryModal, mock-overview). `NEXT_PUBLIC_USE_MOCK_DATA=false`
+mặc định. READ-only: không upload/ghi/đổi schema/xoá/deploy. Gates tsc/lint/build PASS.
+
+---
+
 ## Phase 2C.3+ (TODO)
-Upload Engine (upload `5S/img` + ghi header/lines + offline queue + retry), Config_Areas sync, dashboard data thật, Excel, notifications.
+Upload Engine (upload `5S/img` + ghi header/lines + offline queue + retry), Config_Areas sync cho
+các phòng ban còn thiếu khu vực, Excel, notifications.
 
 ---
 

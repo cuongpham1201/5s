@@ -845,3 +845,51 @@ inactive trùng tên với active (PMKT, TTĐH2) để admin xử lý thủ côn
 Active=true, DepartmentName "Ban Tài chính - Kiểm soát nội bộ". /api/me sẽ resolve TCKS.
 
 ## Gates: tsc/lint/build PASS. Không xoá data, không đổi schema.
+
+---
+
+## Connect UI to SharePoint READ data (2026-06-25)
+
+Phạm vi: chỉ đọc dữ liệu (READ-only). Không upload ảnh, không ghi submission, không
+đổi schema, không xoá, không deploy. Code chỉ trong DEV `/data/dev/5s-app`.
+
+### Data services (read-only Graph)
+- `department-service`: listActiveDepartments, getDepartmentByCode, resolveDepartmentFromGraphValue.
+- `area-service`: listActiveAreas, listAreasByDepartmentCode, getAreaByCode.
+- `report-service`: getTodaySubmissionSummary, getLatestSubmissions, getMissingDepartmentsForToday,
+  getUserSubmissionHistory, getDepartmentDailyStatus. Fallback an toàn = rỗng khi list thiếu/đọc lỗi.
+
+### API routes (login bắt buộc; admin routes thêm admin/dev guard)
+- GET /api/config/departments
+- GET /api/config/areas[?departmentCode=]
+- GET /api/reports/today
+- GET /api/history/mine
+- GET /api/admin/dashboard
+- GET /api/admin/calendar[?month=YYYY-MM]
+
+### UI nối dữ liệu thật
+- AppHeader: hiển thị displayName + departmentCode·departmentName thật từ /api/me (đã bỏ mock PMKT).
+- Home: KPI submitted/expected, missing, latest từ /api/reports/today; empty state "Chưa có ảnh nào hôm nay".
+- Capture: phòng ban readonly từ /api/me; khu vực từ /api/config/areas; cảnh báo + khoá nút khi
+  phòng ban chưa có khu vực 5S.
+- History: /api/history/mine + badge sync; empty "Bạn chưa có lần gửi nào."
+- My-unit, Overview: trạng thái hôm nay theo phòng ban thật.
+- Admin (dashboard, pending, gallery, calendar, ranking): đọc Data_Submissions; empty states,
+  không còn số liệu giả.
+
+### Mock cleanup
+- Xoá DeptGalleryModal.tsx, mock-overview.ts (không còn import).
+- success/ranking bỏ mock-data.
+- Cờ NEXT_PUBLIC_USE_MOCK_DATA mặc định "false": mock fallback chỉ chạy khi dev-login bật
+  AND cờ != "false" AND đọc SharePoint lỗi. Product luôn "false" → không bao giờ dùng mock.
+
+### Config_Areas
+Hiện chỉ có khu vực cho PMKT/PXHL. Phòng ban khác (vd TCKS) chưa có khu vực → UI hiển thị
+cảnh báo "Phòng ban chưa có khu vực 5S. Vui lòng liên hệ quản trị." (KHÔNG fake khu vực).
+Cần admin thiết lập Config_Areas cho các phòng ban còn lại.
+
+### Trạng thái dữ liệu
+Data_Submissions hiện rỗng (chưa có chức năng ghi) → các trang đúng nghĩa hiển thị empty state.
+
+### Gates
+tsc --noEmit PASS · npm run lint PASS · npm run build PASS. Không xoá data, không đổi schema.

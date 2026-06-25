@@ -58,6 +58,12 @@ export interface DeptRow {
   sortOrder: number;
 }
 
+/** Get one active department by code. */
+export async function getDepartmentByCode(code: string): Promise<DeptOption | null> {
+  const all = await listActiveDepartments();
+  return all.find((d) => d.code === code) ?? null;
+}
+
 /** Read ALL departments (active + inactive) from Config_Departments. */
 export async function listAllDepartments(): Promise<DeptRow[]> {
   const client = await getAppOnlyClient();
@@ -73,7 +79,14 @@ export async function listAllDepartments(): Promise<DeptRow[]> {
     .map((d) => ({ code: d.DepartmentCode, name: d.DepartmentName, isActive: d.IsActive, sortOrder: d.SortOrder }));
 }
 
-const devAllowed = () => process.env.NEXT_PUBLIC_ALLOW_DEV_LOGIN === "true";
+/**
+ * Mock fallback is allowed ONLY in dev: dev login enabled AND mock data not
+ * explicitly disabled. Product sets NEXT_PUBLIC_USE_MOCK_DATA=false, so it never
+ * falls back to mock — a SharePoint read failure surfaces as unresolved instead.
+ */
+const devAllowed = () =>
+  process.env.NEXT_PUBLIC_ALLOW_DEV_LOGIN === "true" &&
+  process.env.NEXT_PUBLIC_USE_MOCK_DATA !== "false";
 
 /** Dev fallback options when SharePoint read fails (dev only). */
 function mockOptions(): DeptOption[] {

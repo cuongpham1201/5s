@@ -255,3 +255,19 @@ Báo cáo có ảnh đại diện/đơn vị — Phase sau, không MVP.
 | `/api/export?month=` | GET | Xuất Excel |
 
 > Tất cả endpoint qua Auth.js session + RBAC (xem SECURITY_MODEL.md). Đây là *thiết kế*, không phải code.
+
+---
+
+## Read API surface (UI ↔ SharePoint, READ-only)
+
+| Endpoint | Nguồn | Trả về |
+|---|---|---|
+| GET /api/config/departments | Config_Departments (active) | {count, departments[{code,name}]} |
+| GET /api/config/areas[?departmentCode=] | Config_Areas | {count, areas[{code,name,departmentCode,sortOrder}]} |
+| GET /api/reports/today | Data_Submissions + active depts | {date, expectedDepartments, submittedDepartments, submittedDepartmentCodes, missingDepartments, completionRate, latestSubmissions, hasData} |
+| GET /api/history/mine | Data_Submissions (theo email) | {count, submissions[]} |
+| GET /api/admin/dashboard | tổng hợp hôm nay | {date, expected, submitted, missing, missingCount, completionRate, latest, hasData} |
+| GET /api/admin/calendar[?month=YYYY-MM] | ma trận phòng ban × ngày | {month, rows[{code,name,days}], hasData} |
+
+> "Today" tính theo giờ VN (Asia/Ho_Chi_Minh) qua `vnDateKey()`. Mọi service fallback an toàn về rỗng
+> khi list thiếu hoặc đọc lỗi (KHÔNG fake số liệu production).

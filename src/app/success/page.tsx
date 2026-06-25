@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { Card, InfoRow } from "@/components/ui/Card";
-import { CURRENT_USER } from "@/lib/mock-data";
 import { useSessionCapture } from "@/features/capture/session-context";
 
 function fmt(iso?: string): string {
@@ -35,7 +34,7 @@ export default function SuccessPage() {
         </p>
 
         <Card className="mt-6 w-full text-left">
-          <InfoRow label="Đơn vị" value={s?.departmentCode ?? CURRENT_USER.department} />
+          <InfoRow label="Đơn vị" value={s?.departmentCode ?? "—"} />
           <InfoRow label="Khu vực" value={s?.areaName ?? "—"} />
           <InfoRow label="Số ảnh" value={`${s?.photoCount ?? 0} ảnh`} />
           <InfoRow label="Thời gian nộp" value={fmt(s?.submittedAt)} />

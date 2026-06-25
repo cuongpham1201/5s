@@ -27,6 +27,7 @@
 | `NEXTAUTH_URL` | URL gốc của app (callback OAuth) | `http://localhost:3000` (dev) |
 | `SHAREPOINT_SITE_URL` | URL site SharePoint chứa Library/List 5S | — (Phase 2) |
 | `NEXT_PUBLIC_ALLOW_DEV_LOGIN` | Bật đăng nhập thử (dev mock) khi chưa có Entra | `true` (dev) → đặt `false` ở production |
+| `NEXT_PUBLIC_USE_MOCK_DATA` | Cho phép mock fallback khi đọc SharePoint lỗi (chỉ dev, và chỉ khi dev login bật) | `false` (mặc định; product giữ `false`) |
 
 ## Future (thiết kế trước, chưa dùng)
 

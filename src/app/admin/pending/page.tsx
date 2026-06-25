@@ -1,33 +1,49 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { AdminShell } from "@/components/layout/AdminShell";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { PENDING_UNITS } from "@/lib/mock-data";
+
+interface Dashboard {
+  date: string;
+  expected: number;
+  missing: Array<{ code: string; name: string }>;
+  missingCount: number;
+}
 
 export default function PendingPage() {
+  const [d, setD] = useState<Dashboard | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/admin/dashboard").then((r) => (r.ok ? r.json() : null)).then(setD).finally(() => setLoading(false));
+  }, []);
+
+  const missing = d?.missing ?? [];
+
   return (
-    <AdminShell
-      title="Đơn vị chưa gửi hôm nay"
-      subtitle={`15/06/2026 · ${PENDING_UNITS.length} đơn vị`}
-      actions={<button className="btn btn-primary !min-h-10">🔔 Nhắc tất cả</button>}
-    >
+    <AdminShell title="Đơn vị chưa gửi hôm nay" subtitle={`${d?.date ?? "…"} · ${d?.missingCount ?? 0} đơn vị`}>
       <div className="bg-white rounded-lg border border-line shadow-e2">
         <div className="flex items-center justify-between px-5 py-4 border-b border-line">
-          <span className="text-[16px] font-semibold">Danh sách ({PENDING_UNITS.length})</span>
-          <span className="hidden sm:inline-flex items-center gap-2 rounded-md border border-line-strong bg-white px-3.5 py-2 text-sm font-semibold">
-            Sắp xếp: Lần cuối ▾
-          </span>
+          <span className="text-[16px] font-semibold">Danh sách ({d?.missingCount ?? 0})</span>
         </div>
-        {PENDING_UNITS.map((u) => (
-          <div key={u.code} className="flex items-center gap-3.5 px-5 py-3.5 border-b border-line last:border-0">
-            <StatusBadge tone="warning">⚠ {u.code}</StatusBadge>
-            <div className="flex-1 min-w-0">
-              <div className="font-semibold">{u.name}</div>
-              <div className="text-[13px] text-ink-muted">
-                Hôm nay: {u.photosToday} ảnh · Lần gửi gần nhất: {u.last}
+        {loading ? (
+          <div className="p-6 text-center text-ink-muted text-[14px]">Đang tải…</div>
+        ) : (d?.expected ?? 0) === 0 ? (
+          <div className="p-8 text-center text-ink-muted text-[14px]">Chưa có phòng ban trong Config_Departments.</div>
+        ) : missing.length === 0 ? (
+          <div className="p-8 text-center text-ink-muted text-[14px]">Tất cả đơn vị đã gửi hôm nay 👍</div>
+        ) : (
+          missing.map((u) => (
+            <div key={u.code} className="flex items-center gap-3.5 px-5 py-3.5 border-b border-line last:border-0">
+              <StatusBadge tone="warning">⚠ {u.code}</StatusBadge>
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold">{u.name}</div>
+                <div className="text-[13px] text-ink-muted">Chưa gửi ảnh 5S hôm nay</div>
               </div>
             </div>
-            <button className="btn btn-secondary !min-h-[38px]">🔔 Nhắc</button>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </AdminShell>
   );

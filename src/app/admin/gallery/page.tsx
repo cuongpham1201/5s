@@ -1,30 +1,50 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { AdminShell } from "@/components/layout/AdminShell";
-import { GALLERY_ITEMS } from "@/lib/mock-data";
+
+interface Latest { submissionId: string; departmentCode: string; areaName: string; photoCount: number; submittedAt: string }
+
+function fmt(iso?: string): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
 
 export default function GalleryPage() {
-  return (
-    <AdminShell title="Thư viện ảnh" subtitle="1.248 ảnh · tháng 06/2026">
-      {/* Filter bar */}
-      <div className="flex flex-wrap gap-3 items-center mb-[18px]">
-        <span className="inline-flex items-center gap-2 rounded-md border border-line-strong bg-white px-3.5 py-2 text-sm font-semibold">🏭 Department: PMKT ▾</span>
-        <span className="inline-flex items-center gap-2 rounded-md border border-line-strong bg-white px-3.5 py-2 text-sm font-semibold">📍 Area: Tất cả ▾</span>
-        <span className="inline-flex items-center gap-2 rounded-md border border-line-strong bg-white px-3.5 py-2 text-sm font-semibold">📅 Date: 15/06/2026 ▾</span>
-        <span className="flex-1" />
-        <button className="btn btn-secondary !min-h-10">⬇️ Tải về</button>
-      </div>
+  const [latest, setLatest] = useState<Latest[]>([]);
+  const [loading, setLoading] = useState(true);
 
-      {/* Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
-        {GALLERY_ITEMS.map((g) => (
-          <div key={g.id} className="relative aspect-square rounded-md overflow-hidden shadow-e2 bg-gradient-to-br from-[#cdd7e0] to-[#8fa0b0]">
-            <span className="absolute left-1.5 top-1.5 bg-black/50 text-white text-[9px] px-1.5 py-0.5 rounded">✓ 5S</span>
-            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/65 to-transparent text-white text-[11px] font-semibold px-2.5 pt-4 pb-2">
-              {g.area} · {g.time}
+  useEffect(() => {
+    fetch("/api/admin/dashboard")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setLatest(d?.latest ?? []))
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <AdminShell title="Thư viện ảnh" subtitle="Các lần gửi gần đây">
+      {loading ? (
+        <div className="bg-white rounded-lg border border-line shadow-e2 p-8 text-center text-ink-muted text-[14px]">Đang tải…</div>
+      ) : latest.length === 0 ? (
+        <div className="bg-white rounded-lg border border-line shadow-e2 p-10 text-center">
+          <div className="text-[15px] font-semibold text-ink">Chưa có ảnh nào.</div>
+          <div className="text-[13px] text-ink-muted mt-1">Ảnh sẽ hiển thị khi có lần gửi 5S.</div>
+        </div>
+      ) : (
+        <div className="bg-white rounded-lg border border-line shadow-e2">
+          {latest.map((g) => (
+            <div key={g.submissionId} className="flex items-center gap-3.5 px-5 py-3.5 border-b border-line last:border-0">
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold">{g.departmentCode} · {g.areaName}</div>
+                <div className="text-[13px] text-ink-muted">{fmt(g.submittedAt)} · {g.photoCount} ảnh</div>
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
-      <p className="text-[12px] text-ink-disabled mt-4">Phase 1A: ảnh là placeholder, lightbox chi tiết sẽ nối dữ liệu thật ở Phase 1B.</p>
+          ))}
+        </div>
+      )}
     </AdminShell>
   );
 }
