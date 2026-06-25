@@ -103,6 +103,12 @@ NEXT_PUBLIC_ALLOW_DEV_LOGIN=false   # product: tắt dev login
 - **Department source = Graph /me `.department`**, resolve qua **Config_Departments**
   (đồng bộ từ org). Null/không khớp → chặn nộp ở capture + cảnh báo. Debug:
   `GET /api/debug/me`, `/admin/department-debug` (dev/admin).
+- **Config_Departments sync:** `ORG_DEPARTMENT_SOURCE=graph` + `POST /api/admin/sharepoint/import-departments`
+  (cần app permission **User.Read.All** + admin consent). Quét `users.department`,
+  bỏ null, gom theo mã (`org-codes.ts` `OFFICIAL_DEPARTMENTS` + mã suy diễn),
+  upsert theo `DepartmentCode`, thiếu→IsActive=false (không xoá).
+  Lưu ý: **resolution KHÔNG cần** `ORG_DEPARTMENT_SOURCE` (chỉ cần Config đã có dữ liệu);
+  biến này chỉ dùng khi chạy import.
 
 ## Phase 2C.2 — SSO + Graph app-only (đã wire)
 

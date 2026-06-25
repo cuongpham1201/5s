@@ -13,7 +13,10 @@ import { findListId, resolveSite } from "./site-context";
 import { mapDepartment } from "./list-helpers";
 import { DEPARTMENT_MAP, mapEntraDepartment } from "@/lib/department-mapping";
 import { DEPARTMENTS } from "@/lib/mock-data";
+import { normalizeText, officialCodeForName } from "./org-codes";
 import type { GraphCollection, GraphListItem } from "./sharepoint-types";
+
+export { normalizeText };
 
 export interface DeptOption {
   code: string;
@@ -32,18 +35,6 @@ export interface DepartmentResolution {
 
 const WARN_EMPTY = "Tài khoản chưa có thông tin phòng ban. Vui lòng liên hệ quản trị.";
 const WARN_UNMATCHED = "Phòng ban từ Microsoft 365 chưa khớp danh mục 5S. Vui lòng liên hệ quản trị.";
-
-/** Normalize for matching: NFD strip accents, đ→d, lowercase, collapse spaces. */
-export function normalizeText(s: string): string {
-  return s
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/đ/g, "d")
-    .replace(/Đ/g, "D")
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, " ");
-}
 
 /** Read ACTIVE departments from Config_Departments (app-only Graph, read-only). */
 export async function listActiveDepartments(): Promise<DeptOption[]> {
@@ -111,6 +102,13 @@ export async function resolveDepartmentFromGraphValue(raw: string | null | undef
   }
 
   const n = normalizeText(value);
+
+  // 0) Official org code from the raw name -> find that code in Config.
+  const official = officialCodeForName(value);
+  if (official) {
+    const o = options.find((x) => x.code === official);
+    if (o) return matched(value, o, usedFallback);
+  }
 
   // 1) DepartmentCode exact (normalized)
   const byCode = options.find((o) => normalizeText(o.code) === n);

@@ -191,8 +191,22 @@
 
 > Root cause cần xác nhận từ thiết bị user qua `/api/debug/me` (department NULL vs giá trị không khớp Config). Code đã robust cho cả 4 case. Không đổi schema, không xoá data.
 
+## Import Departments from Org (DONE — đã chạy prod)
+
+| ID | Task | Status |
+|---|---|---|
+| ORG-A | Verify User.Read.All (app-only /users) | DONE (1011 users, 324 có dept, 49 distinct) |
+| ORG-B | org-codes.ts: OFFICIAL_DEPARTMENTS (incl. TCKS) + deterministic + normalize | DONE |
+| ORG-C | org-source graph: dedup theo tên chuẩn hóa, gom theo CODE, name=raw | DONE |
+| ORG-D | resolveDepartmentFromGraphValue: thêm bước (0) mã chính thức theo tên | DONE |
+| ORG-E | Chạy import (ORG_DEPARTMENT_SOURCE=graph) → Config_Departments | DONE (25 active; TCKS ok; dupes deactivated) |
+| ORG-F | Docs (DATA_MODEL/ENVIRONMENT_SETUP/RUN_REPORT/TASK_QUEUE) | DONE |
+| ORG-QG | tsc + lint + build PASS | DONE |
+
+> Còn lại: Config_Areas vẫn mock (capture cần areas theo phòng ban) → đồng bộ areas từ org là task sau. Vài cặp gần-trùng (KHVT/PKHVT, KCS/PKSCLKNM) còn active — admin gộp/sửa code sau.
+
 ## Phase 2C.3+ (TODO)
-Upload Engine (upload `5S/img` + ghi header/lines + nối offline queue + retry), dashboard data thật, Excel, notifications. Đồng bộ Config_Departments từ org (cần User.Read.All).
+Upload Engine (upload `5S/img` + ghi header/lines + nối offline queue + retry), Config_Areas sync, dashboard data thật, Excel, notifications.
 
 ---
 

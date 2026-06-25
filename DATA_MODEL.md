@@ -108,7 +108,9 @@ QueueStatus  = "draft" | "ready" | "queued" | "uploading" | "uploaded" | "failed
 
 - **Khóa chính:** `DepartmentCode`. **Tên hiển thị:** `DepartmentName`. Giữ `IsActive`, `SortOrder`.
 - **Sync = upsert theo `DepartmentCode`:** tồn tại → cập nhật name/metadata; mới → tạo; **thiếu trong nguồn → đặt `IsActive=false` (KHÔNG xoá).**
-- Nguồn cấu hình qua env `ORG_DEPARTMENT_SOURCE` (`graph` = Entra users' `department`; `mock` = fallback dev). Code: `src/lib/sharepoint/org-source.ts` + `importDepartmentsFromOrgSource()`.
+- Nguồn cấu hình qua env `ORG_DEPARTMENT_SOURCE` (`graph` = Entra **users.department**; `mock` = fallback dev). Code: `src/lib/sharepoint/org-source.ts` + `importDepartmentsFromOrgSource()`.
+- **Graph users source:** quét `users.department` (paginate), bỏ null/rỗng, **distinct theo tên chuẩn hóa**, gom **theo CODE** (biến thể của cùng phòng ban → 1 record). `DepartmentName` = giá trị raw (biến thể dài nhất). `DepartmentCode` = mã chính thức (bảng `org-codes.ts` `OFFICIAL_DEPARTMENTS`, vd "Ban Tài chính - Kiểm soát nội bộ" → **TCKS**), nếu chưa có → mã suy diễn (deterministic, admin sửa sau). Upsert theo `DepartmentCode`; thiếu trong nguồn → `IsActive=false` (không xoá); nguồn 0 phần tử → không deactivate.
+- **Resolution** (`resolveDepartmentFromGraphValue`) thử: (0) mã chính thức theo tên → tìm code trong Config → (1) code exact → (2) DepartmentName accent-insensitive → (3) alias. Nhờ (0), raw "Ban Tài chính - Kiểm soát nội bộ" → TCKS bất kể biến thể tên lưu trong Config.
 - Endpoint: `POST /api/admin/sharepoint/import-departments`. Mock seed (`seed-config`) **chỉ chạy ở dev**.
 
 **Resolution pipeline (department mapping):** `Microsoft Graph /me .department` (raw) →

@@ -789,3 +789,31 @@ Pipeline cũ: Graph /me `.department` → `mapEntraDepartment()` (alias hardcode
 A (null) → "Chưa xác định" + chặn nộp. B (giá trị, mapper fail) → giờ khớp Config theo name/accent-insensitive/alias. C (mapper ra code nhưng Config thiếu) → cảnh báo "chưa có trong Config, đồng bộ danh mục". D (Config có nhưng UI sai) → /api/me trả resolved + UI dùng đúng.
 
 ## Gates: tsc/lint/build PASS. Không đổi schema, không xoá data.
+
+---
+---
+
+# 5S Daily — Import Departments from Org Graph Source (2026-06-25)
+
+## Graph users scan (User.Read.All OK)
+1011 users · 324 có department · 49 distinct (nhiều biến thể hoa/dấu/space của ~25 phòng ban thật). "Ban Tài chính - Kiểm soát nội bộ" có mặt.
+
+## Code/source
+`org-codes.ts`: OFFICIAL_DEPARTMENTS (TCKS, SHE, PCTT, TTĐH, HCNS, KT, KHVT, MKT, KPP, VHKD, KDBH, CĐ, CĐHL, CĐĐM, PXHL, PXĐM, KCS, KTCN) + deterministic code + normalize. org-source graph: dedup theo tên chuẩn hóa, gom **theo CODE** (biến thể official → 1 record), name = raw dài nhất. resolveDepartmentFromGraphValue thêm bước mã chính thức theo tên.
+
+## Import result (đã chạy prod)
+Lần 1: created 33 (lỗi tạo trùng *2 do dedup theo tên). Sửa logic → gom theo code.
+Lần 2 (converge): updated 1, **deactivated 10** bản trùng (TCKS2/KT2/SHE2/... IsActive=false, KHÔNG xoá), skipped 24.
+
+## Config_Departments verify
+36 item · **25 active** · 11 inactive. **TCKS active**, DepartmentName "Ban Tài chính - Kiểm soát nội bộ" ✅.
+
+## /api/me resolution (kỳ vọng)
+raw "Ban Tài chính - Kiểm soát nội bộ" → official map TCKS → Config active TCKS →
+departmentResolved=true, departmentCode=TCKS, departmentName="Ban Tài chính - Kiểm soát nội bộ".
+Manual verify trên thiết bị đã đăng nhập: https://she.biahalong.com/admin/department-debug và /me.
+
+## Lưu ý
+- Resolution KHÔNG phụ thuộc ORG_DEPARTMENT_SOURCE (chỉ cần Config có dữ liệu) — product /me resolve TCKS ngay.
+- Config_Areas vẫn mock → capture cho TCKS hiện chưa có khu vực ("liên hệ quản trị") — đồng bộ areas là task sau.
+- Vài cặp gần-trùng còn active (KHVT/PKHVT, KCS/PKSCLKNM) — admin gộp/sửa code sau.
