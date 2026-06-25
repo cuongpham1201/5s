@@ -51,6 +51,18 @@ const LIST_SPECS: ListSpec[] = [
     ],
   },
   {
+    name: CONFIG_LISTS.checkItems,
+    columns: [
+      { name: "CheckItemCode", type: "text", indexed: true },
+      { name: "CheckItemName", type: "text" },
+      { name: "DepartmentCode", type: "text", indexed: true },
+      { name: "AreaCode", type: "text", indexed: true },
+      { name: "SortOrder", type: "number" },
+      { name: "IsActive", type: "boolean" },
+      { name: "Description", type: "text" },
+    ],
+  },
+  {
     name: CONFIG_LISTS.settings,
     columns: [
       { name: "Key", type: "text", indexed: true },

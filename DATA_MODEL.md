@@ -271,3 +271,36 @@ Báo cáo có ảnh đại diện/đơn vị — Phase sau, không MVP.
 
 > "Today" tính theo giờ VN (Asia/Ho_Chi_Minh) qua `vnDateKey()`. Mọi service fallback an toàn về rỗng
 > khi list thiếu hoặc đọc lỗi (KHÔNG fake số liệu production).
+
+---
+
+## Config_Areas & Config_CheckItems (admin-managed) — Phase 2C.3
+
+- **Config_Areas** điều khiển nơi mỗi phòng ban được phép gửi ảnh. Không có khu vực
+  active → trang Capture chặn chụp và hiển thị cảnh báo liên hệ quản trị.
+- **Config_CheckItems** điều khiển checklist/hạng mục 5S. Phạm vi: global (trống dept+area),
+  theo phòng ban (có dept), hoặc theo khu vực (có area). Không có hạng mục → capture vẫn cho
+  chụp "ảnh tổng quan" (photo-only mode).
+- Cả hai đều backed bởi SharePoint Lists, quản trị qua trang /admin/config/* (soft-delete = IsActive=false; KHÔNG hard delete).
+
+### Admin config API (admin/dev guard; write)
+
+| Endpoint | Method | Tác dụng |
+|---|---|---|
+| /api/admin/config/areas | GET/POST | liệt kê (kể cả inactive) / tạo khu vực |
+| /api/admin/config/areas/[id] | PATCH/DELETE | sửa / soft-delete (IsActive=false) |
+| /api/admin/config/areas/seed-office | POST | tạo khu vực "Văn phòng" mặc định cho mọi phòng ban active |
+| /api/admin/config/check-items | GET/POST | liệt kê (kể cả inactive) / tạo hạng mục |
+| /api/admin/config/check-items/[id] | PATCH/DELETE | sửa / soft-delete |
+| /api/admin/config/check-items/seed-default | POST | seed 5 hạng mục 5S global (S1..S5) |
+| /api/admin/sharepoint/import-departments | POST | đồng bộ Config_Departments từ Microsoft 365 |
+
+### User-facing read (login required)
+
+| Endpoint | Trả về |
+|---|---|
+| GET /api/config/areas?departmentCode= | khu vực active của phòng ban |
+| GET /api/config/check-items?departmentCode=&areaCode= | checklist áp dụng (global + dept + area) |
+
+> Chưa có upload engine. Capture chỉ lưu lựa chọn area + checkItem vào session cục bộ
+> (checkItemCode/checkItemName) để dùng cho watermark ("Hạng mục: …") và Phase Upload sau này.

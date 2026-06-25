@@ -31,6 +31,8 @@ interface StartArgs {
   departmentName?: string;
   areaCode: string;
   areaName: string;
+  checkItemCode?: string;
+  checkItemName?: string;
   reporterName: string;
   reporterEmail: string;
 }

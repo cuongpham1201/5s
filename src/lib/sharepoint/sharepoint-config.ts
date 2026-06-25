@@ -34,6 +34,7 @@ export const sharePointConfig = {
   lists: {
     departments: "Config_Departments",
     areas: "Config_Areas",
+    checkItems: "Config_CheckItems",
     settings: "Config_Settings",
     roleMapping: "Config_RoleMapping",
     submissions: "Data_Submissions",
@@ -48,6 +49,7 @@ export const FOLDERS = sharePointConfig.folders;
 export const CONFIG_LISTS = {
   departments: sharePointConfig.lists.departments,
   areas: sharePointConfig.lists.areas,
+  checkItems: sharePointConfig.lists.checkItems,
   settings: sharePointConfig.lists.settings,
   roleMapping: sharePointConfig.lists.roleMapping,
 } as const;

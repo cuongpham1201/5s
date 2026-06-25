@@ -37,6 +37,8 @@ export interface WatermarkMetadata {
   address: string;
   department: string;
   area: string;
+  /** Optional 5S check item(s) — drawn as "Hạng mục: ..." when present. */
+  checkItem?: string;
   reporter: string;
   gps: string; // "20.9512, 107.0834" or "Không xác định"
   verifiedText: string; // "✓ 5S Verified"
@@ -64,6 +66,9 @@ export interface SubmissionSession {
   departmentName?: string;
   areaCode: string;
   areaName: string;
+  /** Optional selected 5S check item(s) for this session (Phase 2C.3 prep). */
+  checkItemCode?: string;
+  checkItemName?: string;
   reporterName: string;
   reporterEmail: string;
   startedAt: string; // ISO
@@ -77,6 +82,8 @@ export interface CompletedSubmission {
   departmentName?: string;
   areaCode: string;
   areaName: string;
+  checkItemCode?: string;
+  checkItemName?: string;
   reporterName: string;
   reporterEmail: string;
   startedAt: string; // ISO

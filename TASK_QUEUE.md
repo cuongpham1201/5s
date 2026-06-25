@@ -227,9 +227,19 @@ mặc định. READ-only: không upload/ghi/đổi schema/xoá/deploy. Gates tsc
 
 ---
 
-## Phase 2C.3+ (TODO)
-Upload Engine (upload `5S/img` + ghi header/lines + offline queue + retry), Config_Areas sync cho
-các phòng ban còn thiếu khu vực, Excel, notifications.
+## Phase 2C.3 — Config Areas + CheckItems admin foundation (DONE)
+List mới Config_CheckItems (provisioned, idempotent). area-service + checkitem-service CRUD
+(soft-delete only). Admin routes /api/admin/config/{areas,check-items}(+[id], seed). User route
+/api/config/check-items. Admin UI /admin/config/{departments,areas,check-items} + nút đồng bộ
+phòng ban M365 + seed office areas + seed 5S checklist. Capture: Area -> CheckItem selection
+(photo-only fallback), persist checkItemCode/Name vào session, watermark "Hạng mục: …". Nav admin
+"Cấu hình". KHÔNG upload, KHÔNG sync queue, KHÔNG deploy. Gates tsc/lint/build PASS.
+
+---
+
+## Phase 2C.4+ (TODO)
+Upload Engine (upload `5S/img` + ghi header/lines Data_Submissions/Data_SubmissionPhotos + offline
+queue + retry + Data_SyncLogs), gắn checkItem vào submission khi upload, Excel, notifications.
 
 ---
 

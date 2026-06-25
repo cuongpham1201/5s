@@ -47,6 +47,23 @@ Quy ước chung:
 | IsActive | Active | YesNo | ✅ | ➖ | |
 | SortOrder | Sort Order | Number | ⬜ | ➖ | |
 
+### Config_CheckItems — "CheckItems" (Phase 2C.3)
+| Internal Name | Display | Type | Required | Indexed | Notes |
+|---|---|---|:---:|:---:|---|
+| Title | Title | Text | ✅ | ✅ | = CheckItemCode |
+| CheckItemCode | Check Item Code | Text | ✅ | ✅ | mã hạng mục (vd S1..S5) |
+| CheckItemName | Check Item Name | Text | ✅ | ➖ | tên hạng mục (Sàng lọc…) |
+| DepartmentCode | Department Code | Text | ⬜ | ✅ | trống = áp dụng mọi phòng ban |
+| AreaCode | Area Code | Text | ⬜ | ✅ | trống = áp dụng cả phòng ban; có = riêng khu vực |
+| SortOrder | Sort Order | Number | ⬜ | ➖ | thứ tự hiển thị |
+| IsActive | Active | YesNo | ✅ | ➖ | soft-delete: false = ẩn |
+| Description | Description | Note | ⬜ | ➖ | mô tả/ghi chú |
+
+Phạm vi (scope) hạng mục:
+- DepartmentCode trống + AreaCode trống → hạng mục toàn hệ thống (global).
+- DepartmentCode có + AreaCode trống → áp dụng cho cả phòng ban.
+- AreaCode có → áp dụng riêng cho khu vực đó.
+
 ### Config_Settings — "Settings"
 | Internal Name | Display | Type | Required | Indexed | Notes |
 |---|---|---|:---:|:---:|---|

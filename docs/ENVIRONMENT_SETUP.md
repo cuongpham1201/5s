@@ -123,3 +123,13 @@ NEXT_PUBLIC_ALLOW_DEV_LOGIN=false   # product: tắt dev login
 - **Graph app-only** (`getAppOnlyToken`, client-credentials, scope `.default`): hiện cần application permission **`Sites.ReadWrite.All`** (đã admin-consent) để tạo list + ghi item. **Hardening tương lai:** chuyển sang **`Sites.Selected`** chỉ cấp trên site Ban5S.
 - `AUTH_SECRET` phải là chuỗi ngẫu nhiên thật (`npx auth secret`) — KHÔNG để placeholder.
 - Health check: `GET /api/admin/sharepoint/health` · Provision: `POST /api/admin/sharepoint/provision` · Seed: `POST /api/admin/sharepoint/seed-config` (đều gated dev/admin).
+
+## Phase 2C.3 — Config Areas + CheckItems (admin foundation)
+
+- List mới **`Config_CheckItems`** đã được provision (idempotent, không đụng dữ liệu cũ). Health check tự động bao gồm list này.
+- Quản trị qua UI (gated admin/dev):
+  - `/admin/config/departments` — nút “Đồng bộ phòng ban từ Microsoft 365” (gọi import-departments, deactivateMissing=false).
+  - `/admin/config/areas` — CRUD khu vực + nút “Tạo khu vực Văn phòng mặc định”.
+  - `/admin/config/check-items` — CRUD hạng mục + nút “Seed checklist 5S mặc định”.
+- Soft-delete only (IsActive=false); KHÔNG hard delete, KHÔNG đổi tên list.
+- Chưa có upload engine; capture chỉ lưu lựa chọn area + hạng mục vào session cục bộ.

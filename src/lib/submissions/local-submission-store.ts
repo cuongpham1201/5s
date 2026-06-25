@@ -109,6 +109,8 @@ export function completeCurrentSession(): CompletedSubmission | null {
     departmentName: session.departmentName,
     areaCode: session.areaCode,
     areaName: session.areaName,
+    checkItemCode: session.checkItemCode,
+    checkItemName: session.checkItemName,
     reporterName: session.reporterName,
     reporterEmail: session.reporterEmail,
     startedAt: session.startedAt,

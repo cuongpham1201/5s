@@ -6,6 +6,7 @@
 import type {
   AppRole,
   AreaRecord,
+  CheckItemRecord,
   DepartmentRecord,
   RoleMappingRecord,
   SettingRecord,
@@ -89,6 +90,18 @@ export function mapArea(f: GraphListItemFields): AreaRecord {
     DepartmentCode: str(f, "DepartmentCode"),
     IsActive: bool(f, "IsActive"),
     SortOrder: num(f, "SortOrder"),
+  };
+}
+
+export function mapCheckItem(f: GraphListItemFields): CheckItemRecord {
+  return {
+    CheckItemCode: str(f, "CheckItemCode") || str(f, "Title"),
+    CheckItemName: str(f, "CheckItemName"),
+    DepartmentCode: strOrNull(f, "DepartmentCode"),
+    AreaCode: strOrNull(f, "AreaCode"),
+    SortOrder: num(f, "SortOrder"),
+    IsActive: bool(f, "IsActive"),
+    Description: strOrNull(f, "Description"),
   };
 }
 

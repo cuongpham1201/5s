@@ -893,3 +893,52 @@ Data_Submissions hiện rỗng (chưa có chức năng ghi) → các trang đún
 
 ### Gates
 tsc --noEmit PASS · npm run lint PASS · npm run build PASS. Không xoá data, không đổi schema.
+
+---
+
+## Config Areas + Check Items admin foundation (2026-06-25)
+
+Phạm vi: thêm nền tảng quản trị Config_Areas + Config_CheckItems + nút đồng bộ phòng ban
+từ Microsoft 365 + chuẩn bị capture chọn Area + CheckItem. KHÔNG upload ảnh, KHÔNG sync
+offline queue lên SharePoint, KHÔNG deploy, code chỉ ở DEV.
+
+### Schema + provision
+- Thêm list Config_CheckItems (CheckItemCode/Name, DepartmentCode, AreaCode, SortOrder,
+  IsActive, Description). Cập nhật sharepoint-config, types/sharepoint, list-helpers (mapCheckItem),
+  provision-service.
+- Chạy provision (jiti, app-only Graph): Config_CheckItems = CREATED (7 cột). Tất cả list cũ =
+  exists, addedColumns rỗng (không đụng dữ liệu). Health: tất cả list FOUND (gồm Config_CheckItems).
+
+### Config_Areas (admin)
+- area-service: thêm listAllAreasAdmin, createArea, updateArea, deactivateArea (soft),
+  upsertAreaByCode, seedDefaultOfficeAreas (AreaCode = `${DeptCode}_OFFICE`, AreaName "Văn phòng").
+- Routes: GET/POST /api/admin/config/areas, PATCH/DELETE /api/admin/config/areas/[id] (DELETE = soft),
+  POST /api/admin/config/areas/seed-office.
+- UI /admin/config/areas: lọc theo phòng ban, thêm/sửa/ẩn khu vực, nút seed office, empty state.
+
+### Config_CheckItems (admin)
+- checkitem-service: listActiveCheckItems, listCheckItemsForArea, listAllCheckItemsAdmin,
+  createCheckItem, updateCheckItem, deactivateCheckItem (soft), upsertCheckItemByCode,
+  seedDefaultChecklist (S1..S5 global).
+- Routes: GET/POST /api/admin/config/check-items, PATCH/DELETE /api/admin/config/check-items/[id],
+  POST /api/admin/config/check-items/seed-default, GET /api/config/check-items (user-facing).
+- UI /admin/config/check-items: lọc theo phòng ban + khu vực, thêm/sửa/ẩn, seed mặc định, empty state.
+
+### Đồng bộ phòng ban (admin)
+- /admin/config/departments: nút “Đồng bộ phòng ban từ Microsoft 365” gọi import-departments
+  (deactivateMissing=false), hiển thị tổng quét / thành viên hoạt động / có phòng ban /
+  created / updated / deactivated / skipped / lần đồng bộ gần nhất. Không lộ danh sách user cá nhân.
+
+### Capture flow prep
+- types/submission: SubmissionSession + CompletedSubmission + StartArgs thêm checkItemCode/checkItemName.
+  WatermarkMetadata thêm checkItem optional.
+- Capture: Phòng ban (readonly) -> Khu vực -> Hạng mục 5S. Không có khu vực: cảnh báo + khoá nút.
+  Có khu vực nhưng chưa có hạng mục: cho chụp photo-only + thông báo "Chưa cấu hình checklist 5S
+  cho khu vực này. Bạn vẫn có thể chụp ảnh tổng quan." Có hạng mục: chọn 1+ hoặc "Ảnh tổng quan".
+- Watermark thêm dòng "Hạng mục: …" khi có (rủi ro thấp, đã thêm).
+
+### Nav
+- AdminShell thêm nhóm "Cấu hình": Phòng ban, Khu vực, Hạng mục 5S, SharePoint Health.
+
+### Gates
+tsc --noEmit PASS · npm run lint PASS · npm run build PASS. Không xoá data, không đổi/rename schema cũ.

@@ -46,6 +46,7 @@ export function watermarkLines(m: WatermarkMetadata): string[] {
     m.address,
     `Phòng ban: ${m.department}`,
     `Khu vực: ${m.area}`,
+    ...(m.checkItem ? [`Hạng mục: ${m.checkItem}`] : []),
     `Người chụp: ${m.reporter}`,
     `GPS: ${m.gps}`,
     m.verifiedText,

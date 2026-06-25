@@ -35,6 +35,18 @@ export interface AreaRecord {
   SortOrder: number;
 }
 
+export interface CheckItemRecord {
+  CheckItemCode: string; // Title; business key
+  CheckItemName: string;
+  /** Blank = applies regardless of department. */
+  DepartmentCode: string | null;
+  /** Blank = applies to the whole department (or globally if DepartmentCode also blank). */
+  AreaCode: string | null;
+  SortOrder: number;
+  IsActive: boolean;
+  Description: string | null;
+}
+
 export interface SettingRecord {
   Key: string; // Title
   Value: string;

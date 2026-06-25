@@ -15,7 +15,7 @@ export function formatGps(geo: GeoLocationSnapshot): string {
 }
 
 export function buildWatermarkMetadata(
-  session: Pick<SubmissionSession, "departmentCode" | "areaName" | "reporterName">,
+  session: Pick<SubmissionSession, "departmentCode" | "areaName" | "reporterName" | "checkItemName">,
   geo: GeoLocationSnapshot,
   when: Date,
 ): WatermarkMetadata {
@@ -26,6 +26,7 @@ export function buildWatermarkMetadata(
     address: geo.address,
     department: session.departmentCode,
     area: session.areaName,
+    checkItem: session.checkItemName || undefined,
     reporter: session.reporterName,
     gps: formatGps(geo),
     verifiedText: "✓ 5S Verified",
