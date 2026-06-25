@@ -68,9 +68,31 @@ export async function listActiveAreas(): Promise<AreaOption[]> {
     .sort((x, y) => x.sortOrder - y.sortOrder);
 }
 
-export async function listAreasByDepartmentCode(departmentCode: string): Promise<AreaOption[]> {
-  const all = await listActiveAreas();
-  return all.filter((a) => a.departmentCode === departmentCode).sort((x, y) => x.sortOrder - y.sortOrder);
+export async function listAreasByDepartmentCode(
+  departmentCode: string,
+  includeInactive = false,
+): Promise<AreaOption[]> {
+  if (!includeInactive) {
+    const all = await listActiveAreas();
+    return all.filter((a) => a.departmentCode === departmentCode).sort((x, y) => x.sortOrder - y.sortOrder);
+  }
+  const areas = await readAreas();
+  return areas
+    .filter((a) => a.AreaCode && a.DepartmentCode === departmentCode)
+    .map((a) => ({ code: a.AreaCode, name: a.AreaName, departmentCode: a.DepartmentCode, sortOrder: a.SortOrder }))
+    .sort((x, y) => x.sortOrder - y.sortOrder);
+}
+
+/** Map of DepartmentCode -> count of ACTIVE areas (for the admin selector). */
+export async function countAreasByDepartment(): Promise<Record<string, number>> {
+  const areas = await readAreas();
+  const counts: Record<string, number> = {};
+  for (const a of areas) {
+    if (a.AreaCode && a.IsActive && a.DepartmentCode) {
+      counts[a.DepartmentCode] = (counts[a.DepartmentCode] ?? 0) + 1;
+    }
+  }
+  return counts;
 }
 
 export async function getAreaByCode(code: string): Promise<AreaOption | null> {
@@ -134,6 +156,18 @@ export async function updateArea(id: string, input: Partial<AreaInput>): Promise
   await client.patch(`/sites/${siteId}/lists/${listId}/items/${id}/fields`, fields);
 }
 
+/** All areas (incl. inactive) for one department, with id + isActive — admin. */
+export async function listAreasByDepartmentAdmin(
+  departmentCode: string,
+  includeInactive = true,
+): Promise<AreaAdminRow[]> {
+  const all = await listAllAreasAdmin();
+  return all
+    .filter((a) => a.departmentCode === departmentCode)
+    .filter((a) => (includeInactive ? true : a.isActive))
+    .sort((x, y) => Number(y.isActive) - Number(x.isActive) || x.sortOrder - y.sortOrder);
+}
+
 /** Soft delete — sets IsActive=false (never removes the row). */
 export async function deactivateArea(id: string): Promise<void> {
   const { client, siteId, listId } = await ctx();
@@ -141,51 +175,102 @@ export async function deactivateArea(id: string): Promise<void> {
   await client.patch(`/sites/${siteId}/lists/${listId}/items/${id}/fields`, { IsActive: false });
 }
 
-export interface SeedOfficeAreasResult {
-  created: string[];
-  skipped: string[];
-  note?: string;
+/** Restore a soft-deleted area — sets IsActive=true. */
+export async function restoreArea(id: string): Promise<void> {
+  const { client, siteId, listId } = await ctx();
+  if (!listId) throw new Error("Chưa có list Config_Areas — chạy provision trước.");
+  await client.patch(`/sites/${siteId}/lists/${listId}/items/${id}/fields`, { IsActive: true });
 }
 
 /**
- * Create a default "Văn phòng" area (AreaCode = `${DeptCode}_OFFICE`) for every
- * ACTIVE department that has no area yet. Idempotent: skips existing codes.
- * Admin-triggered only — never runs automatically.
+ * Idempotent upsert by AreaCode:
+ *  - new code        -> create
+ *  - existing active -> update fields
+ *  - existing inactive -> update fields + reactivate (IsActive=true)
+ * Never creates a duplicate AreaCode. Default reactivates unless isActive=false given.
  */
-export async function seedDefaultOfficeAreas(): Promise<SeedOfficeAreasResult> {
-  const { client, siteId, listId } = await ctx();
-  const out: SeedOfficeAreasResult = { created: [], skipped: [] };
-  if (!listId) {
-    out.note = "Chưa có list Config_Areas — chạy provision trước.";
-    return out;
-  }
-  const [departments, items] = await Promise.all([
-    listActiveDepartments(),
-    readAreaItems(client, siteId, listId),
-  ]);
-  const haveCodes = new Set(items.map((it) => mapArea(it.fields).AreaCode));
-  for (const d of departments) {
-    const code = `${d.code}_OFFICE`;
-    if (haveCodes.has(code)) {
-      out.skipped.push(code);
-      continue;
-    }
-    await createArea({ code, name: "Văn phòng", departmentCode: d.code, sortOrder: 0, isActive: true });
-    out.created.push(code);
-  }
-  return out;
-}
-
-/** Create if AreaCode is new, else update name/dept/sort/active. */
-export async function upsertAreaByCode(input: AreaInput): Promise<{ action: "created" | "updated"; code: string }> {
+export async function upsertAreaByCode(
+  input: AreaInput,
+): Promise<{ action: "created" | "updated" | "restored"; code: string }> {
   const { client, siteId, listId } = await ctx();
   if (!listId) throw new Error("Chưa có list Config_Areas — chạy provision trước.");
   const items = await readAreaItems(client, siteId, listId);
   const found = items.find((it) => mapArea(it.fields).AreaCode === input.code);
   if (!found) {
-    await createArea(input);
+    await createArea({ ...input, isActive: input.isActive ?? true });
     return { action: "created", code: input.code };
   }
-  await updateArea(found.id, input);
-  return { action: "updated", code: input.code };
+  const rec = mapArea(found.fields);
+  const isActive = input.isActive ?? true;
+  await updateArea(found.id, { ...input, isActive });
+  return { action: !rec.IsActive && isActive ? "restored" : "updated", code: input.code };
+}
+
+export interface SeedAreasResult {
+  departmentCode?: string;
+  created: string[];
+  updated: string[];
+  restored: string[];
+  note?: string;
+}
+
+function emptySeed(departmentCode?: string): SeedAreasResult {
+  return { departmentCode, created: [], updated: [], restored: [] };
+}
+function collect(out: SeedAreasResult, r: { action: "created" | "updated" | "restored"; code: string }) {
+  if (r.action === "created") out.created.push(r.code);
+  else if (r.action === "restored") out.restored.push(r.code);
+  else out.updated.push(r.code);
+}
+
+/** The default sample area set created per department. */
+export const DEFAULT_AREA_SET: ReadonlyArray<{ suffix: string; name: string }> = [
+  { suffix: "OFFICE", name: "Văn phòng" },
+  { suffix: "MEETING", name: "Phòng họp" },
+  { suffix: "STORAGE", name: "Kho / Khu lưu trữ" },
+  { suffix: "COMMON", name: "Khu vực chung" },
+];
+
+/** Create just the "Văn phòng" area for one department (idempotent/reactivate). */
+export async function seedOfficeAreaForDepartment(departmentCode: string): Promise<SeedAreasResult> {
+  const out = emptySeed(departmentCode);
+  const r = await upsertAreaByCode({
+    code: `${departmentCode}_OFFICE`,
+    name: "Văn phòng",
+    departmentCode,
+    sortOrder: 0,
+  });
+  collect(out, r);
+  return out;
+}
+
+/** Create the default sample area set (OFFICE/MEETING/STORAGE/COMMON) for one department. */
+export async function seedDefaultAreasForDepartment(departmentCode: string): Promise<SeedAreasResult> {
+  const out = emptySeed(departmentCode);
+  let sort = 0;
+  for (const a of DEFAULT_AREA_SET) {
+    const r = await upsertAreaByCode({
+      code: `${departmentCode}_${a.suffix}`,
+      name: a.name,
+      departmentCode,
+      sortOrder: sort++,
+    });
+    collect(out, r);
+  }
+  return out;
+}
+
+/**
+ * Bulk: create `${DeptCode}_OFFICE` for every ACTIVE department that currently
+ * has NO active area. Idempotent (reactivates an inactive OFFICE if present).
+ */
+export async function seedOfficeAreaForMissingDepartments(): Promise<SeedAreasResult> {
+  const out = emptySeed();
+  const [departments, counts] = await Promise.all([listActiveDepartments(), countAreasByDepartment()]);
+  for (const d of departments) {
+    if ((counts[d.code] ?? 0) > 0) continue; // already has an active area
+    const r = await upsertAreaByCode({ code: `${d.code}_OFFICE`, name: "Văn phòng", departmentCode: d.code, sortOrder: 0 });
+    collect(out, r);
+  }
+  return out;
 }

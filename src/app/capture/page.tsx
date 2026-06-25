@@ -40,7 +40,7 @@ export default function CapturePage() {
     if (!department) return;
     let active = true;
     setAreasLoading(true);
-    fetch(`/api/config/areas?departmentCode=${encodeURIComponent(department)}`)
+    fetch(`/api/config/areas?departmentCode=${encodeURIComponent(department)}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (!active) return;
@@ -58,7 +58,7 @@ export default function CapturePage() {
     let active = true;
     setCheckLoading(true);
     setSelectedChecks(new Set());
-    fetch(`/api/config/check-items?departmentCode=${encodeURIComponent(department)}&areaCode=${encodeURIComponent(selected)}`)
+    fetch(`/api/config/check-items?departmentCode=${encodeURIComponent(department)}&areaCode=${encodeURIComponent(selected)}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => active && setCheckItems(d?.checkItems ?? []))
       .finally(() => active && setCheckLoading(false));

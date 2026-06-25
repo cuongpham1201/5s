@@ -942,3 +942,50 @@ offline queue lên SharePoint, KHÔNG deploy, code chỉ ở DEV.
 
 ### Gates
 tsc --noEmit PASS · npm run lint PASS · npm run build PASS. Không xoá data, không đổi/rename schema cũ.
+
+---
+
+## Admin assign areas to departments (2026-06-25)
+
+Phạm vi: dựng UI quản trị gán khu vực chụp theo phòng ban để admin nhanh chóng tạo khu vực,
+mở khoá /capture cho phòng ban chưa có khu vực (vd TCKS). READ + admin WRITE (soft-delete only).
+KHÔNG upload ảnh, KHÔNG đổi schema, KHÔNG xoá data, code chỉ ở DEV.
+
+### area-service (bổ sung)
+- listAreasByDepartmentCode(departmentCode, includeInactive?)
+- countAreasByDepartment(): map DepartmentCode -> số khu vực active
+- listAreasByDepartmentAdmin(departmentCode, includeInactive)
+- upsertAreaByCode(): idempotent theo AreaCode; nếu code tồn tại inactive -> update + IsActive=true
+  (reactivate), không tạo trùng. action = created | updated | restored.
+- restoreArea(id): IsActive=true
+- seedOfficeAreaForDepartment(dept): tạo {dept}_OFFICE "Văn phòng"
+- seedDefaultAreasForDepartment(dept): bộ mẫu OFFICE/MEETING/STORAGE/COMMON
+- seedOfficeAreaForMissingDepartments(): bulk office cho mọi phòng ban active chưa có khu vực active
+
+### Routes
+- GET /api/admin/config/areas?departmentCode=&includeInactive=true (mặc định bao gồm inactive
+  khi xem theo phòng ban; không có departmentCode -> trả areas + counts)
+- POST /api/admin/config/areas (create) — giữ tương thích
+- PATCH /api/admin/config/areas/[id] (sửa; PATCH {isActive:true} = khôi phục)
+- DELETE /api/admin/config/areas/[id] (soft delete IsActive=false)
+- POST /api/admin/config/areas/seed-office (body {departmentCode} -> 1 phòng ban; không body -> bulk missing)
+- POST /api/admin/config/areas/seed-defaults (body {departmentCode})
+- POST /api/admin/config/areas/seed-office-missing (bulk)
+
+### UI /admin/config/areas
+- Bộ chọn phòng ban (trái): danh sách Config_Departments active + DepartmentName + badge số khu vực
+  active + ô tìm kiếm.
+- Panel quản lý khi chọn phòng ban: tiêu đề phòng ban, form thêm khu vực, danh sách khu vực
+  (sửa tên/thứ tự inline, ẩn/khôi phục), toggle "Hiện cả khu vực đã ẩn".
+- Quick actions: "Tạo khu vực Văn phòng", "Tạo bộ khu vực mẫu".
+- Bulk action (header): "Tạo Văn phòng cho phòng ban chưa có".
+- Empty state: "Phòng ban này chưa có khu vực chụp." + nút "Tạo khu vực Văn phòng".
+- An toàn: mọi create/upsert idempotent theo AreaCode, không trùng, không hard delete,
+  code inactive -> reactivate.
+
+### Capture
+- /capture fetch /api/config/areas + /api/config/check-items với cache:"no-store" -> sau khi admin
+  thêm khu vực, mở lại /capture thấy ngay (không cache cũ).
+
+### Gates
+tsc PASS · lint PASS · build PASS.

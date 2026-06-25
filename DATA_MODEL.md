@@ -304,3 +304,27 @@ Báo cáo có ảnh đại diện/đơn vị — Phase sau, không MVP.
 
 > Chưa có upload engine. Capture chỉ lưu lựa chọn area + checkItem vào session cục bộ
 > (checkItemCode/checkItemName) để dùng cho watermark ("Hạng mục: …") và Phase Upload sau này.
+
+---
+
+## Config_Areas — admin-managed & quy ước AreaCode (Phase 2C.4)
+
+Config_Areas do admin quản lý hoàn toàn qua /admin/config/areas (master-detail theo phòng ban).
+Mỗi phòng ban phải có ≥1 khu vực active thì user của phòng ban đó mới chụp được (/capture mở khoá).
+
+Quy ước AreaCode (idempotent key, không trùng):
+- `${DepartmentCode}_OFFICE`   → "Văn phòng"
+- `${DepartmentCode}_MEETING`  → "Phòng họp"
+- `${DepartmentCode}_STORAGE`  → "Kho / Khu lưu trữ"
+- `${DepartmentCode}_COMMON`   → "Khu vực chung"
+- Khu vực tuỳ biến khác: đặt mã `${DepartmentCode}_<TÊN>` để dễ tra cứu.
+
+Upsert theo AreaCode: code mới → tạo; code đã tồn tại (kể cả đang ẩn) → cập nhật + bật IsActive=true
+(reactivate). Không bao giờ tạo trùng, không hard delete (ẩn = IsActive=false).
+
+Mở khoá capture cho một phòng ban (vd TCKS đang bị chặn vì chưa có khu vực):
+1. Vào /admin/config/areas, chọn phòng ban (badge "0 khu vực" = đang bị chặn).
+2. Nhấn "Tạo khu vực Văn phòng" (tạo TCKS_OFFICE) — hoặc "Tạo bộ khu vực mẫu", hoặc thêm thủ công.
+3. User của phòng ban mở lại /capture → khu vực hiện ngay (fetch no-store), nút "Bắt đầu chụp" mở.
+Bulk nhiều phòng ban: nút "Tạo Văn phòng cho phòng ban chưa có" tạo `${Dept}_OFFICE` cho mọi
+phòng ban active chưa có khu vực active.

@@ -1,16 +1,33 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { denyIfNotAdmin } from "@/lib/sharepoint/admin-guard";
-import { listAllAreasAdmin, createArea, type AreaInput } from "@/lib/sharepoint/area-service";
+import {
+  listAllAreasAdmin,
+  listAreasByDepartmentAdmin,
+  countAreasByDepartment,
+  createArea,
+  type AreaInput,
+} from "@/lib/sharepoint/area-service";
 
 export const dynamic = "force-dynamic";
 
-/** GET /api/admin/config/areas — all areas (incl. inactive) for admin. */
-export async function GET() {
+/**
+ * GET /api/admin/config/areas[?departmentCode=&includeInactive=true]
+ * Without departmentCode: all areas + per-department active counts.
+ * With departmentCode: that department's areas (incl. inactive unless includeInactive=false).
+ */
+export async function GET(req: NextRequest) {
   const denied = await denyIfNotAdmin();
   if (denied) return denied;
+  const sp = req.nextUrl.searchParams;
+  const departmentCode = sp.get("departmentCode");
+  const includeInactive = sp.get("includeInactive") !== "false"; // default: include inactive for admin
   try {
-    const areas = await listAllAreasAdmin();
-    return NextResponse.json({ count: areas.length, areas });
+    if (departmentCode) {
+      const areas = await listAreasByDepartmentAdmin(departmentCode, includeInactive);
+      return NextResponse.json({ count: areas.length, departmentCode, areas });
+    }
+    const [areas, counts] = await Promise.all([listAllAreasAdmin(), countAreasByDepartment()]);
+    return NextResponse.json({ count: areas.length, areas, counts });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }

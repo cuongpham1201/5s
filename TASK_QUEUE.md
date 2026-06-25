@@ -237,7 +237,19 @@ phòng ban M365 + seed office areas + seed 5S checklist. Capture: Area -> CheckI
 
 ---
 
-## Phase 2C.4+ (TODO)
+## Phase 2C.4 — Admin assign areas to departments (DONE)
+UI /admin/config/areas dạng master-detail: bộ chọn phòng ban (badge số khu vực active + tìm kiếm)
++ panel quản lý khu vực (thêm/sửa/ẩn/khôi phục, toggle hiện inactive). Quick actions: tạo Văn phòng,
+tạo bộ khu vực mẫu (OFFICE/MEETING/STORAGE/COMMON). Bulk: tạo Văn phòng cho mọi phòng ban chưa có
+khu vực. area-service: countAreasByDepartment, listAreasByDepartmentAdmin, restoreArea, upsert
+idempotent (reactivate inactive), seedOfficeAreaForDepartment/seedDefaultAreasForDepartment/
+seedOfficeAreaForMissingDepartments. Routes seed-office (per-dept | bulk), seed-defaults,
+seed-office-missing. Capture fetch no-store. Soft-delete only, không trùng AreaCode, không đổi schema.
+Gates tsc/lint/build PASS.
+
+---
+
+## Phase 2C.5+ (TODO)
 Upload Engine (upload `5S/img` + ghi header/lines Data_Submissions/Data_SubmissionPhotos + offline
 queue + retry + Data_SyncLogs), gắn checkItem vào submission khi upload, Excel, notifications.
 
