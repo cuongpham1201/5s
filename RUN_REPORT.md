@@ -989,3 +989,52 @@ KHÔNG upload ảnh, KHÔNG đổi schema, KHÔNG xoá data, code chỉ ở DEV.
 
 ### Gates
 tsc PASS · lint PASS · build PASS.
+
+---
+
+## Admin router + email role mapping (2026-06-25)
+
+Phạm vi: thêm bảng điều khiển quản trị (/admin router) + mô hình quyền admin theo email +
+quản lý Config_RoleMapping (Admin/Manager/Viewer). Soft-delete only. KHÔNG upload ảnh,
+KHÔNG đổi schema phá huỷ, KHÔNG xoá data. Code chỉ ở DEV.
+
+### Mô hình quyền admin (src/lib/auth/admin.ts)
+- Admin nếu: email = cuongpx@biahalong.com (mặc định, không bị khoá) HOẶC trong ADMIN_EMAILS (env)
+  HOẶC Config_RoleMapping active Role=Admin. So sánh email không phân biệt hoa thường.
+- getAdminContext(email) trả {isAdmin, source: default|env|role-mapping|none, mappedRole}.
+- Fallback: đọc Config_RoleMapping lỗi -> chỉ default+env (admin mặc định không bị khoá).
+
+### Bảo vệ route
+- /admin và /admin/*: src/app/admin/layout.tsx (server). Production: chưa đăng nhập -> /signin;
+  đăng nhập nhưng không phải admin -> trang 403 "Bạn không có quyền quản trị 5S.". Dev: bỏ qua.
+- /api/admin/*: denyIfNotAdmin() dùng isAdmin(email) ở production (401 nếu chưa đăng nhập, 403 nếu
+  không phải admin); dev bỏ qua. Áp dụng cho mọi route admin hiện có (config, health, provision,
+  seed, import, dashboard, calendar...).
+
+### /admin dashboard router
+- Panel danh tính: email + displayName + badge ADMIN + nguồn quyền (default/env/role-mapping).
+- KPI tóm tắt (kỳ vọng/đã gửi/chưa gửi/hoàn thành).
+- Menu cards: Tổng quan hệ thống, Đồng bộ phòng ban M365, Quản lý phòng ban, Gán khu vực chụp,
+  Hạng mục 5S, Phân quyền quản trị, SharePoint health, Lịch sử/báo cáo.
+- GET /api/admin/whoami trả admin context.
+
+### Role mapping (Config_RoleMapping)
+- service src/lib/sharepoint/role-mapping-service.ts: listRoleMappings(includeInactive?),
+  getUserRoleByEmail, createRoleMapping, updateRoleMapping, deactivateRoleMapping, restoreRoleMapping,
+  upsertRoleMappingByEmail (idempotent theo email lowercase; inactive -> reactivate, không trùng).
+  ensureRoleChoices(): bổ sung additive Admin/Manager/Viewer vào cột Choice (không phá dữ liệu cũ).
+- API: GET/POST /api/admin/config/role-mapping; PATCH/DELETE /api/admin/config/role-mapping/[id]
+  (DELETE = soft delete; chặn vô hiệu hoá admin cuối cùng khi acting user không phải static admin).
+- UI /admin/config/role-mapping: list + thêm (email+role+phòng ban) + sửa role/phòng ban +
+  kích hoạt/vô hiệu hoá + tìm theo email + lọc theo role + badge Active/Inactive/Admin mặc định/Bạn.
+  Chặn trùng email active; cuongpx luôn admin; client + server cùng chặn vô hiệu hoá admin duy nhất.
+
+### Nav
+- AdminShell: Dashboard (/admin) là mục đầu; thêm "Phân quyền" (/admin/config/role-mapping) trong Cấu hình.
+
+### Env
+- Thêm ADMIN_EMAILS (default cuongpx@biahalong.com) vào .env.example + .env.local.
+- Product: NEXT_PUBLIC_ALLOW_DEV_LOGIN=false.
+
+### Gates
+tsc PASS · lint PASS · build PASS.

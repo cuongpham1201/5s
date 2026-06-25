@@ -328,3 +328,23 @@ Mở khoá capture cho một phòng ban (vd TCKS đang bị chặn vì chưa có
 3. User của phòng ban mở lại /capture → khu vực hiện ngay (fetch no-store), nút "Bắt đầu chụp" mở.
 Bulk nhiều phòng ban: nút "Tạo Văn phòng cho phòng ban chưa có" tạo `${Dept}_OFFICE` cho mọi
 phòng ban active chưa có khu vực active.
+
+---
+
+## Config_RoleMapping — phân quyền quản trị (Phase 2C.5)
+
+Quyền truy cập admin được điều khiển theo EMAIL (không phải session AppRole):
+- cuongpx@biahalong.com = admin mặc định, luôn có quyền (không bị khoá kể cả khi SharePoint lỗi).
+- ADMIN_EMAILS (env, phân tách dấu phẩy) = admin bổ sung.
+- Config_RoleMapping (active, Role=Admin) = admin cấp qua UI.
+
+Config_RoleMapping fields (không đổi schema): Email (Title), Role (Choice), DepartmentCode, IsActive.
+Role choices được mở rộng additive: employee/environment/admin (cũ) + Admin/Manager/Viewer (mới) —
+không phá dữ liệu cũ. So sánh role/email không phân biệt hoa thường. Manager/Viewer dành cho sau.
+
+Quy tắc: key = email lowercase; không trùng mapping active cho cùng email; email tồn tại inactive +
+thêm lại -> khôi phục/cập nhật thay vì tạo trùng. Soft-delete = IsActive=false. Server chặn vô hiệu
+hoá admin cuối cùng khi người thao tác không phải static admin.
+
+API: GET/POST /api/admin/config/role-mapping; PATCH/DELETE /api/admin/config/role-mapping/[id];
+GET /api/admin/whoami (admin context của user hiện tại). UI: /admin/config/role-mapping.

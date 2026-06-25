@@ -28,6 +28,23 @@
 | `SHAREPOINT_SITE_URL` | URL site SharePoint chứa Library/List 5S | — (Phase 2) |
 | `NEXT_PUBLIC_ALLOW_DEV_LOGIN` | Bật đăng nhập thử (dev mock) khi chưa có Entra | `true` (dev) → đặt `false` ở production |
 | `NEXT_PUBLIC_USE_MOCK_DATA` | Cho phép mock fallback khi đọc SharePoint lỗi (chỉ dev, và chỉ khi dev login bật) | `false` (mặc định; product giữ `false`) |
+| `ADMIN_EMAILS` | Danh sách email admin (phân tách bằng dấu phẩy) | `cuongpx@biahalong.com` |
+
+## Quyền quản trị (admin) — Phase 2C.5
+
+Một user là admin nếu thoả MỘT trong các điều kiện (so sánh email không phân biệt hoa thường):
+1. email = **cuongpx@biahalong.com** (admin mặc định — KHÔNG bao giờ bị khoá).
+2. email nằm trong `ADMIN_EMAILS` (env, phân tách bằng dấu phẩy).
+3. có dòng **Config_RoleMapping** đang hoạt động với `Role = "Admin"`.
+
+- Helper trung tâm: `src/lib/auth/admin.ts` (`getAdminContext`, `isAdmin`, `isStaticAdminEmail`).
+- Bảo vệ route: `/admin/*` qua `src/app/admin/layout.tsx` (production: không phải admin → trang 403
+  "Bạn không có quyền quản trị 5S."); API `/api/admin/*` qua `denyIfNotAdmin()`.
+- **Fallback**: nếu đọc Config_RoleMapping lỗi → chỉ dùng (1)+(2), admin mặc định không bị khoá.
+- Vai trò Config_RoleMapping: Admin / Manager / Viewer (Manager & Viewer dành cho sau, chưa mở khoá gì).
+- Cột Role là Choice; service tự động bổ sung (additive, không phá dữ liệu) các giá trị Admin/Manager/Viewer.
+- **Production**: đặt `NEXT_PUBLIC_ALLOW_DEV_LOGIN=false` để tắt dev login; dev (NODE_ENV≠production)
+  bỏ qua guard admin cho tiện thử nghiệm.
 
 ## Future (thiết kế trước, chưa dùng)
 

@@ -249,7 +249,18 @@ Gates tsc/lint/build PASS.
 
 ---
 
-## Phase 2C.5+ (TODO)
+## Phase 2C.5 — Admin router + email role mapping (DONE)
+Mô hình quyền admin theo email (src/lib/auth/admin.ts): cuongpx@biahalong.com mặc định +
+ADMIN_EMAILS (env) + Config_RoleMapping Role=Admin; fallback an toàn khi SharePoint lỗi. Bảo vệ
+/admin/* (layout server, 403 page) + /api/admin/* (denyIfNotAdmin dùng isAdmin). /admin dashboard
+router (identity panel + nguồn quyền + KPI + menu cards). role-mapping-service (CRUD soft-delete,
+upsert idempotent, ensureRoleChoices additive). API /api/admin/config/role-mapping(+[id]),
+/api/admin/whoami. UI /admin/config/role-mapping (badge Active/Inactive/Admin mặc định/Bạn, chặn
+trùng + chặn vô hiệu hoá admin cuối). Nav thêm Phân quyền. ADMIN_EMAILS docs. Gates tsc/lint/build PASS.
+
+---
+
+## Phase 2C.6+ (TODO)
 Upload Engine (upload `5S/img` + ghi header/lines Data_Submissions/Data_SubmissionPhotos + offline
 queue + retry + Data_SyncLogs), gắn checkItem vào submission khi upload, Excel, notifications.
 

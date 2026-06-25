@@ -3,82 +3,91 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AdminShell } from "@/components/layout/AdminShell";
-import { StatusBadge } from "@/components/ui/StatusBadge";
 
-interface Dashboard {
-  date: string;
-  expected: number;
-  submitted: number;
-  missing: Array<{ code: string; name: string }>;
-  missingCount: number;
-  completionRate: number;
-  latest: Array<{ submissionId: string; departmentCode: string; areaName: string; photoCount: number; submittedAt: string }>;
-  hasData: boolean;
-  error?: string;
-}
+interface WhoAmI { email: string | null; displayName: string | null; isAdmin: boolean; source: string; mappedRole: string | null }
+interface Dashboard { date: string; expected: number; submitted: number; missingCount: number; completionRate: number; hasData: boolean }
 
-export default function DashboardPage() {
-  const [d, setD] = useState<Dashboard | null>(null);
-  const [loading, setLoading] = useState(true);
+const SOURCE_LABEL: Record<string, string> = {
+  default: "Admin mặc định",
+  env: "ADMIN_EMAILS (env)",
+  "role-mapping": "Config_RoleMapping",
+  none: "—",
+};
+
+const CARDS = [
+  { href: "/admin/calendar", icon: "📊", title: "Tổng quan hệ thống", desc: "Lịch tổng hợp gửi ảnh theo ngày" },
+  { href: "/admin/config/departments", icon: "🔄", title: "Đồng bộ phòng ban Microsoft 365", desc: "Đồng bộ Config_Departments từ M365" },
+  { href: "/admin/config/departments", icon: "🏢", title: "Quản lý phòng ban", desc: "Danh sách phòng ban đang hoạt động" },
+  { href: "/admin/config/areas", icon: "📍", title: "Gán khu vực chụp", desc: "Khu vực 5S theo từng phòng ban" },
+  { href: "/admin/config/check-items", icon: "✅", title: "Hạng mục 5S", desc: "Checklist / hạng mục kiểm tra" },
+  { href: "/admin/config/role-mapping", icon: "🛡️", title: "Phân quyền quản trị", desc: "Gán quyền theo email (Config_RoleMapping)" },
+  { href: "/admin/sharepoint-health", icon: "🩺", title: "SharePoint health", desc: "Kiểm tra site/library/lists Ban5S" },
+  { href: "/admin/ranking", icon: "🏆", title: "Lịch sử / báo cáo", desc: "Xếp hạng & thống kê đơn vị" },
+];
+
+export default function AdminHome() {
+  const [me, setMe] = useState<WhoAmI | null>(null);
+  const [dash, setDash] = useState<Dashboard | null>(null);
 
   useEffect(() => {
-    fetch("/api/admin/dashboard").then((r) => (r.ok ? r.json() : null)).then(setD).finally(() => setLoading(false));
+    fetch("/api/admin/whoami").then((r) => (r.ok ? r.json() : null)).then(setMe).catch(() => {});
+    fetch("/api/admin/dashboard").then((r) => (r.ok ? r.json() : null)).then(setDash).catch(() => {});
   }, []);
 
-  const pct = Math.round((d?.completionRate ?? 0) * 100);
-  const kpis = [
-    { label: "Expected Units", value: d?.expected ?? 0, cls: "bg-info-bg text-info" },
-    { label: "Submitted Today", value: d?.submitted ?? 0, cls: "bg-success-bg text-success" },
-    { label: "Missing Units", value: d?.missingCount ?? 0, cls: "bg-danger-bg text-danger" },
-    { label: "Completion %", value: `${pct}%`, cls: "bg-warning-bg text-warning" },
-  ];
+  const pct = Math.round((dash?.completionRate ?? 0) * 100);
 
   return (
-    <AdminShell title="Dashboard" subtitle={`Hôm nay · ${d?.date ?? "…"}`}>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {kpis.map((k) => (
-          <div key={k.label} className="bg-white rounded-lg p-5 shadow-e2 border border-line">
-            <span className="text-[13px] text-ink-muted font-semibold">{k.label}</span>
-            <div className="text-[32px] font-bold mt-2 tracking-tight">{loading ? "…" : k.value}</div>
+    <AdminShell title="Quản trị 5S" subtitle="Bảng điều khiển quản trị">
+      {/* Identity panel */}
+      <div className="bg-white rounded-lg border border-line shadow-e2 p-4 mb-4 flex flex-wrap items-center gap-3">
+        <div className="w-10 h-10 rounded-full grid place-items-center bg-primary-100 text-primary-700 font-bold">
+          {(me?.displayName ?? me?.email ?? "?").slice(0, 1).toUpperCase()}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="font-semibold text-[15px] truncate">{me?.displayName ?? me?.email ?? "…"}</div>
+          <div className="text-[12.5px] text-ink-muted truncate">{me?.email ?? ""}</div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-bold px-2.5 h-6 rounded-pill grid place-items-center bg-success-bg text-success">
+            {me?.isAdmin ? "ADMIN" : "—"}
+          </span>
+          <span className="text-[11px] px-2.5 h-6 rounded-pill grid place-items-center bg-info-bg text-info">
+            nguồn: {SOURCE_LABEL[me?.source ?? "none"] ?? me?.source}
+          </span>
+        </div>
+      </div>
+
+      {/* KPI mini summary */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+        {[
+          { label: "Phòng ban kỳ vọng", value: dash?.expected ?? "…" },
+          { label: "Đã gửi hôm nay", value: dash?.submitted ?? "…" },
+          { label: "Chưa gửi", value: dash?.missingCount ?? "…" },
+          { label: "Hoàn thành", value: dash ? `${pct}%` : "…" },
+        ].map((k) => (
+          <div key={k.label} className="bg-white rounded-lg border border-line shadow-e2 p-4">
+            <div className="text-[12px] text-ink-muted font-semibold">{k.label}</div>
+            <div className="text-[26px] font-bold mt-1 tracking-tight">{k.value}</div>
           </div>
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr] gap-[18px] mt-[18px]">
-        <div className="bg-white rounded-lg border border-line shadow-e2">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-line">
-            <span className="text-[16px] font-semibold">Chưa gửi hôm nay</span>
-            <StatusBadge tone="danger">{d?.missingCount ?? 0}</StatusBadge>
-          </div>
-          {!loading && (d?.missing?.length ?? 0) === 0 ? (
-            <div className="p-6 text-center text-ink-muted text-[14px]">{(d?.expected ?? 0) === 0 ? "Chưa có phòng ban." : "Tất cả đã gửi 👍"}</div>
-          ) : (
-            <div>
-              {(d?.missing ?? []).slice(0, 8).map((u) => (
-                <div key={u.code} className="flex items-center gap-3 px-5 py-3 border-b border-line">
-                  <span className="w-2.5 h-2.5 rounded-full bg-danger" />
-                  <div className="flex-1 min-w-0"><div className="font-semibold">{u.code}</div><div className="text-[13px] text-ink-muted truncate">{u.name}</div></div>
-                </div>
-              ))}
-              <div className="p-3.5"><Link href="/admin/pending" className="btn btn-ghost btn-block">Xem tất cả →</Link></div>
-            </div>
-          )}
-        </div>
-
-        <div className="bg-white rounded-lg border border-line shadow-e2">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-line"><span className="text-[16px] font-semibold">Ảnh mới nhất</span></div>
-          {!loading && (d?.latest?.length ?? 0) === 0 ? (
-            <div className="p-6 text-center text-ink-muted text-[14px]">Chưa có ảnh nào.</div>
-          ) : (
-            (d?.latest ?? []).map((s) => (
-              <div key={s.submissionId} className="flex items-center gap-3 px-5 py-3 border-b border-line">
-                <div className="flex-1 min-w-0"><div className="font-semibold">{s.departmentCode} · {s.areaName}</div><div className="text-[13px] text-ink-muted">{s.photoCount} ảnh</div></div>
-              </div>
-            ))
-          )}
-        </div>
+      {/* Menu cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {CARDS.map((c, i) => (
+          <Link
+            key={`${c.href}-${i}`}
+            href={c.href}
+            className="bg-white rounded-lg border border-line shadow-e2 p-5 flex items-start gap-3.5 hover:border-primary-600 hover:shadow-md transition"
+          >
+            <span className="text-[26px] leading-none">{c.icon}</span>
+            <span className="min-w-0">
+              <span className="block font-semibold text-[15px]">{c.title}</span>
+              <span className="block text-[13px] text-ink-muted mt-0.5">{c.desc}</span>
+            </span>
+          </Link>
+        ))}
       </div>
-      {d?.error && <div className="text-danger text-[13px] mt-3">Lỗi đọc dữ liệu: {d.error}</div>}
     </AdminShell>
   );
 }
