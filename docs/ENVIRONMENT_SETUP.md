@@ -77,6 +77,29 @@ NEXT_PUBLIC_ALLOW_DEV_LOGIN="true"
 | Thiếu Entra + `NEXT_PUBLIC_ALLOW_DEV_LOGIN=true` | Chỉ có **Dev mock login**; `/api/me` trả hồ sơ mock từ session |
 | Có cả hai | Hiện cả hai (tiện test) |
 
+## SSO (Microsoft 365) — cấu hình bắt buộc
+
+**Entra App Registration → Redirect URI (Web):**
+```
+https://she.biahalong.com/api/auth/callback/microsoft-entra-id
+```
+**Delegated permissions:** `User.Read`, `openid`, `profile`, `email`, `offline_access`.
+
+**Env (product/staging):**
+```dotenv
+AUTH_SECRET=<random 32+ bytes: npx auth secret>
+AUTH_URL=https://she.biahalong.com
+NEXTAUTH_URL=https://she.biahalong.com
+AUTH_TRUST_HOST=true
+AUTH_AZURE_AD_CLIENT_ID=<app client id>
+AUTH_AZURE_AD_CLIENT_SECRET=<app client secret>
+AUTH_AZURE_AD_TENANT_ID=<tenant id>
+NEXT_PUBLIC_ALLOW_DEV_LOGIN=false   # product: tắt dev login
+```
+- Dev login panel chỉ hiện khi `NEXT_PUBLIC_ALLOW_DEV_LOGIN=true` (dev). Product đặt `false`.
+- `/api/me` trả `{ displayName, email, department, jobTitle, officeLocation, source }`
+  (`source` = `microsoft-entra-id` | `dev`).
+
 ## Phase 2C.2 — SSO + Graph app-only (đã wire)
 
 - **SSO redirect URI (QUAN TRỌNG):** provider Auth.js v5 là **`microsoft-entra-id`**, nên Redirect URI phải đăng ký đúng:

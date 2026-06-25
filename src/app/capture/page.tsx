@@ -14,13 +14,19 @@ export default function CapturePage() {
   const { data: auth } = useSession();
   const { session, startSession } = useSessionCapture();
 
-  // Department is READONLY (from M365 account) — never selectable.
-  const department = auth?.user?.department ?? CURRENT_USER.department;
-  const deptName = departmentName(department) ?? DEPARTMENTS.find((d) => d.code === department)?.name ?? "";
-  const areas = areasForDepartment(department);
+  // Department is READONLY (from M365 user.department) — never selectable.
+  // In dev, the mock provider supplies one; with real SSO it may be missing.
+  const allowDev = process.env.NEXT_PUBLIC_ALLOW_DEV_LOGIN === "true";
+  const department = auth?.user?.department ?? (allowDev ? CURRENT_USER.department : null);
+  const hasDepartment = !!department;
+  const deptName = department
+    ? departmentName(department) ?? DEPARTMENTS.find((d) => d.code === department)?.name ?? ""
+    : "";
+  const areas = department ? areasForDepartment(department) : [];
   const [selected, setSelected] = useState<string | null>(areas[0]?.id ?? null);
 
   const begin = () => {
+    if (!hasDepartment) return;
     const area = areas.find((a) => a.id === selected);
     if (!area) return;
     startSession({
@@ -44,10 +50,18 @@ export default function CapturePage() {
       </div>
 
       <div className="flex-1 px-5 pb-4">
+        {!hasDepartment && (
+          <div className="mb-4 flex items-start gap-2.5 rounded-md bg-warning-bg text-warning p-3.5">
+            <span className="text-lg">⚠</span>
+            <span className="text-[13px] font-medium">
+              Tài khoản chưa có thông tin phòng ban. Vui lòng liên hệ quản trị.
+            </span>
+          </div>
+        )}
         <label className="text-[13px] font-semibold text-ink-muted">Phòng ban</label>
         <div className="mt-2 flex items-center justify-between rounded-md bg-surface border border-line px-4 py-3.5">
           <span className="flex items-center gap-3">
-            <span className="badge badge-info">{department}</span>
+            <span className="badge badge-info">{department ?? "—"}</span>
             <span className="text-ink-muted text-[13px]">{deptName}</span>
           </span>
           <span className="text-ink-muted text-[14px]">🔒 Từ tài khoản</span>
@@ -97,8 +111,8 @@ export default function CapturePage() {
       <div className="px-5 py-4 pb-[calc(16px+env(safe-area-inset-bottom))] border-t border-line">
         <button
           onClick={begin}
-          disabled={!selected}
-          className={`btn btn-primary btn-lg btn-block ${!selected ? "opacity-50 pointer-events-none" : ""}`}
+          disabled={!selected || !hasDepartment}
+          className={`btn btn-primary btn-lg btn-block ${!selected || !hasDepartment ? "opacity-50 pointer-events-none" : ""}`}
         >
           📷 Bắt đầu chụp
         </button>

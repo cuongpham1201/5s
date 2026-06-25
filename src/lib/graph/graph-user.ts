@@ -36,6 +36,6 @@ export function normalizeGraphUser(raw: GraphUserRaw): MeProfile {
     jobTitle: raw.jobTitle ?? null,
     officeLocation: raw.officeLocation ?? null,
     employeeId: raw.employeeId ?? null,
-    source: "graph",
+    source: "microsoft-entra-id",
   };
 }

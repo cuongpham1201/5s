@@ -25,8 +25,8 @@ export interface MeProfile {
   jobTitle: string | null;
   officeLocation: string | null;
   employeeId: string | null;
-  /** "graph" when sourced from Microsoft Graph, "mock" for dev login. */
-  source: "graph" | "mock";
+  /** Identity source: real M365 (Entra/Graph) vs dev mock login. */
+  source: "microsoft-entra-id" | "dev";
 }
 
 export class GraphError extends Error {

@@ -43,8 +43,8 @@ export default function MePage() {
       <div className="px-5 pt-2 pb-3 flex items-center justify-between">
         <span className="text-[22px] font-semibold">Hồ sơ</span>
         {profile && (
-          <StatusBadge tone={profile.source === "graph" ? "success" : "neutral"}>
-            {profile.source === "graph" ? "Microsoft 365" : "Dev mock"}
+          <StatusBadge tone={profile.source === "microsoft-entra-id" ? "success" : "neutral"}>
+            {profile.source === "microsoft-entra-id" ? "Microsoft 365" : "Dev mock"}
           </StatusBadge>
         )}
       </div>
@@ -73,7 +73,7 @@ export default function MePage() {
           Đăng xuất
         </button>
         <p className="text-[12px] text-ink-disabled mt-4 text-center">
-          {profile?.source === "graph"
+          {profile?.source === "microsoft-entra-id"
             ? "Dữ liệu lấy trực tiếp từ Microsoft 365 (Graph /me)."
             : "Đang dùng đăng nhập thử (dev). Khi cấu hình Entra App thật, hồ sơ sẽ tự lấy từ Microsoft 365."}
         </p>

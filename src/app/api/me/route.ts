@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
     jobTitle,
     officeLocation: null,
     employeeId: null,
-    source: "mock",
+    source: "dev",
   };
   return NextResponse.json(profile);
 }
