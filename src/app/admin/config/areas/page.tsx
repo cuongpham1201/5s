@@ -130,7 +130,7 @@ export default function ConfigAreasPage() {
   return (
     <AdminShell
       title="Khu vực 5S theo phòng ban"
-      subtitle="Gán khu vực chụp cho từng phòng ban (Config_Areas)"
+      subtitle="Khu vực là nhãn cho watermark/báo cáo — không phải phân quyền (Config_Areas)"
       actions={
         <button onClick={() => runSeed("/api/admin/config/areas/seed-office-missing", null, "bulk")} disabled={!!busy} className="btn btn-secondary !min-h-10">
           {busy === "bulk" ? "Đang tạo…" : "Tạo Văn phòng cho phòng ban chưa có"}

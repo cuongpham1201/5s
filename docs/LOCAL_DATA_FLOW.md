@@ -80,3 +80,13 @@ Trạng thái hàng đợi: queued -> uploading -> uploaded | failed.
 
 Folder path: Img/YYYY/MM/DD/<DepartmentCode>/<SubmissionId>/{original,watermarked}-NN.jpg (idempotent;
 retry ghi đè). SubmissionId = SUB-YYYYMMDD-XXXX dùng xuyên suốt queue/list/folder.
+
+---
+
+## Phase 3.1 — Area = nhãn (không phải phân quyền)
+
+- /capture: phòng ban từ /api/me; khu vực từ /api/config/areas?departmentCode=<dept>. User có thể
+  thêm khu vực ngay (POST /api/config/areas) nếu thiếu; AreaCode = <Dept>_<tên chuẩn hoá>.
+- Khu vực CHỈ là nhãn cho watermark + ngữ cảnh báo cáo; không giới hạn ai được chụp.
+- Lưu trữ ảnh: Img/<DepartmentCode>/YYYY/MM/DD/<SubmissionId>/ (KHÔNG chứa AreaCode).
+- Config_UserAreaPermissions: deprecated/dự phòng — không dùng trong luồng chụp.

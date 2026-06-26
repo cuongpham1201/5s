@@ -1112,3 +1112,44 @@ SharePoint (xem chéo user/admin). App-only Graph cho mọi write; token KHÔNG 
 
 ### Gates
 tsc PASS · lint PASS · build PASS.
+
+---
+
+## Simplify area model: department areas, user can add area (2026-06-26)
+
+Sửa nghiệp vụ: Khu vực (Area) = NHÃN cho watermark/báo cáo, KHÔNG phải phân quyền, KHÔNG phải
+phân cấp lưu trữ. Bỏ phụ thuộc Config_UserAreaPermissions khỏi luồng chụp.
+
+### Capture
+- /capture dùng /api/me (departmentCode) + /api/config/areas?departmentCode=<dept>. KHÔNG gọi /api/user/areas.
+- Empty state: "Phòng ban chưa có khu vực. Bạn có thể thêm khu vực đầu tiên." + nút thêm.
+- Form "Thêm khu vực" inline: nhập AreaName -> POST /api/config/areas; sau khi lưu refresh list + chọn
+  khu vực mới -> chụp được.
+
+### User-facing area API
+- POST /api/config/areas (đăng nhập): tạo khu vực cho ĐÚNG phòng ban của user (resolve server-side qua
+  resolveRequestUser; client không thể tạo cho phòng ban khác). AreaCode sinh server-side =
+  <DepartmentCode>_<TÊN_CHUẨN_HOÁ> (vd TCKS_VAN_PHONG, TCKS_KHO_HO_SO). Upsert theo AreaCode: tồn tại
+  inactive -> restore; không trùng; IsActive=true.
+
+### Storage path
+- photo-upload-service: đổi sang Img/<DepartmentCode>/YYYY/MM/DD/<SubmissionId>/ (KHÔNG có AreaCode).
+  Vd Img/TCKS/2026/06/26/SUB-20260626-AB12/.
+
+### Sync validation (đã sửa)
+- Bỏ kiểm tra Config_UserAreaPermissions. Thay bằng: departmentCode phải khớp phòng ban resolve của user
+  (chặn gửi hộ phòng ban khác); area phải thuộc phòng ban đó (area là nhãn, lenient nếu không đọc được).
+
+### Watermark
+- Giữ nguyên: time/date, address/GPS, departmentCode/Name, areaName, checkItemName (nếu chọn), reporter.
+
+### Dashboard / Gallery / History
+- Không lọc theo user-area. Mọi user đăng nhập xem được dashboard/gallery của tất cả phòng ban.
+  Lịch sử cá nhân vẫn lọc theo email người gửi.
+
+### Deprecate user-area
+- Bỏ "Khu vực người dùng" khỏi nav admin + card dashboard. Trang /admin/config/user-areas giữ lại nhưng
+  có banner "Nâng cao · không dùng cho MVP". /api/user/areas vẫn còn nhưng capture không phụ thuộc.
+- Config_UserAreaPermissions: KHÔNG xoá list, chỉ deprecate/giữ dự phòng.
+
+### Gates: tsc PASS · lint PASS · build PASS.

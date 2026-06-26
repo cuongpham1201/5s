@@ -376,3 +376,14 @@ Data_SubmissionPhotos. Folder ảnh: `Img/YYYY/MM/DD/<DepartmentCode>/<Submissio
 - Data_Submissions.SyncStatus: uploading -> uploaded | failed. Data_SyncLogs ghi mỗi lần chuyển trạng thái.
 - Upload qua `POST /api/sync/submission` (multipart, app-only Graph server-side). History/Gallery/Home
   đọc SharePoint nên user/admin khác xem được ảnh đã nộp.
+
+---
+
+## Phase 3.1 — Area là nhãn; user tự thêm; đổi folder path
+
+- **Config_Areas** = nhãn khu vực cho watermark/báo cáo theo phòng ban (KHÔNG phải phân quyền, KHÔNG phải
+  phân cấp lưu trữ). Mọi user của phòng ban có thể chọn hoặc thêm khu vực.
+- User thêm khu vực: POST /api/config/areas { areaName } (đăng nhập). Phòng ban resolve server-side;
+  AreaCode = `<DepartmentCode>_<TÊN_CHUẨN_HOÁ>` (vd TCKS_VAN_PHONG). Upsert theo AreaCode (restore nếu ẩn).
+- **Folder ảnh** đổi: `Img/<DepartmentCode>/YYYY/MM/DD/<SubmissionId>/` (department-first; KHÔNG có AreaCode).
+- **Config_UserAreaPermissions**: deprecated/dự phòng — không còn dùng cho capture/sync (list vẫn giữ).

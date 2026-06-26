@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { auth } from "@/auth";
-import { listUserAllowedAreas } from "@/lib/sharepoint/user-area-service";
+import { listAreasByDepartmentCode } from "@/lib/sharepoint/area-service";
+import { resolveRequestUser } from "@/lib/auth/request-department";
 import { processSubmissionUpload, type UploadPhotoInput } from "@/lib/sharepoint/submission-upload-service";
 import { vnDateKey } from "@/lib/sharepoint/report-service";
 
@@ -39,8 +39,8 @@ interface SyncMeta {
  * Server-side upload to SharePoint (app-only Graph). Graph token never leaves server.
  */
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  const sessionEmail = session?.user?.email?.toLowerCase();
+  const me = await resolveRequestUser(req);
+  const sessionEmail = me?.email?.toLowerCase();
   if (!sessionEmail) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   let form: FormData;
@@ -71,14 +71,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `tối đa ${MAX_PHOTOS} ảnh mỗi lần gửi` }, { status: 400 });
   }
 
-  // Area permission: the user must be granted this area.
+  // Department scope: a user submits only under their own resolved department.
+  // (Area is a label, not a permission — but it must belong to that department.)
+  if (!me?.departmentResolved || !me.departmentCode) {
+    return NextResponse.json({ error: "chưa xác định được phòng ban của bạn" }, { status: 400 });
+  }
+  if (meta.departmentCode !== me.departmentCode) {
+    return NextResponse.json({ error: "không thể gửi cho phòng ban khác" }, { status: 403 });
+  }
   try {
-    const allowed = await listUserAllowedAreas(sessionEmail);
-    if (!allowed.some((a) => a.code === meta.areaCode)) {
-      return NextResponse.json({ error: "bạn không có quyền chụp khu vực này" }, { status: 403 });
+    const deptAreas = await listAreasByDepartmentCode(me.departmentCode);
+    if (deptAreas.length > 0 && !deptAreas.some((a) => a.code === meta.areaCode)) {
+      return NextResponse.json({ error: "khu vực không thuộc phòng ban của bạn" }, { status: 403 });
     }
   } catch {
-    return NextResponse.json({ error: "không kiểm tra được quyền khu vực" }, { status: 500 });
+    // Non-fatal: if the area list can't be read, proceed (area is a label).
   }
 
   // Collect photo blobs.

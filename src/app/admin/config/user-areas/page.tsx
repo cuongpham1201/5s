@@ -101,7 +101,11 @@ export default function UserAreasPage() {
   const selectedDept = depts.find((d) => d.code === dept) ?? null;
 
   return (
-    <AdminShell title="Phân quyền khu vực theo người dùng" subtitle="User → Department → Allowed Areas (Config_UserAreaPermissions)">
+    <AdminShell title="Phân quyền khu vực theo người dùng" subtitle="Nâng cao · không dùng cho MVP (Config_UserAreaPermissions)">
+      <div className="mb-4 text-[13px] bg-warning-bg text-warning px-3.5 py-2.5 rounded-md">
+        ⚠ Tính năng nâng cao, đã ngừng dùng cho MVP. Khu vực hiện là <b>nhãn cho watermark/báo cáo</b>,
+        KHÔNG phải phân quyền — /capture không còn phụ thuộc trang này. Trang giữ lại để tham khảo/tương lai.
+      </div>
       {msg && <div className="mb-4 text-[13px] bg-info-bg text-info px-3.5 py-2.5 rounded-md">{msg}</div>}
 
       <div className="flex flex-wrap items-center gap-3 mb-4">

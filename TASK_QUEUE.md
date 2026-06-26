@@ -280,7 +280,16 @@ Self-test upload/download/cleanup PASS. Gates tsc/lint/build PASS.
 
 ---
 
-## Phase 3.1+ (TODO)
+## Phase 3.1 — Simplify area model: department areas, user can add area (DONE)
+Area = nhãn watermark/báo cáo (không phải phân quyền). /capture dùng /api/config/areas?departmentCode +
+form thêm khu vực inline (POST /api/config/areas, AreaCode=<Dept>_<tên chuẩn hoá>, upsert/restore,
+resolve dept server-side). Folder ảnh đổi sang Img/<Dept>/YYYY/MM/DD/<SubmissionId>. Sync validation
+chuyển sang department-match (bỏ Config_UserAreaPermissions). Bỏ "Khu vực người dùng" khỏi nav + card,
+trang giữ lại + banner deprecated. Gates tsc/lint/build PASS.
+
+---
+
+## Phase 3.2+ (TODO)
 Chunked upload cho ảnh lớn; cache/CDN ảnh; central SubmissionId sequence; Excel export; notifications;
 gắn checkItem vào Data_Submissions (cột mới) khi cần.
 

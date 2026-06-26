@@ -110,3 +110,12 @@ Lists:
 
 Retry: cùng SubmissionId -> upsert (không trùng dòng) + ghi đè file cùng path. Idempotent.
 Giới hạn: PUT đơn ≤ ~4MB/ảnh (chưa chunked); tối đa 20 ảnh/lần gửi; MIME jpeg/png/webp.
+
+---
+
+## Phase 3.1 — Đổi folder path + Area là nhãn
+
+- Folder ảnh: `Img/<DepartmentCode>/YYYY/MM/DD/<SubmissionId>/` (department-first; KHÔNG có AreaCode).
+- Area chỉ là nhãn watermark/báo cáo. User tự thêm khu vực cho phòng ban mình qua POST /api/config/areas
+  (AreaCode = <Dept>_<tên chuẩn hoá>, upsert/restore, không trùng).
+- Config_UserAreaPermissions: deprecated (giữ list, không dùng cho capture/sync).

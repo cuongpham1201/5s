@@ -9,6 +9,7 @@ import { getAppOnlyClient, type SharePointGraphClient } from "./graph-client";
 import { findListId, resolveSite } from "./site-context";
 import { mapArea } from "./list-helpers";
 import { listActiveDepartments } from "./department-service";
+import { normalizeText } from "./org-codes";
 import type { GraphCollection, GraphListItem } from "./sharepoint-types";
 import type { AreaRecord } from "@/types/sharepoint";
 
@@ -98,6 +99,43 @@ export async function countAreasByDepartment(): Promise<Record<string, number>> 
 export async function getAreaByCode(code: string): Promise<AreaOption | null> {
   const all = await listActiveAreas();
   return all.find((a) => a.code === code) ?? null;
+}
+
+/**
+ * Generate an AreaCode from a department + area name:
+ *   <DepartmentCode>_<NORMALIZED_NAME>  e.g. TCKS_VAN_PHONG, TCKS_KHO_HO_SO
+ * Accent-insensitive, uppercased, non-alphanumeric collapsed to single "_".
+ */
+export function generateAreaCode(departmentCode: string, areaName: string): string {
+  const slug = normalizeText(areaName)
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return `${departmentCode}_${slug || "KHU_VUC"}`;
+}
+
+/**
+ * Create an area for a department from a user-supplied name (idempotent).
+ * Generates the AreaCode server-side and upserts (restores if previously hidden).
+ * Returns the resulting area option.
+ */
+export async function createAreaForDepartment(
+  departmentCode: string,
+  areaName: string,
+  sortOrder?: number,
+): Promise<{ action: "created" | "updated" | "restored"; area: AreaOption }> {
+  const code = generateAreaCode(departmentCode, areaName);
+  const res = await upsertAreaByCode({
+    code,
+    name: areaName.trim(),
+    departmentCode,
+    sortOrder: sortOrder ?? 0,
+    isActive: true,
+  });
+  return {
+    action: res.action,
+    area: { code, name: areaName.trim(), departmentCode, sortOrder: sortOrder ?? 0 },
+  };
 }
 
 // ---- ADMIN (read all + write) ----

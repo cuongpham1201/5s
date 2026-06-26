@@ -31,14 +31,18 @@ function pad2(n: number): string {
   return String(n).padStart(2, "0");
 }
 
-/** Drive-relative folder for a submission, derived from submittedAt (VN day not required — uses ISO date parts of submittedAt UTC→ but we accept explicit yyyy/mm/dd). */
+/**
+ * Drive-relative folder for a submission. Department-first, then date, then
+ * submission — Area is NOT part of the path (Area is only a watermark/report label):
+ *   Img/<DepartmentCode>/YYYY/MM/DD/<SubmissionId>
+ */
 export function buildSubmissionFolder(submissionId: string, submittedAt: string, departmentCode: string): string {
   const d = new Date(submittedAt);
   const yyyy = String(d.getFullYear());
   const mm = pad2(d.getMonth() + 1);
   const dd = pad2(d.getDate());
   const dept = (departmentCode || "UNKNOWN").replace(/[^\w-]/g, "_");
-  return `${FOLDERS.img}/${yyyy}/${mm}/${dd}/${dept}/${submissionId}`;
+  return `${FOLDERS.img}/${dept}/${yyyy}/${mm}/${dd}/${submissionId}`;
 }
 
 /** Deterministic file names for a photo pair (1-based seq). */
