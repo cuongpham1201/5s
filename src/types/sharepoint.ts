@@ -47,6 +47,16 @@ export interface CheckItemRecord {
   Description: string | null;
 }
 
+export interface UserAreaPermissionRecord {
+  Email: string; // Title
+  DisplayName: string | null;
+  DepartmentCode: string | null;
+  AreaCode: string;
+  IsActive: boolean;
+  CreatedAt: string | null; // ISO datetime
+  UpdatedAt: string | null; // ISO datetime
+}
+
 export interface SettingRecord {
   Key: string; // Title
   Value: string;

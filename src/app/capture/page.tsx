@@ -32,15 +32,15 @@ export default function CapturePage() {
     return () => { active = false; };
   }, []);
 
-  const resolved = !!me?.departmentResolved;
-  const department = resolved ? me!.departmentCode! : null;
+  const department = me?.departmentResolved ? me.departmentCode ?? null : null;
   const deptName = me?.departmentName ?? "";
 
+  // Areas come from the user's PERMITTED areas (Config_UserAreaPermissions), not
+  // the whole department — each user only sees what they're allowed to capture.
   useEffect(() => {
-    if (!department) return;
     let active = true;
     setAreasLoading(true);
-    fetch(`/api/config/areas?departmentCode=${encodeURIComponent(department)}`, { cache: "no-store" })
+    fetch(`/api/user/areas`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (!active) return;
@@ -50,20 +50,24 @@ export default function CapturePage() {
       })
       .finally(() => active && setAreasLoading(false));
     return () => { active = false; };
-  }, [department]);
+  }, []);
 
-  // Load applicable checklist whenever department + selected area change.
+  const selectedArea = useMemo(() => areas.find((a) => a.code === selected) ?? null, [areas, selected]);
+
+  // Load applicable checklist whenever the selected area changes (scoped by the
+  // selected area's department).
   useEffect(() => {
-    if (!department || !selected) { setCheckItems([]); return; }
+    if (!selected) { setCheckItems([]); return; }
+    const deptForChecks = selectedArea?.departmentCode || me?.departmentCode || "";
     let active = true;
     setCheckLoading(true);
     setSelectedChecks(new Set());
-    fetch(`/api/config/check-items?departmentCode=${encodeURIComponent(department)}&areaCode=${encodeURIComponent(selected)}`, { cache: "no-store" })
+    fetch(`/api/config/check-items?departmentCode=${encodeURIComponent(deptForChecks)}&areaCode=${encodeURIComponent(selected)}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => active && setCheckItems(d?.checkItems ?? []))
       .finally(() => active && setCheckLoading(false));
     return () => { active = false; };
-  }, [department, selected]);
+  }, [selected, selectedArea, me]);
 
   const toggleCheck = (code: string) =>
     setSelectedChecks((prev) => {
@@ -78,14 +82,14 @@ export default function CapturePage() {
   );
 
   const begin = () => {
-    if (!resolved || !department) return;
     const area = areas.find((a) => a.code === selected);
     if (!area) return;
+    const depCode = area.departmentCode || me?.departmentCode || "";
     const checkItemCode = selectedCheckList.map((c) => c.code).join(",") || undefined;
     const checkItemName = selectedCheckList.map((c) => c.name).join(", ") || undefined;
     startSession({
-      departmentCode: department,
-      departmentName: deptName,
+      departmentCode: depCode,
+      departmentName: depCode === me?.departmentCode ? deptName : area.departmentCode,
       areaCode: area.code,
       areaName: area.name,
       checkItemCode,
@@ -104,7 +108,7 @@ export default function CapturePage() {
       </div>
 
       <div className="flex-1 px-5 pb-4">
-        {!loading && !resolved && (
+        {!loading && !me?.departmentResolved && (
           <div className="mb-4 flex items-start gap-2.5 rounded-md bg-warning-bg text-warning p-3.5">
             <span className="text-lg">⚠</span>
             <span className="text-[13px] font-medium">
@@ -122,18 +126,18 @@ export default function CapturePage() {
           <span className="text-ink-muted text-[14px]">🔒 Từ tài khoản</span>
         </div>
 
-        {resolved && (
+        {(
           <>
             <label className="block mt-6 text-[13px] font-semibold text-ink-muted">
               Khu vực <span className="text-danger">*</span>
             </label>
-            <div className="text-[13px] text-ink-muted mt-1 mb-3">Chọn khu vực cho lần gửi này</div>
+            <div className="text-[13px] text-ink-muted mt-1 mb-3">Chọn khu vực bạn được phép chụp</div>
             {areasLoading ? (
               <div className="text-[13px] text-ink-muted">Đang tải khu vực…</div>
             ) : areas.length === 0 ? (
               <div className="flex items-start gap-2.5 rounded-md bg-warning-bg text-warning p-3.5">
                 <span className="text-lg">⚠</span>
-                <span className="text-[13px] font-medium">Phòng ban chưa có khu vực 5S. Vui lòng liên hệ quản trị.</span>
+                <span className="text-[13px] font-medium">Bạn chưa được phân quyền khu vực chụp. Vui lòng liên hệ quản trị.</span>
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-3">
@@ -207,8 +211,8 @@ export default function CapturePage() {
       <div className="px-5 py-4 pb-[calc(16px+env(safe-area-inset-bottom))] border-t border-line">
         <button
           onClick={begin}
-          disabled={!resolved || !selected || areas.length === 0}
-          className={`btn btn-primary btn-lg btn-block ${!resolved || !selected || areas.length === 0 ? "opacity-50 pointer-events-none" : ""}`}
+          disabled={!selected || areas.length === 0}
+          className={`btn btn-primary btn-lg btn-block ${!selected || areas.length === 0 ? "opacity-50 pointer-events-none" : ""}`}
         >
           📷 Bắt đầu chụp
         </button>

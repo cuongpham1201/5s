@@ -16,6 +16,7 @@ const NAV = [
   { href: "/admin/config/departments", label: "Phòng ban", icon: "🏢" },
   { href: "/admin/config/areas", label: "Khu vực", icon: "📍" },
   { href: "/admin/config/check-items", label: "Hạng mục 5S", icon: "✅" },
+  { href: "/admin/config/user-areas", label: "Khu vực người dùng", icon: "👤" },
   { href: "/admin/config/role-mapping", label: "Phân quyền", icon: "🛡️" },
   { href: "/admin/sharepoint-health", label: "SharePoint Health", icon: "🩺" },
 ] as const;

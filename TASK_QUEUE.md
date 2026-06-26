@@ -260,7 +260,17 @@ trùng + chặn vô hiệu hoá admin cuối). Nav thêm Phân quyền. ADMIN_EM
 
 ---
 
-## Phase 2C.6+ (TODO)
+## Phase 2C.6 — User ↔ Area permission (DONE)
+List mới Config_UserAreaPermissions (provisioned idempotent). user-area-service: listUserAreas,
+listDepartmentUsers, listUserAllowedAreas, grant/upsert, revoke (soft), restore, setUserAreas. API
+/api/admin/config/user-areas (GET/POST/PATCH/DELETE) + /api/user/areas. UI /admin/config/user-areas
+(Department -> Users + badge, checkbox khu vực, Save). Capture đọc /api/user/areas (0 -> "Bạn chưa
+được phân quyền khu vực chụp." + khoá nút). Dashboard + nav thêm card. Soft-delete, idempotent,
+không trùng (email,areaCode). Gates tsc/lint/build PASS.
+
+---
+
+## Phase 2C.7+ (TODO)
 Upload Engine (upload `5S/img` + ghi header/lines Data_Submissions/Data_SubmissionPhotos + offline
 queue + retry + Data_SyncLogs), gắn checkItem vào submission khi upload, Excel, notifications.
 

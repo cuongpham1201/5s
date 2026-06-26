@@ -348,3 +348,17 @@ hoá admin cuối cùng khi người thao tác không phải static admin.
 
 API: GET/POST /api/admin/config/role-mapping; PATCH/DELETE /api/admin/config/role-mapping/[id];
 GET /api/admin/whoami (admin context của user hiện tại). UI: /admin/config/role-mapping.
+
+---
+
+## Config_UserAreaPermissions — phân quyền khu vực người dùng (Phase 2C.6)
+
+Mở rộng phân quyền: User → Department → Allowed Areas → CheckItems. Mỗi user chỉ chụp được khu vực
+được gán. 1 dòng/(Email, AreaCode). Fields: Email (Title), DisplayName, DepartmentCode, AreaCode,
+IsActive, CreatedAt, UpdatedAt. Key = (email lowercase, areaCode) — không trùng; soft-delete
+(IsActive=false); grant lại email+area inactive -> reactivate (không tạo trùng).
+
+API: GET/POST/PATCH/DELETE /api/admin/config/user-areas (Admin; POST = set cả tập areaCodes cho user,
+PATCH = grant đơn, DELETE ?email=&areaCode= = soft revoke). GET /api/user/areas (user hiện tại; [] nếu
+chưa gán). Capture đọc /api/user/areas (không còn lấy toàn bộ khu vực phòng ban).
+UI: /admin/config/user-areas.

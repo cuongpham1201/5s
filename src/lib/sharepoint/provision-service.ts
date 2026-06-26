@@ -63,6 +63,18 @@ const LIST_SPECS: ListSpec[] = [
     ],
   },
   {
+    name: CONFIG_LISTS.userAreaPermissions,
+    columns: [
+      { name: "Email", type: "text", indexed: true },
+      { name: "DisplayName", type: "text" },
+      { name: "DepartmentCode", type: "text", indexed: true },
+      { name: "AreaCode", type: "text", indexed: true },
+      { name: "IsActive", type: "boolean" },
+      { name: "CreatedAt", type: "dateTime" },
+      { name: "UpdatedAt", type: "dateTime" },
+    ],
+  },
+  {
     name: CONFIG_LISTS.settings,
     columns: [
       { name: "Key", type: "text", indexed: true },

@@ -1038,3 +1038,23 @@ KHÔNG đổi schema phá huỷ, KHÔNG xoá data. Code chỉ ở DEV.
 
 ### Gates
 tsc PASS · lint PASS · build PASS.
+
+---
+
+## User ↔ Area permission (2026-06-26)
+
+Phạm vi: tầng phân quyền người chụp — User → Department → Allowed Areas → CheckItems.
+Mỗi nhân viên chỉ thấy khu vực được phép. Chỉ bổ sung, không đổi schema cũ, soft-delete, idempotent.
+
+- List mới Config_UserAreaPermissions (Email, DisplayName, DepartmentCode, AreaCode, IsActive,
+  CreatedAt, UpdatedAt). Provision idempotent: CREATED 7 cột; các list khác exists/0 (không đụng).
+- service src/lib/sharepoint/user-area-service.ts: listUserAreas, listDepartmentUsers,
+  listUserAllowedAreas, upsertUserArea/grantArea, revokeArea (soft), restoreUserArea, setUserAreas
+  (sync set). Key = (email lowercase, areaCode), không trùng; inactive + grant lại -> reactivate.
+- API: GET/POST/PATCH/DELETE /api/admin/config/user-areas (Admin); GET /api/user/areas (user; [] nếu chưa gán).
+- UI /admin/config/user-areas: cột trái Department -> Users (badge số khu vực) + thêm người dùng + tìm;
+  cột phải checkbox khu vực + Lưu.
+- Capture: lấy /api/user/areas thay vì toàn bộ Area của phòng ban; 0 area ->
+  "Bạn chưa được phân quyền khu vực chụp." + khoá nút.
+- Admin dashboard + nav: thêm "Phân quyền khu vực người dùng".
+- Gates tsc/lint/build PASS.
