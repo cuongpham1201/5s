@@ -387,3 +387,15 @@ Data_SubmissionPhotos. Folder ảnh: `Img/YYYY/MM/DD/<DepartmentCode>/<Submissio
   AreaCode = `<DepartmentCode>_<TÊN_CHUẨN_HOÁ>` (vd TCKS_VAN_PHONG). Upsert theo AreaCode (restore nếu ẩn).
 - **Folder ảnh** đổi: `Img/<DepartmentCode>/YYYY/MM/DD/<SubmissionId>/` (department-first; KHÔNG có AreaCode).
 - **Config_UserAreaPermissions**: deprecated/dự phòng — không còn dùng cho capture/sync (list vẫn giữ).
+
+---
+
+## Phase 3.2 — UserProfile = nguồn sự thật department
+
+- **Data_UserProfiles** (Email key): DisplayName, DepartmentRaw, DepartmentCode, DepartmentName,
+  JobTitle, OfficeLocation, LastDepartmentSync, LastLogin, IsActive.
+- Resolve department 1 LẦN khi login đầu; chỉ re-resolve khi DepartmentRaw (Graph) đổi — nếu không
+  chỉ refresh LastLogin + light fields. forceResyncProfile cho admin "Sync lại".
+- /api/me đọc Data_UserProfiles (tạo on-demand nếu thiếu), KHÔNG resolve live. POST /api/profile/sync
+  chạy 1 lần sau login (từ /dashboard). resolveRequestUser (areas POST + sync) cũng đọc profile.
+- Capture session KHÔNG chứa DepartmentRaw (chỉ DepartmentCode/Name/Area/CheckItem/Reporter/SubmissionId).

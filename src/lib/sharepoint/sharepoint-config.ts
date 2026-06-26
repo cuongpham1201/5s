@@ -41,6 +41,7 @@ export const sharePointConfig = {
     submissions: "Data_Submissions",
     submissionPhotos: "Data_SubmissionPhotos",
     syncLogs: "Data_SyncLogs",
+    userProfiles: "Data_UserProfiles",
   },
 } as const;
 
@@ -59,6 +60,7 @@ export const DATA_LISTS = {
   submissions: sharePointConfig.lists.submissions,
   submissionPhotos: sharePointConfig.lists.submissionPhotos,
   syncLogs: sharePointConfig.lists.syncLogs,
+  userProfiles: sharePointConfig.lists.userProfiles,
 } as const;
 
 export const GRAPH_BASE = "https://graph.microsoft.com/v1.0";

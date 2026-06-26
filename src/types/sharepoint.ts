@@ -109,3 +109,16 @@ export interface SyncLogRecord {
   Message: string | null;
   Timestamp: string; // ISO datetime
 }
+
+export interface UserProfileRecord {
+  Email: string; // Title; key (lowercased compare)
+  DisplayName: string | null;
+  DepartmentRaw: string | null; // raw Graph department value last seen
+  DepartmentCode: string | null; // resolved 5S code
+  DepartmentName: string | null;
+  JobTitle: string | null;
+  OfficeLocation: string | null;
+  LastDepartmentSync: string | null; // ISO datetime of last resolve
+  LastLogin: string | null; // ISO datetime
+  IsActive: boolean;
+}

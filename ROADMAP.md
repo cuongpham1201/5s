@@ -114,3 +114,12 @@
 - Mỗi phase **giao được giá trị độc lập** (có thể dừng và vẫn dùng được).
 - Không tối ưu sớm: anti-fraud tự động & notification chỉ làm sau khi luồng cốt lõi ổn định.
 - Quyết định mở rộng (archive, geofence, PDF) dựa trên **số liệu thật** sau khi vận hành.
+
+---
+
+## Phase 3.2 — User Profile Architecture (kiến trúc nền chính thức)
+
+Luồng chuẩn: M365 login → Graph /me → DepartmentRaw → resolve **1 lần** → **Data_UserProfiles** →
+/dashboard → Capture/History/Gallery. Mọi màn hình đọc UserProfile (qua /api/me), KHÔNG resolve
+department trực tiếp. Resolve lại chỉ khi DepartmentRaw đổi (admin có thể "Sync lại"). /dashboard là
+HOME của user; admin thấy card Quản trị → /admin. Đây là kiến trúc nền chính thức của 5S.

@@ -9,7 +9,8 @@ const DEV_ALLOWED = process.env.NEXT_PUBLIC_ALLOW_DEV_LOGIN === "true";
 
 export default function SignInPage() {
   const [providers, setProviders] = useState<Providers>(null);
-  const [callbackUrl, setCallbackUrl] = useState("/");
+  // Default landing after login is the user dashboard (NOT /capture).
+  const [callbackUrl, setCallbackUrl] = useState("/dashboard");
   const [email, setEmail] = useState("nguyen.van.a@biahalong.com");
   const [role, setRole] = useState("employee");
 

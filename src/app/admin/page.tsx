@@ -21,6 +21,7 @@ const CARDS = [
   { href: "/admin/config/areas", icon: "📍", title: "Gán khu vực chụp", desc: "Khu vực 5S theo từng phòng ban" },
   { href: "/admin/config/check-items", icon: "✅", title: "Hạng mục 5S", desc: "Checklist / hạng mục kiểm tra" },
   { href: "/admin/config/role-mapping", icon: "🛡️", title: "Phân quyền quản trị", desc: "Gán quyền theo email (Config_RoleMapping)" },
+  { href: "/admin/user-profiles", icon: "👤", title: "Hồ sơ người dùng", desc: "Data_UserProfiles · phòng ban đã resolve" },
   { href: "/admin/sharepoint-health", icon: "🩺", title: "SharePoint health", desc: "Kiểm tra site/library/lists Ban5S" },
   { href: "/admin/ranking", icon: "🏆", title: "Lịch sử / báo cáo", desc: "Xếp hạng & thống kê đơn vị" },
 ];

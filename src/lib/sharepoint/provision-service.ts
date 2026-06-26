@@ -135,6 +135,21 @@ const LIST_SPECS: ListSpec[] = [
       { name: "Timestamp", type: "dateTime", indexed: true },
     ],
   },
+  {
+    name: DATA_LISTS.userProfiles,
+    columns: [
+      { name: "Email", type: "text", indexed: true },
+      { name: "DisplayName", type: "text" },
+      { name: "DepartmentRaw", type: "text" },
+      { name: "DepartmentCode", type: "text", indexed: true },
+      { name: "DepartmentName", type: "text" },
+      { name: "JobTitle", type: "text" },
+      { name: "OfficeLocation", type: "text" },
+      { name: "LastDepartmentSync", type: "dateTime" },
+      { name: "LastLogin", type: "dateTime" },
+      { name: "IsActive", type: "boolean" },
+    ],
+  },
 ];
 
 function columnPayload(c: ColumnSpec): Record<string, unknown> {

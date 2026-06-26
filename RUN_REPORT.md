@@ -1153,3 +1153,47 @@ phân cấp lưu trữ. Bỏ phụ thuộc Config_UserAreaPermissions khỏi lu�
 - Config_UserAreaPermissions: KHÔNG xoá list, chỉ deprecate/giữ dự phòng.
 
 ### Gates: tsc PASS · lint PASS · build PASS.
+
+---
+
+## User profile architecture + dashboard router (2026-06-26)
+
+Refactor kien truc (khong phai hotfix): department resolve 1 LAN, luu Data_UserProfiles; moi man hinh
+doc profile thay vi resolve truc tiep moi lan. Them /dashboard lam HOME cho user.
+
+### Kien truc moi
+M365 login -> Graph /me -> DepartmentRaw -> resolve 1 lan -> Data_UserProfiles -> Dashboard ->
+Capture/History/Gallery. Cac man hinh KHONG resolve department nua.
+
+### Data_UserProfiles (PHASE A)
+List moi (provision idempotent: CREATED 10 cot; list khac exists/0): Email, DisplayName, DepartmentRaw,
+DepartmentCode, DepartmentName, JobTitle, OfficeLocation, LastDepartmentSync, LastLogin, IsActive.
+
+### user-profile-service (PHASE B)
+getProfile, listProfiles, createProfile, updateProfile, touchLastLogin, syncProfileFromGraph
+(lan dau: resolve + create; lan sau: chi RE-RESOLVE khi DepartmentRaw doi, neu khong chi refresh
+light fields + LastLogin), forceResyncProfile (admin "Sync lai"). On-demand: thieu profile -> tu tao.
+
+### Login flow (PHASE C)
+signin callbackUrl mac dinh = /dashboard (KHONG ve /capture). /dashboard mount goi POST
+/api/profile/sync (full sync 1 lan) roi load /api/me + /api/admin/whoami.
+
+### /api/me (PHASE D)
+KHONG resolve department live nua. Doc Data_UserProfiles (tao on-demand neu thieu) -> tra
+DisplayName, Email, DepartmentCode, DepartmentName, Role, JobTitle, OfficeLocation, LastLogin,
+departmentResolved/Warning. departmentSource="profile".
+
+### Dashboard router (PHASE E/F)
+/dashboard: card Chup anh, Lich su, Gallery, Dashboard hom nay, Ho so; neu admin them card Quan tri
+-> /admin. /admin them card + nav "Ho so nguoi dung".
+
+### Capture/History/Gallery (PHASE G/H/I/K)
+/capture chi goi /api/me (profile) -> departmentCode -> /api/config/areas -> chup. Session KHONG chua
+DepartmentRaw. /history doc Data_Submissions loc theo Email. /gallery (moi, /api/photos) moi user xem
+duoc, doc SharePoint, khong phu thuoc session. resolveRequestUser (areas POST + sync) cung doc profile.
+
+### Admin user profiles (PHASE J)
+/admin/user-profiles: list Email/DisplayName/DepartmentRaw/Code/Name/LastLogin/LastDepartmentSync +
+trang thai resolved + nut "Sync lai" (POST /api/admin/user-profiles).
+
+### Gates: tsc PASS · lint PASS · build PASS (31/31).

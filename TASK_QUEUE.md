@@ -289,7 +289,17 @@ trang giữ lại + banner deprecated. Gates tsc/lint/build PASS.
 
 ---
 
-## Phase 3.2+ (TODO)
+## Phase 3.2 — User profile architecture + dashboard router (DONE)
+List moi Data_UserProfiles (provisioned). user-profile-service: get/list/create/update/touchLastLogin/
+syncProfileFromGraph (resolve 1 lan, chi re-resolve khi DepartmentRaw doi)/forceResyncProfile.
+/api/me doc profile (khong resolve live; tao on-demand). POST /api/profile/sync (sau login). signin ->
+/dashboard. /dashboard router (Chup/Lich su/Gallery/Dashboard hom nay/Ho so + Quan tri neu admin).
+/gallery (moi, /api/photos, moi user). /admin/user-profiles + nut Sync lai. resolveRequestUser doc
+profile. Session khong chua DepartmentRaw. Gates tsc/lint/build PASS (31/31).
+
+---
+
+## Phase 3.3+ (TODO)
 Chunked upload cho ảnh lớn; cache/CDN ảnh; central SubmissionId sequence; Excel export; notifications;
 gắn checkItem vào Data_Submissions (cột mới) khi cần.
 

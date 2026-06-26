@@ -90,3 +90,14 @@ retry ghi đè). SubmissionId = SUB-YYYYMMDD-XXXX dùng xuyên suốt queue/list
 - Khu vực CHỈ là nhãn cho watermark + ngữ cảnh báo cáo; không giới hạn ai được chụp.
 - Lưu trữ ảnh: Img/<DepartmentCode>/YYYY/MM/DD/<SubmissionId>/ (KHÔNG chứa AreaCode).
 - Config_UserAreaPermissions: deprecated/dự phòng — không dùng trong luồng chụp.
+
+---
+
+## Phase 3.2 — UserProfile la nguon su that cho department
+
+- Login M365 -> Graph /me -> DepartmentRaw -> resolve 1 LAN -> Data_UserProfiles.
+- /dashboard (HOME) goi POST /api/profile/sync (sync 1 lan sau login), sau do moi man hinh doc
+  /api/me (doc Data_UserProfiles, KHONG resolve live; tao on-demand neu thieu).
+- Resolve lai CHI khi DepartmentRaw doi; nguoc lai chi cap nhat LastLogin + light fields.
+- /capture, /history, /gallery deu doc profile/SharePoint, khong resolve department truc tiep.
+- Capture session chi chua: DepartmentCode, DepartmentName, Area, CheckItem, Reporter, SubmissionId.

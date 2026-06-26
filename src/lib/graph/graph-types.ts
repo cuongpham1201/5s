@@ -46,6 +46,10 @@ export interface MeResponse {
   employeeId: string | null;
   id: string | null;
   source: "microsoft-entra-id" | "dev";
+  /** App role (employee/environment/admin) from the session. */
+  role?: string;
+  /** ISO datetime of last login (from the stored profile). */
+  lastLogin?: string | null;
 }
 
 export class GraphError extends Error {

@@ -171,3 +171,21 @@ Phạm vi (scope) hạng mục:
 - **5000 item view threshold:** `Data_Submissions`/`Data_SubmissionPhotos` lớn nhanh → query luôn filter theo cột **indexed** (`DepartmentCode`, `SubmissionDate`); cân nhắc archive theo năm.
 - **File > 4MB:** dùng **upload session** (chunked) của Graph; ảnh đã nén client (~<2MB) nên đa số PUT thẳng.
 - **Throttling Graph:** batch, `$select`/`$filter`, tôn trọng `Retry-After`.
+
+### Data_UserProfiles — "UserProfiles" (Phase 3.2)
+| Internal Name | Display | Type | Required | Indexed | Notes |
+|---|---|---|:---:|:---:|---|
+| Title | Title | Text | ✅ | ✅ | = Email |
+| Email | Email | Text | ✅ | ✅ | key (so sánh lowercase) |
+| DisplayName | Display Name | Text | ⬜ | ➖ | |
+| DepartmentRaw | Department Raw | Text | ⬜ | ➖ | giá trị department thô từ Graph (để so sánh đổi) |
+| DepartmentCode | Department Code | Text | ⬜ | ✅ | code 5S đã resolve |
+| DepartmentName | Department Name | Text | ⬜ | ➖ | |
+| JobTitle | Job Title | Text | ⬜ | ➖ | |
+| OfficeLocation | Office Location | Text | ⬜ | ➖ | |
+| LastDepartmentSync | Last Department Sync | DateTime | ⬜ | ➖ | lần resolve gần nhất |
+| LastLogin | Last Login | DateTime | ⬜ | ➖ | |
+| IsActive | Active | YesNo | ✅ | ➖ | |
+
+UserProfile = nguồn sự thật cho department của user. Resolve 1 lần (login đầu) + chỉ resolve lại khi
+DepartmentRaw đổi. Mọi màn hình đọc profile (qua /api/me) thay vì resolve trực tiếp.
