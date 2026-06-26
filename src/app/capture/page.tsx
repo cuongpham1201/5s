@@ -129,7 +129,7 @@ export default function CapturePage() {
   return (
     <AppShell showNav={false}>
       <div className="flex items-center gap-3 px-5 pt-3 pb-3">
-        <Link href="/" className="w-10 h-10 rounded-pill grid place-items-center text-xl bg-surface">←</Link>
+        <Link href="/dashboard" className="w-10 h-10 rounded-pill grid place-items-center text-xl bg-surface">←</Link>
         <div className="text-[18px] font-semibold">Chuẩn bị chụp</div>
       </div>
 

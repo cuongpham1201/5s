@@ -43,7 +43,7 @@ export default function HistoryPage() {
 
   return (
     <AppShell>
-      <AppHeader title="Lịch sử của tôi" subtitle="Các lần gửi của bạn" />
+      <AppHeader title="Lịch sử của tôi" subtitle="Các lần gửi của bạn" showHome />
       <div className="px-4 pb-6">
         {loading ? (
           <div className="text-ink-muted text-[14px] px-1">Đang tải…</div>

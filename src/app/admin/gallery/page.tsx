@@ -23,6 +23,7 @@ function fmt(iso?: string): string {
 export default function GalleryPage() {
   const [photos, setPhotos] = useState<GalleryPhoto[]>([]);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetch("/api/admin/photos?limit=120")
@@ -30,6 +31,8 @@ export default function GalleryPage() {
       .then((d) => setPhotos(d?.photos ?? []))
       .finally(() => setLoading(false));
   }, []);
+
+  const markFailed = (key: string) => setFailed((p) => new Set(p).add(key));
 
   return (
     <AdminShell title="Thư viện ảnh" subtitle="Ảnh 5S đã đồng bộ từ SharePoint">
@@ -42,16 +45,25 @@ export default function GalleryPage() {
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
-          {photos.map((g) => (
-            <div key={`${g.submissionId}-${g.seqNo}`} className="relative aspect-square rounded-md overflow-hidden shadow-e2 bg-surface">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={`/api/photo?path=${encodeURIComponent(g.watermarkedPath)}`} alt={g.areaName} loading="lazy" className="w-full h-full object-cover" />
-              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent text-white text-[11px] font-semibold px-2.5 pt-4 pb-2">
-                {g.departmentCode} · {g.areaName}
-                <span className="block font-normal text-[10px] opacity-90">{fmt(g.submittedAt)}</span>
+          {photos.map((g) => {
+            const key = `${g.submissionId}-${g.seqNo}`;
+            return (
+              <div key={key} className="relative aspect-square rounded-md overflow-hidden shadow-e2 bg-surface">
+                {failed.has(key) ? (
+                  <div className="w-full h-full grid place-items-center text-center text-ink-muted p-2">
+                    <span className="text-[11px] leading-tight">🖼️<br />Ảnh lỗi / không tải được</span>
+                  </div>
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={`/api/photo?path=${encodeURIComponent(g.watermarkedPath)}`} alt={g.areaName} loading="lazy" onError={() => markFailed(key)} className="w-full h-full object-cover" />
+                )}
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent text-white text-[11px] font-semibold px-2.5 pt-4 pb-2">
+                  {g.departmentCode} · {g.areaName}
+                  <span className="block font-normal text-[10px] opacity-90">{fmt(g.submittedAt)}</span>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </AdminShell>

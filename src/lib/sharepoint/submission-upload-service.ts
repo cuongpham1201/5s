@@ -12,10 +12,12 @@
 import { DATA_LISTS } from "./sharepoint-config";
 import { getAppOnlyClient, type SharePointGraphClient } from "./graph-client";
 import { findListId, resolveSite } from "./site-context";
-import { mapSubmission } from "./list-helpers";
-import { ensureSubmissionFolder, uploadPhotoPair } from "./photo-upload-service";
+import { ensureSubmissionFolder, uploadPhotoPair, downloadFromImgPath } from "./photo-upload-service";
+import { detectImageType, edgeHex, bytesRoundTripOk } from "./image-bytes";
 import type { GraphCollection, GraphListItem } from "./sharepoint-types";
 import type { SubmissionStatus, SyncStatus } from "@/types/sharepoint";
+
+const ilog = (action: string, data: Record<string, unknown>) => console.warn("[5S_IMAGE_DEBUG]", action, data);
 
 export interface UploadPhotoInput {
   seqNo: number;
@@ -215,15 +217,44 @@ export async function processSubmissionUpload(input: UploadSubmissionInput): Pro
 
     const uploaded: UploadResult["photos"] = [];
     for (const p of input.photos) {
-      const res = await uploadPhotoPair({
-        client,
-        driveId,
-        folder,
-        seqNo: p.seqNo,
-        original: p.original,
-        watermarked: p.watermarked,
-        contentType: p.contentType,
+      // 1) Detect REAL image type from bytes (refuse mislabeled / non-image).
+      const oType = detectImageType(p.original);
+      const wType = detectImageType(p.watermarked);
+      const oEdge = edgeHex(p.original);
+      const wEdge = edgeHex(p.watermarked);
+      ilog("upload.detect", {
+        submissionId: input.submissionId, seq: p.seqNo,
+        originalBytes: p.original.byteLength, originalMime: oType?.mime ?? "UNKNOWN", originalFirst: oEdge.first, originalLast: oEdge.last,
+        watermarkedBytes: p.watermarked.byteLength, watermarkedMime: wType?.mime ?? "UNKNOWN", watermarkedFirst: wEdge.first, watermarkedLast: wEdge.last,
       });
+      if (!oType || !wType) {
+        throw new Error(`Ảnh #${p.seqNo} không hợp lệ (không phải JPEG/PNG/WEBP). Vui lòng chụp lại.`);
+      }
+
+      // 2) Upload using the REAL extension + content-type.
+      const res = await uploadPhotoPair({
+        client, driveId, folder, seqNo: p.seqNo,
+        original: p.original, watermarked: p.watermarked,
+        originalExt: oType.ext, watermarkedExt: wType.ext,
+        originalType: oType.mime, watermarkedType: wType.mime,
+      });
+
+      // 3) Verify integrity: download back and compare bytes + magic (both files).
+      const [dlO, dlW] = await Promise.all([
+        downloadFromImgPath(client, driveId, res.originalPath),
+        downloadFromImgPath(client, driveId, res.watermarkedPath),
+      ]);
+      const okO = bytesRoundTripOk(p.original, dlO.data) && !!detectImageType(dlO.data);
+      const okW = bytesRoundTripOk(p.watermarked, dlW.data) && !!detectImageType(dlW.data);
+      ilog("upload.verify", {
+        submissionId: input.submissionId, seq: p.seqNo,
+        originalUploaded: p.original.byteLength, originalDownloaded: dlO.data.byteLength, originalOk: okO,
+        watermarkedUploaded: p.watermarked.byteLength, watermarkedDownloaded: dlW.data.byteLength, watermarkedOk: okW,
+      });
+      if (!okO || !okW) {
+        throw new Error(`Ảnh #${p.seqNo} tải lên không toàn vẹn (byte không khớp). Sẽ thử lại.`);
+      }
+
       const photoId = `${input.submissionId}-P${String(p.seqNo).padStart(2, "0")}`;
       await upsertPhotoRow(client, siteId, photoListId, {
         photoId,

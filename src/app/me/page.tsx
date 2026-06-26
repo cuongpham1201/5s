@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { signOut } from "next-auth/react";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
@@ -35,7 +36,10 @@ export default function MePage() {
   return (
     <AppShell>
       <div className="px-5 pt-2 pb-3 flex items-center justify-between">
-        <span className="text-[22px] font-semibold">Hồ sơ</span>
+        <span className="flex items-center gap-2.5">
+          <Link href="/dashboard" aria-label="Về Dashboard" className="w-9 h-9 rounded-pill grid place-items-center text-lg bg-surface">←</Link>
+          <span className="text-[22px] font-semibold">Hồ sơ</span>
+        </span>
         {profile && (
           <StatusBadge tone={profile.source === "microsoft-entra-id" ? "success" : "neutral"}>
             {profile.source === "microsoft-entra-id" ? "Microsoft 365" : "Dev mock"}

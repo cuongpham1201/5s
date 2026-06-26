@@ -45,10 +45,14 @@ export function buildSubmissionFolder(submissionId: string, submittedAt: string,
   return `${FOLDERS.img}/${dept}/${yyyy}/${mm}/${dd}/${submissionId}`;
 }
 
-/** Deterministic file names for a photo pair (1-based seq). */
-export function buildPhotoFileNames(seqNo: number): { original: string; watermarked: string } {
+/** Deterministic file names for a photo pair (1-based seq) using the REAL ext. */
+export function buildPhotoFileNames(
+  seqNo: number,
+  originalExt = "jpg",
+  watermarkedExt = "jpg",
+): { original: string; watermarked: string } {
   const n = pad2(seqNo);
-  return { original: `original-${n}.jpg`, watermarked: `watermarked-${n}.jpg` };
+  return { original: `original-${n}.${originalExt}`, watermarked: `watermarked-${n}.${watermarkedExt}` };
 }
 
 async function getDriveId(client: SharePointGraphClient): Promise<string> {
@@ -92,19 +96,22 @@ export interface PhotoPairInput {
   seqNo: number;
   original: ArrayBuffer | Uint8Array;
   watermarked: ArrayBuffer | Uint8Array;
-  contentType?: string;
+  /** REAL types detected from bytes (filenames + content-type derive from these). */
+  originalExt?: string;
+  watermarkedExt?: string;
+  originalType?: string;
+  watermarkedType?: string;
 }
 
 /** Upload an original+watermarked pair into the submission folder. Idempotent paths. */
 export async function uploadPhotoPair(input: PhotoPairInput): Promise<UploadedPhoto> {
   const { client, driveId, folder, seqNo } = input;
-  const contentType = input.contentType ?? "image/jpeg";
-  const names = buildPhotoFileNames(seqNo);
+  const names = buildPhotoFileNames(seqNo, input.originalExt ?? "jpg", input.watermarkedExt ?? "jpg");
   const originalPath = `${folder}/${names.original}`;
   const watermarkedPath = `${folder}/${names.watermarked}`;
   const [orig, wm] = await Promise.all([
-    uploadBytesToImgPath(client, driveId, originalPath, input.original, contentType),
-    uploadBytesToImgPath(client, driveId, watermarkedPath, input.watermarked, contentType),
+    uploadBytesToImgPath(client, driveId, originalPath, input.original, input.originalType ?? "image/jpeg"),
+    uploadBytesToImgPath(client, driveId, watermarkedPath, input.watermarked, input.watermarkedType ?? "image/jpeg"),
   ]);
   return {
     seqNo,
@@ -115,10 +122,19 @@ export async function uploadPhotoPair(input: PhotoPairInput): Promise<UploadedPh
   };
 }
 
+/** Download a photo's bytes via an existing client/drive (for integrity verify). */
+export async function downloadFromImgPath(
+  client: SharePointGraphClient,
+  driveId: string,
+  relativePath: string,
+): Promise<{ data: ArrayBuffer; contentType: string }> {
+  const encoded = relativePath.split("/").map(encodeURIComponent).join("/");
+  return client.getContent(`/drives/${driveId}/root:/${encoded}:/content`);
+}
+
 /** Download a photo's bytes by its drive-relative path (for the authenticated proxy). */
 export async function getImgContent(relativePath: string): Promise<{ data: ArrayBuffer; contentType: string }> {
   const client = await getAppOnlyClient();
   const driveId = await getDriveId(client);
-  const encoded = relativePath.split("/").map(encodeURIComponent).join("/");
-  return client.getContent(`/drives/${driveId}/root:/${encoded}:/content`);
+  return downloadFromImgPath(client, driveId, relativePath);
 }

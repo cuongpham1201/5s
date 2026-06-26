@@ -96,7 +96,10 @@ export async function POST(req: NextRequest) {
     if (!(orig instanceof Blob) || !(wm instanceof Blob)) {
       return NextResponse.json({ error: `thiếu file ảnh cho seq ${mp.seqNo}` }, { status: 400 });
     }
-    if (!ALLOWED_MIME.has(orig.type) || !ALLOWED_MIME.has(wm.type)) {
+    // Reject only when a type IS declared and is clearly not an allowed image.
+    // Empty/octet-stream is allowed here — the server verifies real bytes (magic
+    // numbers) in submission-upload-service before any list write.
+    if ((orig.type && !ALLOWED_MIME.has(orig.type)) || (wm.type && !ALLOWED_MIME.has(wm.type))) {
       return NextResponse.json({ error: "chỉ chấp nhận ảnh jpeg/png/webp" }, { status: 400 });
     }
     photos.push({

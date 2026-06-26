@@ -5,10 +5,11 @@ import { usePathname } from "next/navigation";
 import { Icon, type IconName } from "@/components/ui/Icon";
 
 const ITEMS: { href: string; label: string; icon: IconName }[] = [
-  { href: "/", label: "Trang chủ", icon: "home" },
-  { href: "/my-unit", label: "Phòng ban", icon: "building" },
-  { href: "/overview", label: "Toàn cảnh", icon: "chart" },
+  { href: "/dashboard", label: "Trang chủ", icon: "home" },
+  { href: "/capture", label: "Chụp ảnh", icon: "camera" },
+  { href: "/gallery", label: "Gallery", icon: "image" },
   { href: "/history", label: "Lịch sử", icon: "clock" },
+  { href: "/me", label: "Hồ sơ", icon: "user" },
 ];
 
 export function BottomNav() {
@@ -16,7 +17,7 @@ export function BottomNav() {
   return (
     <nav className="bottom-nav">
       {ITEMS.map((it) => {
-        const active = it.href === "/" ? pathname === "/" : pathname.startsWith(it.href);
+        const active = pathname === it.href || pathname.startsWith(it.href + "/");
         return (
           <Link
             key={it.href}

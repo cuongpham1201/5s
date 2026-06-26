@@ -49,15 +49,15 @@ export function AdminShell({
           open ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         }`}
       >
-        <div className="flex items-center gap-2.5 px-2 pt-1.5 pb-[18px]">
+        <Link href="/dashboard" onClick={() => setOpen(false)} className="flex items-center gap-2.5 px-2 pt-1.5 pb-[18px]" aria-label="Về Dashboard">
           <div className="w-9 h-9 rounded-[10px] grid place-items-center text-white font-extrabold text-[15px] bg-gradient-to-br from-[#1480d4] to-[#115EA3]">
             5S
           </div>
           <div>
             <div className="font-bold text-[16px]">5S Daily</div>
-            <div className="text-[11px] text-ink-muted">Ban Môi trường đời sống</div>
+            <div className="text-[11px] text-ink-muted">← Về Dashboard</div>
           </div>
-        </div>
+        </Link>
         {NAV.map((n, i) =>
           "section" in n ? (
             <div key={i} className="text-[11px] font-bold text-ink-muted uppercase tracking-wide px-3 pt-3.5 pb-1.5">
