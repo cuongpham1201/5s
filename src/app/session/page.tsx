@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { InfoRow } from "@/components/ui/Card";
 import { PhotoThumb } from "@/components/media/PhotoThumb";
 import { useSessionCapture } from "@/features/capture/session-context";
+import * as store from "@/lib/submissions/local-submission-store";
 
 function fmt(iso: string): string {
   const d = new Date(iso);
@@ -18,6 +19,19 @@ export default function SessionPage() {
   const router = useRouter();
   const { hydrated, session, removePhoto, clearSession, completeSession } = useSessionCapture();
   const [confirming, setConfirming] = useState(false);
+
+  // Temporary capture-flow diagnostics (no secrets).
+  useEffect(() => {
+    if (!hydrated) return;
+    console.warn("[5s-debug]", "session.mount", {
+      hydrated,
+      hasSession: !!session,
+      sessionId: session?.sessionId ?? null,
+      photoCount: session?.photos.length ?? 0,
+      lsSessionExists: !!store.getCurrentSession(),
+      lsCompletedCount: store.listCompletedSubmissions().length,
+    });
+  }, [hydrated, session]);
 
   if (!hydrated) {
     return (

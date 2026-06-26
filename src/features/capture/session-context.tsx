@@ -65,9 +65,12 @@ export function SessionCaptureProvider({ children }: { children: ReactNode }) {
   // Hydrate from the local store (client only). `hydrated` flips true AFTER this
   // so route guards never redirect during the null window on a fresh/refresh load.
   useEffect(() => {
-    setSession(store.getCurrentSession());
+    console.warn("[5s-debug]", "ctx.hydrate:begin", {});
+    const loaded = store.getCurrentSession();
+    setSession(loaded);
     setHistory(store.listCompletedSubmissions());
     setHydrated(true);
+    console.warn("[5s-debug]", "ctx.hydrate:end", { loadedSessionId: loaded?.sessionId ?? null, loadedPhotoCount: loaded?.photos.length ?? 0 });
   }, []);
 
   const startSession = useCallback((args: StartArgs): SubmissionSession => {
@@ -82,9 +85,7 @@ export function SessionCaptureProvider({ children }: { children: ReactNode }) {
     // Persist to localStorage FIRST (synchronous) so a fresh load of /camera can
     // re-hydrate the session even if React state didn't carry across navigation.
     const saved = store.saveCurrentSession(next);
-    if (!saved && process.env.NODE_ENV !== "production") {
-      console.warn("[capture] saveCurrentSession returned false (localStorage quota/unavailable).");
-    }
+    console.warn("[5s-debug]", "ctx.startSession", { sessionId: next.sessionId, savedToLocalStorage: saved, areaCode: next.areaCode, checkItemCode: next.checkItemCode ?? null });
     setSession(next);
     setPendingCapture(null);
     return next;
@@ -92,6 +93,7 @@ export function SessionCaptureProvider({ children }: { children: ReactNode }) {
 
   const addPhoto = useCallback((photo: SessionPhoto) => {
     const updated = store.addPhotoToSession(photo);
+    console.warn("[5s-debug]", "ctx.addPhoto", { photoId: photo.photoId, ok: !!updated, newPhotoCount: updated?.photos.length ?? null });
     if (updated) setSession(updated);
   }, []);
 
@@ -103,6 +105,7 @@ export function SessionCaptureProvider({ children }: { children: ReactNode }) {
 
   const clearSession = useCallback(() => {
     const current = store.getCurrentSession();
+    console.warn("[5s-debug]", "ctx.clearSession", { sessionId: current?.sessionId ?? null });
     store.clearCurrentSession();
     setSession(null);
     setPendingCapture(null);
@@ -111,6 +114,7 @@ export function SessionCaptureProvider({ children }: { children: ReactNode }) {
 
   const completeSession = useCallback((): CompletedSubmission | null => {
     const completed = store.completeCurrentSession();
+    console.warn("[5s-debug]", "ctx.completeSession", { submissionId: completed?.submissionId ?? null, photoCount: completed?.photoCount ?? 0 });
     if (completed) {
       setSession(null);
       setPendingCapture(null);

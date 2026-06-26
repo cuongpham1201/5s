@@ -8,8 +8,12 @@ import { useSessionCapture } from "@/features/capture/session-context";
 import { generateWatermarkedImage } from "@/lib/watermark/watermark-engine";
 import { buildWatermarkMetadata } from "@/lib/submissions/metadata";
 import { dataUrlToBlob, makeThumbnailDataUrl } from "@/lib/storage/image-utils";
-import { putPhoto } from "@/lib/storage/photo-store";
+import { putPhoto, listPhotosBySubmission } from "@/lib/storage/photo-store";
+import * as store from "@/lib/submissions/local-submission-store";
 import type { SessionPhoto, WatermarkMetadata } from "@/types/submission";
+
+/** Temporary capture-flow diagnostics (no secrets). */
+const dbg = (step: string, data: Record<string, unknown>) => console.warn("[5s-debug]", step, data);
 
 export default function PreviewPage() {
   const router = useRouter();
@@ -26,8 +30,13 @@ export default function PreviewPage() {
   // so we don't bounce away during the pre-hydration null window.
   useEffect(() => {
     if (!hydrated) return;
-    if (!session) router.replace("/capture");
-    else if (!pendingCapture) router.replace("/camera");
+    if (!session) {
+      dbg("preview.guard:redirect", { reason: "no-session", hydrated, session: null, hasPending: !!pendingCapture, currentRoute: "/preview", lsSession: store.getCurrentSession()?.sessionId ?? null });
+      router.replace("/capture");
+    } else if (!pendingCapture) {
+      dbg("preview.guard:redirect", { reason: "no-pendingCapture", hydrated, sessionId: session.sessionId, photoCount: session.photos.length, currentRoute: "/preview" });
+      router.replace("/camera");
+    }
   }, [hydrated, session, pendingCapture, router]);
 
   // Generate the watermarked image once.
@@ -60,6 +69,7 @@ export default function PreviewPage() {
   };
 
   const keep = async () => {
+    dbg("preview.keep:begin", { sessionId: session.sessionId, submissionId: session.sessionId, photoCount: session.photos.length, hasPending: !!pendingCapture });
     if (!watermarkedUrl || !originalUrl || !meta || saving) return;
     setSaving(true);
     try {
@@ -72,6 +82,7 @@ export default function PreviewPage() {
         dataUrlToBlob(watermarkedUrl),
         dataUrlToBlob(thumbnailDataUrl),
       ]);
+      dbg("preview.putPhoto:before", { photoId, submissionId, originalBytes: originalBlob.size, watermarkedBytes: watermarkedBlob.size, thumbBytes: thumbnailBlob.size });
       const saved = await putPhoto({
         photoId,
         submissionId,
@@ -81,6 +92,7 @@ export default function PreviewPage() {
         createdAt: new Date().toISOString(),
         status: "ready",
       });
+      dbg("preview.putPhoto:after", { photoId, saved });
       if (!saved) {
         // IndexedDB unavailable (e.g. private mode) — do NOT add metadata pointing
         // at a missing blob; surface the error so the user can retry.
@@ -99,10 +111,20 @@ export default function PreviewPage() {
         address: pendingCapture.geo.address,
         status: "ready",
       };
+      dbg("preview.addPhoto:before", { photoCount: session.photos.length });
       addPhoto(photo);
-      setPendingCapture(null);
+      const persisted = store.getCurrentSession();
+      const idbCount = (await listPhotosBySubmission(submissionId)).length;
+      dbg("preview.addPhoto:after", { persistedCount: persisted?.photos.length ?? null, lsSessionId: persisted?.sessionId ?? null, idbPhotoCount: idbCount });
+      // NOTE: do NOT clear pendingCapture here. Doing so re-fires the route guard
+      // above (`!pendingCapture → replace("/camera")`) while still mounted on
+      // /preview, which overrides this push and bounces the user out of the flow.
+      // pendingCapture is reset by the next startSession / overwritten by the next
+      // camera shot; /session does not read it.
+      dbg("preview.navigate", { target: "/session", sessionId: submissionId, photoCount: persisted?.photos.length ?? null });
       router.push("/session");
     } catch (e) {
+      dbg("preview.keep:error", { message: (e as Error)?.message ?? "unknown" });
       setError((e as Error)?.message ?? "Không lưu được ảnh.");
       setSaving(false);
     }
