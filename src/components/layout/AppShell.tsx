@@ -1,16 +1,14 @@
 import type { ReactNode } from "react";
 import { BottomNav } from "./BottomNav";
+import { AppSidebar } from "./AppSidebar";
 
 /**
- * Employee AppShell (Phase 1C — real-device clean shell).
- *
- * Production: full browser viewport (100dvh), NO fake iPhone bezel, NO fake
- * status bar, safe-area aware. On desktop it renders as a centered phone-width
- * column (still no bezel). A fake device frame is shown ONLY in an explicit
- * dev preview mode (NEXT_PUBLIC_DEVICE_PREVIEW=true).
+ * Responsive application shell.
+ *  - Mobile / tablet (<1024px): full-bleed content + BottomNav (PWA feel).
+ *  - Desktop (≥1024px): persistent sidebar + centered content (max 1500px),
+ *    BottomNav hidden (CSS). The full-screen capture flow passes showNav={false}
+ *    to render plain content with no chrome.
  */
-const DEV_PREVIEW = process.env.NEXT_PUBLIC_DEVICE_PREVIEW === "true";
-
 export function AppShell({
   children,
   showNav = true,
@@ -18,19 +16,20 @@ export function AppShell({
   children: ReactNode;
   showNav?: boolean;
 }) {
-  const shell = (
-    <div className="app-shell">
-      <div className="app-screen">{children}</div>
-      {showNav && <BottomNav />}
-    </div>
-  );
-
-  if (DEV_PREVIEW) {
+  if (!showNav) {
     return (
-      <div className="device-preview-stage">
-        <div className="device-preview">{shell}</div>
+      <div className="app-shell-plain">
+        <div className="app-screen">{children}</div>
       </div>
     );
   }
-  return shell;
+  return (
+    <div className="shell-root">
+      <AppSidebar />
+      <div className="shell-main">
+        <div className="app-screen">{children}</div>
+        <BottomNav />
+      </div>
+    </div>
+  );
 }

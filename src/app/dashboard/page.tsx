@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { AppHeader } from "@/components/layout/AppHeader";
-import { Icon } from "@/components/ui/Icon";
+import { Icon, type IconName } from "@/components/ui/Icon";
 import { PhotoViewerModal, type ViewerPhoto } from "@/components/media/PhotoViewerModal";
 import { fetchMe } from "@/lib/client/me-cache";
 import type { MeResponse } from "@/lib/graph/graph-types";
@@ -18,11 +18,11 @@ function hhmm(iso?: string): string {
   return Number.isNaN(d.getTime()) ? "" : `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
-const QUICK = [
-  { href: "/gallery", icon: "🖼", label: "Gallery" },
-  { href: "/history", icon: "📜", label: "Lịch sử" },
-  { href: "/overview", icon: "📊", label: "Toàn cảnh" },
-  { href: "/me", icon: "👤", label: "Hồ sơ" },
+const QUICK: { href: string; icon: IconName; label: string }[] = [
+  { href: "/gallery", icon: "image", label: "Thư viện" },
+  { href: "/history", icon: "clock", label: "Lịch sử" },
+  { href: "/overview", icon: "chart", label: "Toàn cảnh" },
+  { href: "/me", icon: "user", label: "Hồ sơ" },
 ];
 
 export default function DashboardPage() {
@@ -143,14 +143,14 @@ export default function DashboardPage() {
         <section className="lg:col-span-3">
           <div className="grid grid-cols-4 lg:grid-cols-8 gap-2.5">
             {QUICK.map((q) => (
-              <Link key={q.href} href={q.href} className="bg-white rounded-[14px] border border-line p-3 shadow-e2 flex flex-col items-center gap-1 active:bg-surface-2">
-                <span className="text-[22px] leading-none">{q.icon}</span>
+              <Link key={q.href} href={q.href} className="bg-white rounded-[14px] border border-line p-3 shadow-e2 flex flex-col items-center gap-1.5 hover:border-primary-600/40 hover:shadow-md transition active:bg-surface-2">
+                <Icon name={q.icon} size={22} className="text-primary-600" />
                 <span className="text-[12px] font-semibold">{q.label}</span>
               </Link>
             ))}
             {isAdmin && (
-              <Link href="/admin" className="bg-primary-100 rounded-[14px] border border-primary-600/30 p-3 shadow-e2 flex flex-col items-center gap-1 active:opacity-90">
-                <span className="text-[22px] leading-none">⚙️</span>
+              <Link href="/admin" className="bg-primary-100 rounded-[14px] border border-primary-600/30 p-3 shadow-e2 flex flex-col items-center gap-1.5 hover:shadow-md transition active:opacity-90">
+                <Icon name="building" size={22} className="text-primary-700" />
                 <span className="text-[12px] font-semibold text-primary-700">Quản trị</span>
               </Link>
             )}

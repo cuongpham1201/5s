@@ -132,41 +132,65 @@ body {
   .cell.future { background: var(--surface); color: var(--text-disabled); }
   .cell.weekend { background: #eef0f3; color: var(--text-disabled); }
 
-  /* ---- Production app shell (real mobile: full viewport, NO fake frame) ---- */
-  .app-shell {
-    @apply w-full flex flex-col bg-white;
-    min-height: 100dvh;
-  }
+  /* ---- Responsive application shell ---- */
+  .app-shell-plain { @apply w-full flex flex-col bg-white; min-height: 100dvh; }
+  .shell-root { @apply flex; min-height: 100dvh; background: var(--app-bg); }
+  .shell-main { @apply flex-1 min-w-0 flex flex-col; min-height: 100dvh; }
   .app-screen {
-    @apply flex-1 min-h-0 flex flex-col;
+    @apply flex-1 min-h-0 flex flex-col w-full;
     padding-top: env(safe-area-inset-top);
   }
-  /* Tablet (768–1023px): keep the compact phone-width column (PWA-friendly). */
-  @media (min-width: 768px) and (max-width: 1023.98px) {
-    .app-shell {
-      max-width: 480px;
-      margin-inline: auto;
-      box-shadow: var(--sh-8);
-    }
-  }
-  /* Desktop/laptop (≥1024px): use full width with a centered content container. */
+
+  /* Desktop sidebar — hidden below 1024px (mobile/tablet use BottomNav). */
+  .app-sidebar { display: none; }
+
   @media (min-width: 1024px) {
-    .app-shell { max-width: 100%; }
-    .app-screen { width: 100%; max-width: 1400px; margin-inline: auto; padding-inline: 8px; }
-    .bottom-nav { width: 100%; max-width: 1400px; margin-inline: auto; }
+    .app-screen { max-width: 1500px; margin-inline: auto; padding-inline: 14px; }
+    .bottom-nav { display: none; }
+
+    .app-sidebar {
+      display: flex; flex-direction: column; flex: none;
+      width: 248px; position: sticky; top: 0; height: 100dvh;
+      background: var(--bg); border-right: 1px solid var(--border);
+      padding: 14px 12px; gap: 4px;
+      transition: width .18s ease;
+    }
+    .app-sidebar.is-collapsed { width: 76px; }
+    .sidebar-brand { @apply flex items-center gap-2.5; padding: 6px 8px 14px; }
+    .sidebar-logo {
+      @apply grid place-items-center text-white font-extrabold flex-none;
+      width: 36px; height: 36px; border-radius: 11px; font-size: 15px;
+      background: linear-gradient(135deg, var(--primary-600), var(--primary-800));
+    }
+    .sidebar-brand-text { @apply flex flex-col leading-tight; }
+    .sidebar-brand-text b { @apply text-[15px] font-bold; }
+    .sidebar-brand-text i { @apply text-[11px] not-italic text-ink-muted; }
+    .sidebar-nav { @apply flex flex-col gap-0.5; flex: 1; }
+    .sidebar-item {
+      @apply flex items-center gap-3 text-[14px] font-medium text-ink rounded-md;
+      padding: 10px 11px; transition: background .15s, color .15s; white-space: nowrap;
+    }
+    .sidebar-item:hover { background: var(--surface); }
+    .sidebar-item.is-active { background: var(--primary-100); color: var(--primary-700); font-weight: 600; }
+    .is-collapsed .sidebar-item { justify-content: center; padding: 10px; }
+    .sidebar-foot { @apply flex items-center gap-2 mt-2 pt-2; border-top: 1px solid var(--border); }
+    .sidebar-profile { @apply flex items-center gap-2.5 flex-1 min-w-0 rounded-md; padding: 7px 8px; }
+    .sidebar-profile:hover { background: var(--surface); }
+    .sidebar-avatar {
+      @apply grid place-items-center text-white text-[12px] font-bold flex-none;
+      width: 30px; height: 30px; border-radius: 999px; background: var(--primary-600);
+    }
+    .sidebar-collapse {
+      @apply grid place-items-center text-ink-muted flex-none rounded-md;
+      width: 30px; height: 30px;
+    }
+    .sidebar-collapse:hover { background: var(--surface); }
+    .is-collapsed .sidebar-foot { flex-direction: column; }
   }
-  /* Dev-only preview frame (enabled via NEXT_PUBLIC_DEVICE_PREVIEW=true). */
-  .device-preview-stage {
-    @apply min-h-screen flex items-center justify-center p-4;
-    background: radial-gradient(1200px 600px at 50% -10%, #e6ecf5, transparent), var(--app-bg);
-  }
-  .device-preview {
-    width: 390px;
-    height: min(844px, 92dvh);
-    overflow: hidden;
-    border-radius: 28px;
-    box-shadow: var(--sh-16), 0 0 0 8px #1b1b1b;
-    display: flex;
-    flex-direction: column;
-  }
+}
+
+/* Smooth, restrained interactions (Linear/Notion-like). */
+@layer utilities {
+  .focus-ring:focus-visible { outline: 2px solid var(--primary-600); outline-offset: 2px; }
+  ::selection { background: var(--primary-100); }
 }
