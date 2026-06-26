@@ -6,6 +6,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { Icon } from "@/components/ui/Icon";
 import { PhotoViewerModal, type ViewerPhoto } from "@/components/media/PhotoViewerModal";
+import { fetchMe } from "@/lib/client/me-cache";
 import type { MeResponse } from "@/lib/graph/graph-types";
 import type { TodaySummary, LatestSubmission } from "@/lib/sharepoint/report-service";
 
@@ -35,7 +36,7 @@ export default function DashboardPage() {
   useEffect(() => {
     void fetch("/api/profile/sync", { method: "POST" }).catch(() => {});
     Promise.all([
-      fetch("/api/me").then((r) => (r.ok ? r.json() : null)),
+      fetchMe(),
       fetch("/api/reports/today").then((r) => (r.ok ? r.json() : null)),
       fetch("/api/history/mine").then((r) => (r.ok ? r.json() : null)),
       fetch("/api/admin/whoami").then((r) => (r.ok ? r.json() : null)),

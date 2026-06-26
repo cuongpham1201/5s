@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { useSessionCapture } from "@/features/capture/session-context";
+import { fetchMe } from "@/lib/client/me-cache";
 import type { MeResponse } from "@/lib/graph/graph-types";
 import type { AreaOption } from "@/lib/sharepoint/area-service";
 import type { CheckItemOption } from "@/lib/sharepoint/checkitem-service";
@@ -31,10 +32,7 @@ export default function CapturePage() {
 
   useEffect(() => {
     let active = true;
-    fetch("/api/me")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => active && setMe(d))
-      .finally(() => active && setLoading(false));
+    fetchMe().then((d) => { if (active) { setMe(d); setLoading(false); } });
     return () => { active = false; };
   }, []);
 

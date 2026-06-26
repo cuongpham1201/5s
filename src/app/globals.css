@@ -152,11 +152,8 @@ body {
   /* Desktop/laptop (≥1024px): use full width with a centered content container. */
   @media (min-width: 1024px) {
     .app-shell { max-width: 100%; }
-    .app-screen { width: 100%; max-width: 1200px; margin-inline: auto; }
-    .bottom-nav { width: 100%; max-width: 1200px; margin-inline: auto; }
-  }
-  @media (min-width: 1440px) {
-    .app-screen, .bottom-nav { max-width: 1320px; }
+    .app-screen { width: 100%; max-width: 1400px; margin-inline: auto; padding-inline: 8px; }
+    .bottom-nav { width: 100%; max-width: 1400px; margin-inline: auto; }
   }
   /* Dev-only preview frame (enabled via NEXT_PUBLIC_DEVICE_PREVIEW=true). */
   .device-preview-stage {

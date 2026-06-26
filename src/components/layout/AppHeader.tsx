@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Icon } from "@/components/ui/Icon";
+import { fetchMe } from "@/lib/client/me-cache";
 import type { MeResponse } from "@/lib/graph/graph-types";
 
 /** Compact app header — avatar + greeting + resolved department (from /api/me). */
@@ -21,10 +22,7 @@ export function AppHeader({
 
   useEffect(() => {
     let active = true;
-    fetch("/api/me")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => active && setMe(d))
-      .catch(() => {});
+    fetchMe().then((d) => active && setMe(d));
     return () => {
       active = false;
     };
