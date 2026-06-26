@@ -138,3 +138,17 @@ export async function getImgContent(relativePath: string): Promise<{ data: Array
   const driveId = await getDriveId(client);
   return downloadFromImgPath(client, driveId, relativePath);
 }
+
+/** Hard-delete a file by drive-relative path (admin delete). Tolerates 404. Returns true if deleted. */
+export async function deleteImgFile(relativePath: string): Promise<boolean> {
+  if (!relativePath || !relativePath.startsWith(FOLDERS.img)) return false;
+  const client = await getAppOnlyClient();
+  const driveId = await getDriveId(client);
+  const encoded = relativePath.split("/").map(encodeURIComponent).join("/");
+  try {
+    await client.del(`/drives/${driveId}/root:/${encoded}`);
+    return true;
+  } catch {
+    return false; // already gone / not found
+  }
+}

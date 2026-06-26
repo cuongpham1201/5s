@@ -122,6 +122,11 @@ const LIST_SPECS: ListSpec[] = [
       { name: "Latitude", type: "number" },
       { name: "Longitude", type: "number" },
       { name: "Address", type: "text" },
+      // Additive soft-delete audit fields (Phase 3.3) — existing rows unaffected.
+      { name: "IsDeleted", type: "boolean" },
+      { name: "DeletedAt", type: "dateTime" },
+      { name: "DeletedBy", type: "text" },
+      { name: "DeleteReason", type: "text" },
     ],
   },
   {

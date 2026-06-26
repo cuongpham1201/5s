@@ -152,6 +152,10 @@ export function mapSubmissionPhoto(f: GraphListItemFields): SubmissionPhotoRecor
     Latitude: numOrNull(f, "Latitude"),
     Longitude: numOrNull(f, "Longitude"),
     Address: strOrNull(f, "Address"),
+    IsDeleted: bool(f, "IsDeleted"),
+    DeletedAt: strOrNull(f, "DeletedAt"),
+    DeletedBy: strOrNull(f, "DeletedBy"),
+    DeleteReason: strOrNull(f, "DeleteReason"),
   };
 }
 

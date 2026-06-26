@@ -13,6 +13,7 @@ export interface SharePointGraphClient {
   get<T>(path: string): Promise<T>;
   post<T>(path: string, body: unknown): Promise<T>;
   patch<T>(path: string, body: unknown): Promise<T>;
+  del(path: string): Promise<void>;
   /** Upload raw binary content (e.g. PUT .../content). */
   putContent<T>(path: string, data: ArrayBuffer | Uint8Array, contentType: string): Promise<T>;
   /** Download raw binary content (returns bytes + content type). */
@@ -151,6 +152,7 @@ export function createSharePointGraphClient(accessToken: string): SharePointGrap
     get: (path) => request("GET", accessToken, path),
     post: (path, body) => request("POST", accessToken, path, body),
     patch: (path, body) => request("PATCH", accessToken, path, body),
+    del: (path) => request("DELETE", accessToken, path),
     putContent: (path, data, contentType) => rawUpload(accessToken, path, data, contentType),
     getContent: (path) => rawDownload(accessToken, path),
   };

@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
     const [subs, photos] = await Promise.all([getSubmissions(999), getSubmissionPhotos(999)]);
     const byId = new Map(subs.map((s) => [s.SubmissionId, s]));
     const items = photos
-      .filter((p) => p.WatermarkedPhotoUrl)
+      .filter((p) => p.WatermarkedPhotoUrl && !p.IsDeleted)
       .map((p) => {
         const s = byId.get(p.SubmissionId);
         return {

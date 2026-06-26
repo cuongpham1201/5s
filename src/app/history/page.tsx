@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { MockPhoto } from "@/components/ui/MockPhoto";
+import { PhotoViewerModal, type ViewerPhoto } from "@/components/media/PhotoViewerModal";
 import type { LatestSubmission } from "@/lib/sharepoint/report-service";
 
 function photoSrc(path: string | null): string | null {
@@ -29,6 +30,7 @@ function syncLabel(s: string): string {
 export default function HistoryPage() {
   const [subs, setSubs] = useState<LatestSubmission[] | null>(null);
   const [loading, setLoading] = useState(true);
+  const [viewer, setViewer] = useState<number | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -40,6 +42,21 @@ export default function HistoryPage() {
       active = false;
     };
   }, []);
+
+  // Only submissions with a watermarked thumbnail can be viewed full.
+  const viewable = useMemo(() => (subs ?? []).filter((s) => s.thumbnailPath), [subs]);
+  const viewerPhotos: ViewerPhoto[] = viewable.map((s) => ({
+    watermarkedPath: s.thumbnailPath as string,
+    departmentCode: s.departmentCode,
+    areaName: s.areaName,
+    reporterName: s.reporterName,
+    submittedAt: s.submittedAt,
+    submissionId: s.submissionId,
+  }));
+  const openViewer = (submissionId: string) => {
+    const idx = viewable.findIndex((s) => s.submissionId === submissionId);
+    if (idx >= 0) setViewer(idx);
+  };
 
   return (
     <AppShell>
@@ -57,8 +74,10 @@ export default function HistoryPage() {
             {subs.map((s) => (
               <div key={s.submissionId} className="card-flat p-3 flex items-center gap-3">
                 {photoSrc(s.thumbnailPath) ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={photoSrc(s.thumbnailPath)!} alt="" className="w-12 h-12 flex-none rounded-[10px] object-cover bg-surface" />
+                  <button onClick={() => openViewer(s.submissionId)} className="w-12 h-12 flex-none rounded-[10px] overflow-hidden bg-surface" aria-label="Xem ảnh">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={photoSrc(s.thumbnailPath)!} alt="" className="w-full h-full object-cover" />
+                  </button>
                 ) : (
                   <MockPhoto className="w-12 h-12 flex-none" rounded="10px" />
                 )}
@@ -72,6 +91,9 @@ export default function HistoryPage() {
           </div>
         )}
       </div>
+      {viewer != null && (
+        <PhotoViewerModal photos={viewerPhotos} index={viewer} onClose={() => setViewer(null)} onIndexChange={setViewer} />
+      )}
     </AppShell>
   );
 }

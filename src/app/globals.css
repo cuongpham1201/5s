@@ -141,13 +141,22 @@ body {
     @apply flex-1 min-h-0 flex flex-col;
     padding-top: env(safe-area-inset-top);
   }
-  /* On desktop, employee pages render as a centered phone-width column (no bezel). */
-  @media (min-width: 768px) {
+  /* Tablet (768–1023px): keep the compact phone-width column (PWA-friendly). */
+  @media (min-width: 768px) and (max-width: 1023.98px) {
     .app-shell {
       max-width: 480px;
       margin-inline: auto;
       box-shadow: var(--sh-8);
     }
+  }
+  /* Desktop/laptop (≥1024px): use full width with a centered content container. */
+  @media (min-width: 1024px) {
+    .app-shell { max-width: 100%; }
+    .app-screen { width: 100%; max-width: 1200px; margin-inline: auto; }
+    .bottom-nav { width: 100%; max-width: 1200px; margin-inline: auto; }
+  }
+  @media (min-width: 1440px) {
+    .app-screen, .bottom-nav { max-width: 1320px; }
   }
   /* Dev-only preview frame (enabled via NEXT_PUBLIC_DEVICE_PREVIEW=true). */
   .device-preview-stage {

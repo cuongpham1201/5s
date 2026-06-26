@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { AppHeader } from "@/components/layout/AppHeader";
@@ -44,7 +45,7 @@ export default function OverviewPage() {
 
   return (
     <AppShell>
-      <AppHeader title="Toàn cảnh hôm nay" subtitle={today?.date ?? ""} />
+      <AppHeader title="Toàn cảnh hôm nay" subtitle={today?.date ?? ""} showHome />
       <div className="px-4 pb-6 flex flex-col gap-4">
         <div className="card p-4 flex items-center gap-4">
           <div className="text-[26px] font-extrabold leading-none">
@@ -71,7 +72,11 @@ export default function OverviewPage() {
         ) : (
           <div className="card-flat divide-y divide-line overflow-hidden">
             {list.map((d) => (
-              <div key={d.code} className="w-full flex items-center gap-3 px-4 py-2.5 text-left">
+              <Link
+                key={d.code}
+                href={`/gallery?departmentCode=${encodeURIComponent(d.code)}${today?.date ? `&date=${today.date}` : ""}`}
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-surface-2"
+              >
                 <span className={`w-2.5 h-2.5 rounded-full flex-none ${d.shot ? "bg-success" : "bg-danger"}`} />
                 <span className="flex-1 min-w-0">
                   <span className="block font-bold text-[15px] leading-tight">{d.code}</span>
@@ -80,7 +85,8 @@ export default function OverviewPage() {
                 <span className={`text-[12px] font-semibold px-2 h-6 rounded-pill grid place-items-center ${d.shot ? "bg-success-bg text-success" : "bg-danger-bg text-danger"}`}>
                   {d.shot ? "Đã chụp" : "Chưa chụp"}
                 </span>
-              </div>
+                <Icon name="chevronRight" size={16} className="text-ink-disabled flex-none" />
+              </Link>
             ))}
             {list.length === 0 && <div className="px-4 py-6 text-center text-ink-muted text-[14px]">Không tìm thấy.</div>}
           </div>

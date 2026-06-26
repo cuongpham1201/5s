@@ -99,6 +99,10 @@ export interface SubmissionPhotoRecord {
   Latitude: number | null;
   Longitude: number | null;
   Address: string | null;
+  IsDeleted: boolean;
+  DeletedAt: string | null;
+  DeletedBy: string | null;
+  DeleteReason: string | null;
 }
 
 export interface SyncLogRecord {

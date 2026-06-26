@@ -53,7 +53,7 @@ async function firstPhotoPathMap(): Promise<Map<string, string>> {
   }
   const map = new Map<string, { seq: number; path: string }>();
   for (const p of photos) {
-    if (!p.WatermarkedPhotoUrl) continue;
+    if (!p.WatermarkedPhotoUrl || p.IsDeleted) continue;
     const cur = map.get(p.SubmissionId);
     if (!cur || p.SeqNo < cur.seq) map.set(p.SubmissionId, { seq: p.SeqNo, path: p.WatermarkedPhotoUrl });
   }
