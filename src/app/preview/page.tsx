@@ -13,7 +13,7 @@ import type { SessionPhoto, WatermarkMetadata } from "@/types/submission";
 
 export default function PreviewPage() {
   const router = useRouter();
-  const { session, pendingCapture, addPhoto, setPendingCapture } = useSessionCapture();
+  const { hydrated, session, pendingCapture, addPhoto, setPendingCapture } = useSessionCapture();
 
   const [watermarkedUrl, setWatermarkedUrl] = useState<string | null>(null);
   const [originalUrl, setOriginalUrl] = useState<string | null>(null);
@@ -22,11 +22,13 @@ export default function PreviewPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Guard: missing session/pending → restart appropriately.
+  // Guard: missing session/pending → restart appropriately. Wait for hydration
+  // so we don't bounce away during the pre-hydration null window.
   useEffect(() => {
+    if (!hydrated) return;
     if (!session) router.replace("/capture");
     else if (!pendingCapture) router.replace("/camera");
-  }, [session, pendingCapture, router]);
+  }, [hydrated, session, pendingCapture, router]);
 
   // Generate the watermarked image once.
   useEffect(() => {
@@ -70,7 +72,7 @@ export default function PreviewPage() {
         dataUrlToBlob(watermarkedUrl),
         dataUrlToBlob(thumbnailDataUrl),
       ]);
-      await putPhoto({
+      const saved = await putPhoto({
         photoId,
         submissionId,
         originalBlob,
@@ -79,6 +81,13 @@ export default function PreviewPage() {
         createdAt: new Date().toISOString(),
         status: "ready",
       });
+      if (!saved) {
+        // IndexedDB unavailable (e.g. private mode) — do NOT add metadata pointing
+        // at a missing blob; surface the error so the user can retry.
+        setError("Không lưu được ảnh trên thiết bị (bộ nhớ trình duyệt bị chặn). Vui lòng thử lại hoặc dùng trình duyệt khác.");
+        setSaving(false);
+        return;
+      }
       // Light metadata ONLY (no image payload) → session in localStorage.
       const photo: SessionPhoto = {
         photoId,

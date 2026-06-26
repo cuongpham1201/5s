@@ -39,11 +39,13 @@ interface StartArgs {
 }
 
 interface SessionCaptureValue {
+  /** True once the local store has been read on the client (guards avoid redirecting before this). */
+  hydrated: boolean;
   session: SubmissionSession | null;
   history: CompletedSubmission[];
   lastCompleted: CompletedSubmission | null;
   pendingCapture: PendingCapture | null;
-  startSession: (args: StartArgs) => void;
+  startSession: (args: StartArgs) => SubmissionSession;
   setPendingCapture: (p: PendingCapture | null) => void;
   addPhoto: (photo: SessionPhoto) => void;
   removePhoto: (photoId: string) => void;
@@ -58,14 +60,17 @@ export function SessionCaptureProvider({ children }: { children: ReactNode }) {
   const [history, setHistory] = useState<CompletedSubmission[]>([]);
   const [lastCompleted, setLastCompleted] = useState<CompletedSubmission | null>(null);
   const [pendingCapture, setPendingCapture] = useState<PendingCapture | null>(null);
+  const [hydrated, setHydrated] = useState(false);
 
-  // Hydrate from the local store (client only).
+  // Hydrate from the local store (client only). `hydrated` flips true AFTER this
+  // so route guards never redirect during the null window on a fresh/refresh load.
   useEffect(() => {
     setSession(store.getCurrentSession());
     setHistory(store.listCompletedSubmissions());
+    setHydrated(true);
   }, []);
 
-  const startSession = useCallback((args: StartArgs) => {
+  const startSession = useCallback((args: StartArgs): SubmissionSession => {
     const next: SubmissionSession = {
       // sessionId doubles as the submissionId (IndexedDB grouping key, queue key,
       // SharePoint folder name, and Data_Submissions business key).
@@ -74,9 +79,15 @@ export function SessionCaptureProvider({ children }: { children: ReactNode }) {
       startedAt: new Date().toISOString(),
       photos: [],
     };
-    store.saveCurrentSession(next);
+    // Persist to localStorage FIRST (synchronous) so a fresh load of /camera can
+    // re-hydrate the session even if React state didn't carry across navigation.
+    const saved = store.saveCurrentSession(next);
+    if (!saved && process.env.NODE_ENV !== "production") {
+      console.warn("[capture] saveCurrentSession returned false (localStorage quota/unavailable).");
+    }
     setSession(next);
     setPendingCapture(null);
+    return next;
   }, []);
 
   const addPhoto = useCallback((photo: SessionPhoto) => {
@@ -115,6 +126,7 @@ export function SessionCaptureProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider
       value={{
+        hydrated,
         session,
         history,
         lastCompleted,

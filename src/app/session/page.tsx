@@ -16,8 +16,16 @@ function fmt(iso: string): string {
 
 export default function SessionPage() {
   const router = useRouter();
-  const { session, removePhoto, clearSession, completeSession } = useSessionCapture();
+  const { hydrated, session, removePhoto, clearSession, completeSession } = useSessionCapture();
   const [confirming, setConfirming] = useState(false);
+
+  if (!hydrated) {
+    return (
+      <AppShell showNav={false}>
+        <div className="flex-1 grid place-items-center text-ink-muted text-[14px]">Đang tải phiên chụp…</div>
+      </AppShell>
+    );
+  }
 
   if (!session) {
     return (

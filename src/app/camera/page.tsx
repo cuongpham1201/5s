@@ -13,17 +13,29 @@ export default function CameraPage() {
   const router = useRouter();
   const { videoRef, ready, errorKind, errorMessage, start, flip, capture } = useCamera();
   const { snapshot } = useGeolocation(true);
-  const { session, setPendingCapture } = useSessionCapture();
+  const { hydrated, session, setPendingCapture } = useSessionCapture();
+
+  // Only redirect once the local store has been read — never during the
+  // pre-hydration null window (that caused the /camera → /capture loop).
+  useEffect(() => {
+    if (hydrated && !session) {
+      if (process.env.NODE_ENV !== "production") console.warn("[camera] no active session after hydration → /capture");
+      router.replace("/capture");
+    }
+  }, [hydrated, session, router]);
 
   useEffect(() => {
-    if (!session) router.replace("/capture");
-  }, [session, router]);
-
-  useEffect(() => {
-    void start();
+    if (session) void start();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [session]);
 
+  if (!hydrated) {
+    return (
+      <AppShell showNav={false}>
+        <div className="flex-1 grid place-items-center text-ink-muted text-[14px]">Đang tải phiên chụp…</div>
+      </AppShell>
+    );
+  }
   if (!session) return null;
 
   const label = `${session.departmentCode} · ${session.areaName}`;
