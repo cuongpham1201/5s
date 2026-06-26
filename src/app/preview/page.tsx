@@ -10,10 +10,9 @@ import { buildWatermarkMetadata } from "@/lib/submissions/metadata";
 import { dataUrlToBlob, makeThumbnailDataUrl } from "@/lib/storage/image-utils";
 import { putPhoto, listPhotosBySubmission } from "@/lib/storage/photo-store";
 import * as store from "@/lib/submissions/local-submission-store";
+import { clog as dbg } from "@/lib/debug/capture-debug";
+import { CaptureDebugPanel } from "@/components/system/CaptureDebugPanel";
 import type { SessionPhoto, WatermarkMetadata } from "@/types/submission";
-
-/** Temporary capture-flow diagnostics (no secrets). */
-const dbg = (step: string, data: Record<string, unknown>) => console.warn("[5s-debug]", step, data);
 
 export default function PreviewPage() {
   const router = useRouter();
@@ -94,6 +93,7 @@ export default function PreviewPage() {
       });
       dbg("preview.putPhoto:after", { photoId, saved });
       if (!saved) {
+        dbg("preview.putPhoto:failed", { error: "IndexedDB unavailable" });
         // IndexedDB unavailable (e.g. private mode) — do NOT add metadata pointing
         // at a missing blob; surface the error so the user can retry.
         setError("Không lưu được ảnh trên thiết bị (bộ nhớ trình duyệt bị chặn). Vui lòng thử lại hoặc dùng trình duyệt khác.");
@@ -177,6 +177,7 @@ export default function PreviewPage() {
           {saving ? "Đang lưu…" : "✓ Giữ ảnh"}
         </button>
       </div>
+      <CaptureDebugPanel where="preview" />
     </AppShell>
   );
 }

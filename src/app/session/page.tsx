@@ -8,6 +8,8 @@ import { InfoRow } from "@/components/ui/Card";
 import { PhotoThumb } from "@/components/media/PhotoThumb";
 import { useSessionCapture } from "@/features/capture/session-context";
 import * as store from "@/lib/submissions/local-submission-store";
+import { clog } from "@/lib/debug/capture-debug";
+import { CaptureDebugPanel } from "@/components/system/CaptureDebugPanel";
 
 function fmt(iso: string): string {
   const d = new Date(iso);
@@ -23,7 +25,7 @@ export default function SessionPage() {
   // Temporary capture-flow diagnostics (no secrets).
   useEffect(() => {
     if (!hydrated) return;
-    console.warn("[5s-debug]", "session.mount", {
+    clog("session.mount", {
       hydrated,
       hasSession: !!session,
       sessionId: session?.sessionId ?? null,
@@ -52,6 +54,7 @@ export default function SessionPage() {
             Bắt đầu chụp
           </Link>
         </div>
+        <CaptureDebugPanel where="session(empty)" />
       </AppShell>
     );
   }
@@ -165,6 +168,7 @@ export default function SessionPage() {
           </div>
         </div>
       )}
+      <CaptureDebugPanel where="session" />
     </AppShell>
   );
 }
