@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { signOut } from "next-auth/react";
 import { useEffect, useState } from "react";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { fetchMe } from "@/lib/client/me-cache";
@@ -16,12 +17,15 @@ const NAV: { href: string; label: string; icon: IconName }[] = [
   { href: "/me", label: "Hồ sơ", icon: "user" },
 ];
 
-/** Desktop-only sidebar (≥1024px). Collapsible. Mobile uses BottomNav instead. */
+const ROLE_LABEL: Record<string, string> = { admin: "Quản trị", environment: "Môi trường", employee: "Nhân viên" };
+
 export function AppSidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [me, setMe] = useState<MeResponse | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     fetchMe().then(setMe);
@@ -30,18 +34,28 @@ export function AppSidebar() {
   }, []);
 
   const toggle = () => setCollapsed((c) => { try { localStorage.setItem("5s.sidebar.collapsed", c ? "0" : "1"); } catch {} return !c; });
+  const refresh = async () => {
+    setRefreshing(true);
+    try { await fetch("/api/profile/sync", { method: "POST" }); setMe(await fetchMe(true)); } finally { setRefreshing(false); setMenuOpen(false); }
+  };
 
   const items = isAdmin ? [...NAV, { href: "/admin", label: "Quản trị", icon: "building" as IconName }] : NAV;
   const active = (href: string) => pathname === href || pathname.startsWith(href + "/");
   const initials = (me?.displayName ?? "?").trim().split(/\s+/).map((p) => p[0]).slice(-2).join("").toUpperCase() || "?";
+  const role = me?.role ? ROLE_LABEL[me.role] ?? me.role : null;
 
   return (
     <aside className={`app-sidebar ${collapsed ? "is-collapsed" : ""}`}>
-      <Link href="/dashboard" className="sidebar-brand" aria-label="5S Daily — Trang chủ">
-        <span className="sidebar-logo">5S</span>
-        {!collapsed && <span className="sidebar-brand-text"><b>5S Daily</b><i>Bia Hạ Long</i></span>}
-      </Link>
+      {/* Header */}
+      <div className="sidebar-head">
+        <Link href="/dashboard" className="sidebar-brand" aria-label="5S Daily — Trang chủ">
+          <span className="sidebar-logo">5S</span>
+          {!collapsed && <span className="sidebar-brand-text"><b>5S Daily</b><i>Bia Hạ Long</i></span>}
+        </Link>
+        <button onClick={toggle} className="sidebar-collapse" aria-label={collapsed ? "Mở rộng" : "Thu gọn"}>{collapsed ? "»" : "«"}</button>
+      </div>
 
+      {/* Navigation */}
       <nav className="sidebar-nav">
         {items.map((n) => (
           <Link key={n.href} href={n.href} className={`sidebar-item ${active(n.href) ? "is-active" : ""}`} title={n.label}>
@@ -51,18 +65,26 @@ export function AppSidebar() {
         ))}
       </nav>
 
-      <div className="sidebar-foot">
-        <Link href="/me" className="sidebar-profile" title={me?.displayName ?? "Hồ sơ"}>
-          <span className="sidebar-avatar">{initials}</span>
+      {/* Footer user */}
+      <div className="sidebar-foot relative">
+        {menuOpen && (
+          <div className="sidebar-menu">
+            <Link href="/me" onClick={() => setMenuOpen(false)} className="sidebar-menu-item"><Icon name="user" size={16} /> Hồ sơ</Link>
+            <button onClick={refresh} disabled={refreshing} className="sidebar-menu-item"><Icon name="refresh" size={16} /> {refreshing ? "Đang làm mới…" : "Làm mới hồ sơ"}</button>
+            <button onClick={() => signOut({ callbackUrl: "/signin" })} className="sidebar-menu-item text-danger"><Icon name="x" size={16} /> Đăng xuất</button>
+          </div>
+        )}
+        <button onClick={() => setMenuOpen((o) => !o)} className="sidebar-user" aria-label="Tài khoản">
+          <span className="sidebar-avatar relative">{initials}<span className="sidebar-online" /></span>
           {!collapsed && (
-            <span className="min-w-0">
+            <span className="min-w-0 flex-1 text-left">
               <span className="block text-[13px] font-semibold truncate">{me?.displayName ?? "…"}</span>
-              <span className="block text-[11px] text-ink-muted truncate">{me?.departmentResolved ? me.departmentCode : "—"}</span>
+              <span className="block text-[11px] text-ink-muted truncate">
+                {me?.departmentResolved ? me.departmentCode : "—"}{role ? ` · ${role}` : ""}
+              </span>
             </span>
           )}
-        </Link>
-        <button onClick={toggle} className="sidebar-collapse" aria-label={collapsed ? "Mở rộng" : "Thu gọn"}>
-          {collapsed ? "»" : "«"}
+          {!collapsed && <Icon name="chevronRight" size={16} className="text-ink-disabled rotate-[-90deg]" />}
         </button>
       </div>
     </aside>

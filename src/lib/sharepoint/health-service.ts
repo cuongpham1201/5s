@@ -34,7 +34,9 @@ export interface HealthResult {
   };
 }
 
-const EXPECTED_FOLDERS = [FOLDERS.img, FOLDERS.listConfig, FOLDERS.listData];
+// READY depends on: Site + Library + Img folder + Config/Data lists.
+// ListConfig/ListData are intentionally NOT checked (artifact folders, not required).
+const EXPECTED_FOLDERS = [FOLDERS.img];
 const EXPECTED_LISTS = [...Object.values(CONFIG_LISTS), ...Object.values(DATA_LISTS)];
 
 export async function checkHealth(): Promise<HealthResult> {

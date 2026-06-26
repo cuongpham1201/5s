@@ -51,12 +51,12 @@ export async function listLibraryRootChildren(
   return res.value.map((c) => c.name);
 }
 
-/** Verify the expected real folders (img/ListConfig/ListData) exist under "5S". */
+/** Verify the expected real folder (Img) exists under "5S". */
 export async function verifyExpectedFolders(
   client: SharePointGraphClient,
   driveId: string,
 ): Promise<{ present: string[]; missing: string[] }> {
-  const expected = [FOLDERS.img, FOLDERS.listConfig, FOLDERS.listData];
+  const expected = [FOLDERS.img];
   const children = await listLibraryRootChildren(client, driveId);
   return {
     present: expected.filter((f) => children.includes(f)),

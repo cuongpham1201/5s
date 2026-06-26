@@ -51,6 +51,13 @@ async function buildFormData(
     const blob = byId.get(sp.photoId);
     if (!blob) continue;
     seq += 1;
+    // Device-diagnostic: surface blob size/type (catches the iOS empty-blob bug).
+    // eslint-disable-next-line no-console
+    console.warn("[5S_IMAGE_DEBUG]", "client.blob", {
+      submissionId: sub.submissionId, seq,
+      originalBytes: blob.originalBlob?.size ?? 0, originalType: blob.originalBlob?.type ?? "",
+      watermarkedBytes: blob.watermarkedBlob?.size ?? 0, watermarkedType: blob.watermarkedBlob?.type ?? "",
+    });
     form.append(`original_${seq}`, blob.originalBlob, `original-${seq}.jpg`);
     form.append(`watermarked_${seq}`, blob.watermarkedBlob, `watermarked-${seq}.jpg`);
     metaPhotos.push({

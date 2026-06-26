@@ -5,14 +5,11 @@
  * SOURCE OF TRUTH (existing, do NOT recreate/rename):
  *   Site:    https://biahalong.sharepoint.com/sites/Ban5S
  *   Library: "5S" (Document Library)
- *   Folders (REAL, already exist in the 5S library):
- *     5S/img         → image folders/files
- *     5S/ListConfig  → configuration artifacts / seed / export files
- *     5S/ListData    → operational artifacts / data exports / logs
+ *   Folder (REAL, already exists in the 5S library):
+ *     5S/Img         → image files
  *
- * Structured data still lives in site-level SharePoint **Lists** (SharePoint
- * cannot physically nest Lists inside library folders). Lists are named with
- * Config_/Data_ prefixes so they map clearly to the ListConfig/ListData groups.
+ * Structured data lives in site-level SharePoint **Lists** (SharePoint cannot
+ * nest Lists inside library folders), named with Config_/Data_ prefixes.
  */
 
 export const SHAREPOINT_HOSTNAME = "biahalong.sharepoint.com";
@@ -24,11 +21,10 @@ export const sharePointConfig = {
   sitePath: SHAREPOINT_SITE_PATH,
   /** The Document Library that holds the real folders below. */
   documentLibraryName: "5S",
-  /** REAL existing folders inside the "5S" library (note: "Img" is capitalized). */
+  /** REAL existing folders inside the "5S" library (note: "Img" is capitalized).
+   *  Only "Img" is used by the app; structured data lives in site-level Lists. */
   folders: {
     img: "Img",
-    listConfig: "ListConfig",
-    listData: "ListData",
   },
   /** Site-level structured Lists (grouped logically by Config_/Data_ prefix). */
   lists: {

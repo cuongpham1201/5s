@@ -1,9 +1,30 @@
 /** Image helpers for moving photos between data URLs (UI) and Blobs (IndexedDB). */
 
-/** Convert a data URL to a Blob (browser). */
+/**
+ * Convert a data URL to a Blob WITHOUT fetch().
+ *
+ * iOS Safari (notably in standalone/PWA mode) does not reliably support
+ * `fetch("data:…")` — it can resolve to an EMPTY blob, producing a 0-byte image
+ * that uploads as "invalid" and showed "Lỗi đồng bộ" only on iPhone. Decoding the
+ * base64 manually works identically on iOS / Android / desktop.
+ */
 export async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
-  const res = await fetch(dataUrl);
-  return res.blob();
+  const comma = dataUrl.indexOf(",");
+  if (!dataUrl.startsWith("data:") || comma < 0) {
+    const res = await fetch(dataUrl); // non-data URL fallback
+    return res.blob();
+  }
+  const header = dataUrl.slice(5, comma); // e.g. "image/jpeg;base64"
+  const isBase64 = /;base64/i.test(header);
+  const mime = header.split(";")[0] || "image/jpeg";
+  const dataPart = dataUrl.slice(comma + 1);
+  if (isBase64) {
+    const bin = atob(dataPart);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], { type: mime });
+  }
+  return new Blob([new TextEncoder().encode(decodeURIComponent(dataPart))], { type: mime });
 }
 
 /** Build a small thumbnail data URL from a source data URL (for instant display). */

@@ -82,6 +82,14 @@ export default function PreviewPage() {
         dataUrlToBlob(thumbnailDataUrl),
       ]);
       dbg("preview.putPhoto:before", { photoId, submissionId, originalBytes: originalBlob.size, watermarkedBytes: watermarkedBlob.size, thumbBytes: thumbnailBlob.size });
+      // Guard: a 0-byte blob means image decoding failed on this device — fail loud
+      // instead of saving an empty photo that would later error at sync.
+      if (originalBlob.size === 0 || watermarkedBlob.size === 0) {
+        dbg("preview.blob:empty", { originalBytes: originalBlob.size, watermarkedBytes: watermarkedBlob.size });
+        setError("Không xử lý được ảnh trên thiết bị này. Vui lòng thử lại hoặc cập nhật trình duyệt.");
+        setSaving(false);
+        return;
+      }
       const saved = await putPhoto({
         photoId,
         submissionId,
