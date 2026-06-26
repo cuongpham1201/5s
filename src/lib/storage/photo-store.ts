@@ -63,6 +63,22 @@ export async function deletePhotosBySubmission(submissionId: string): Promise<vo
   }
 }
 
+export async function listPhotosBySubmission(submissionId: string): Promise<StoredPhoto[]> {
+  if (!idbAvailable()) return [];
+  try {
+    const db = await openDatabase();
+    return await new Promise<StoredPhoto[]>((resolve, reject) => {
+      const tx = db.transaction(PHOTO_STORE, "readonly");
+      const index = tx.objectStore(PHOTO_STORE).index(SUBMISSION_INDEX);
+      const req = index.getAll(IDBKeyRange.only(submissionId));
+      req.onsuccess = () => resolve((req.result as StoredPhoto[]) ?? []);
+      req.onerror = () => reject(req.error);
+    });
+  } catch {
+    return [];
+  }
+}
+
 export async function countPhotos(): Promise<number> {
   if (!idbAvailable()) return 0;
   try {

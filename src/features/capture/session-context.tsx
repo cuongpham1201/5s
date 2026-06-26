@@ -18,6 +18,7 @@ import * as store from "@/lib/submissions/local-submission-store";
 import { deletePhoto, deletePhotosBySubmission } from "@/lib/storage/photo-store";
 import { enqueueSubmission } from "@/lib/queue/offline-queue";
 import { processQueue } from "@/lib/queue/sync-engine";
+import { generateSubmissionId } from "@/lib/submissions/submission-id";
 
 /**
  * Capture session context (Phase 2A) — React state mirror over the local store.
@@ -66,8 +67,9 @@ export function SessionCaptureProvider({ children }: { children: ReactNode }) {
 
   const startSession = useCallback((args: StartArgs) => {
     const next: SubmissionSession = {
-      // sessionId doubles as the submissionId (and IndexedDB grouping key).
-      sessionId: `sub-${Date.now()}`,
+      // sessionId doubles as the submissionId (IndexedDB grouping key, queue key,
+      // SharePoint folder name, and Data_Submissions business key).
+      sessionId: generateSubmissionId(),
       ...args,
       startedAt: new Date().toISOString(),
       photos: [],

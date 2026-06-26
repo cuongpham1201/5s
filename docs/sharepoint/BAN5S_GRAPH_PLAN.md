@@ -90,3 +90,23 @@ GET /sites/{siteId}/lists?$select=id,name        → verify/tạo Config_* & Dat
 | URL builders, read-only GET wrapper, mappers, types, config | token app-only thật, create item, upload file, PATCH, SyncLogs, retry |
 | `getAppOnlyToken()` = 501 stub | MSAL client-credentials |
 | Không mutation | Mutations + upload |
+
+---
+
+## Phase 3.0 — Upload Engine (đã hiện thực)
+
+App-only Graph (client-credentials, scope .default) cho mọi write. Token chỉ ở server.
+
+Drive (thư viện "5S"):
+- Upload: `PUT /drives/{driveId}/root:/Img/YYYY/MM/DD/{Dept}/{SubmissionId}/{file}:/content` (binary,
+  tự tạo folder cha, ghi đè khi retry). File: original-NN.jpg, watermarked-NN.jpg.
+- Download (proxy): `GET /drives/{driveId}/root:/{path}:/content` -> stream qua /api/photo (auth).
+
+Lists:
+- Data_Submissions: upsert theo SubmissionId (Title=SubmissionId). SyncStatus: uploading -> uploaded|failed.
+- Data_SubmissionPhotos: upsert theo PhotoId (= SubmissionId-PNN). OriginalPhotoUrl/WatermarkedPhotoUrl
+  lưu PATH drive-relative (cho proxy), không phải URL public.
+- Data_SyncLogs: 1 dòng/lần chuyển trạng thái (uploading/uploaded/failed) — best-effort, không chặn upload.
+
+Retry: cùng SubmissionId -> upsert (không trùng dòng) + ghi đè file cùng path. Idempotent.
+Giới hạn: PUT đơn ≤ ~4MB/ảnh (chưa chunked); tối đa 20 ảnh/lần gửi; MIME jpeg/png/webp.

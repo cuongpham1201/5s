@@ -1,0 +1,253 @@
+/**
+ * Submission upload orchestration (Phase 3.0) — app-only Graph writes.
+ *
+ * Order: create/patch Data_Submissions header (SyncStatus=uploading) → upload
+ * photo pairs to the 5S library → create/patch Data_SubmissionPhotos rows →
+ * patch header SyncStatus=uploaded → write Data_SyncLogs. On failure the header
+ * is marked "failed" and a failed sync log is written; client keeps local blobs.
+ *
+ * All writes are idempotent (upsert by SubmissionId / PhotoId) so retries with
+ * the same SubmissionId never duplicate rows and overwrite the same files.
+ */
+import { DATA_LISTS } from "./sharepoint-config";
+import { getAppOnlyClient, type SharePointGraphClient } from "./graph-client";
+import { findListId, resolveSite } from "./site-context";
+import { mapSubmission } from "./list-helpers";
+import { ensureSubmissionFolder, uploadPhotoPair } from "./photo-upload-service";
+import type { GraphCollection, GraphListItem } from "./sharepoint-types";
+import type { SubmissionStatus, SyncStatus } from "@/types/sharepoint";
+
+export interface UploadPhotoInput {
+  seqNo: number;
+  capturedAt: string;
+  latitude: number | null;
+  longitude: number | null;
+  address: string | null;
+  original: ArrayBuffer;
+  watermarked: ArrayBuffer;
+  contentType?: string;
+}
+
+export interface UploadSubmissionInput {
+  submissionId: string;
+  departmentCode: string;
+  areaCode: string;
+  areaName: string;
+  reporterName: string;
+  reporterEmail: string;
+  submittedAt: string; // ISO
+  submissionDate: string; // YYYY-MM-DD (VN)
+  latitude: number | null;
+  longitude: number | null;
+  address: string | null;
+  status?: SubmissionStatus;
+  photos: UploadPhotoInput[];
+  queueId?: string;
+  attemptCount?: number;
+}
+
+export interface UploadResult {
+  submissionId: string;
+  syncStatus: SyncStatus;
+  photos: Array<{ seqNo: number; watermarkedPath: string; originalPath: string }>;
+}
+
+async function ctx(): Promise<{ client: SharePointGraphClient; siteId: string }> {
+  const client = await getAppOnlyClient();
+  const site = await resolveSite(client);
+  return { client, siteId: site.id };
+}
+
+async function requireList(client: SharePointGraphClient, siteId: string, name: string): Promise<string> {
+  const id = await findListId(client, siteId, name);
+  if (!id) throw new Error(`List ${name} chưa tồn tại — chạy provision trước.`);
+  return id;
+}
+
+async function findItemIdByField(
+  client: SharePointGraphClient,
+  siteId: string,
+  listId: string,
+  fieldKey: string,
+  value: string,
+): Promise<string | null> {
+  const res = await client.get<GraphCollection<GraphListItem>>(
+    `/sites/${siteId}/lists/${listId}/items?expand=fields&$top=999`,
+  );
+  const hit = res.value.find((it) => (it.fields as Record<string, unknown>)[fieldKey] === value);
+  return hit?.id ?? null;
+}
+
+// ---- header ----
+
+export async function upsertSubmissionHeader(
+  input: Pick<
+    UploadSubmissionInput,
+    | "submissionId" | "departmentCode" | "areaCode" | "areaName" | "reporterName"
+    | "reporterEmail" | "submittedAt" | "submissionDate" | "latitude" | "longitude" | "address"
+  > & { photoCount: number; status: SubmissionStatus; syncStatus: SyncStatus },
+): Promise<void> {
+  const { client, siteId } = await ctx();
+  const listId = await requireList(client, siteId, DATA_LISTS.submissions);
+  const fields = {
+    Title: input.submissionId,
+    SubmissionId: input.submissionId,
+    DepartmentCode: input.departmentCode,
+    AreaCode: input.areaCode,
+    AreaName: input.areaName,
+    ReporterName: input.reporterName,
+    ReporterEmail: input.reporterEmail,
+    PhotoCount: input.photoCount,
+    SubmissionDate: input.submissionDate,
+    SubmittedAt: input.submittedAt,
+    Latitude: input.latitude,
+    Longitude: input.longitude,
+    Address: input.address,
+    Status: input.status,
+    SyncStatus: input.syncStatus,
+  };
+  const existingId = await findItemIdByField(client, siteId, listId, "SubmissionId", input.submissionId);
+  if (existingId) {
+    await client.patch(`/sites/${siteId}/lists/${listId}/items/${existingId}/fields`, fields);
+  } else {
+    await client.post(`/sites/${siteId}/lists/${listId}/items`, { fields });
+  }
+}
+
+export async function updateSubmissionSyncStatus(submissionId: string, status: SyncStatus): Promise<void> {
+  const { client, siteId } = await ctx();
+  const listId = await requireList(client, siteId, DATA_LISTS.submissions);
+  const id = await findItemIdByField(client, siteId, listId, "SubmissionId", submissionId);
+  if (id) await client.patch(`/sites/${siteId}/lists/${listId}/items/${id}/fields`, { SyncStatus: status });
+}
+
+// ---- photo rows ----
+
+async function upsertPhotoRow(
+  client: SharePointGraphClient,
+  siteId: string,
+  listId: string,
+  rec: {
+    photoId: string; submissionId: string; seqNo: number;
+    originalPath: string; watermarkedPath: string;
+    captureTime: string; latitude: number | null; longitude: number | null; address: string | null;
+  },
+): Promise<void> {
+  const fields = {
+    Title: rec.photoId,
+    PhotoId: rec.photoId,
+    SubmissionId: rec.submissionId,
+    SeqNo: rec.seqNo,
+    OriginalPhotoUrl: rec.originalPath,
+    WatermarkedPhotoUrl: rec.watermarkedPath,
+    CaptureTime: rec.captureTime,
+    Latitude: rec.latitude,
+    Longitude: rec.longitude,
+    Address: rec.address,
+  };
+  const existingId = await findItemIdByField(client, siteId, listId, "PhotoId", rec.photoId);
+  if (existingId) {
+    await client.patch(`/sites/${siteId}/lists/${listId}/items/${existingId}/fields`, fields);
+  } else {
+    await client.post(`/sites/${siteId}/lists/${listId}/items`, { fields });
+  }
+}
+
+// ---- sync log ----
+
+export async function writeSyncLog(
+  queueId: string,
+  submissionId: string,
+  status: "queued" | "uploading" | "uploaded" | "failed" | "cancelled",
+  attemptCount: number,
+  message: string,
+): Promise<void> {
+  try {
+    const { client, siteId } = await ctx();
+    const listId = await findListId(client, siteId, DATA_LISTS.syncLogs);
+    if (!listId) return;
+    await client.post(`/sites/${siteId}/lists/${listId}/items`, {
+      fields: {
+        Title: `${submissionId}-${status}`,
+        QueueId: queueId || submissionId,
+        SubmissionId: submissionId,
+        Status: status,
+        AttemptCount: attemptCount,
+        Message: message.slice(0, 250),
+        Timestamp: new Date().toISOString(),
+      },
+    });
+  } catch {
+    // Sync logs are best-effort; never fail the upload because of logging.
+  }
+}
+
+// ---- orchestrator ----
+
+export async function processSubmissionUpload(input: UploadSubmissionInput): Promise<UploadResult> {
+  const queueId = input.queueId ?? input.submissionId;
+  const attempt = input.attemptCount ?? 1;
+  const status: SubmissionStatus = input.status ?? "complete";
+  let headerCreated = false;
+  try {
+    await upsertSubmissionHeader({
+      submissionId: input.submissionId,
+      departmentCode: input.departmentCode,
+      areaCode: input.areaCode,
+      areaName: input.areaName,
+      reporterName: input.reporterName,
+      reporterEmail: input.reporterEmail,
+      submittedAt: input.submittedAt,
+      submissionDate: input.submissionDate,
+      latitude: input.latitude,
+      longitude: input.longitude,
+      address: input.address,
+      photoCount: input.photos.length,
+      status,
+      syncStatus: "uploading",
+    });
+    headerCreated = true;
+    await writeSyncLog(queueId, input.submissionId, "uploading", attempt, `Bắt đầu tải ${input.photos.length} ảnh.`);
+
+    const { driveId, folder } = await ensureSubmissionFolder(input.submissionId, input.submittedAt, input.departmentCode);
+    const { client, siteId } = await ctx();
+    const photoListId = await requireList(client, siteId, DATA_LISTS.submissionPhotos);
+
+    const uploaded: UploadResult["photos"] = [];
+    for (const p of input.photos) {
+      const res = await uploadPhotoPair({
+        client,
+        driveId,
+        folder,
+        seqNo: p.seqNo,
+        original: p.original,
+        watermarked: p.watermarked,
+        contentType: p.contentType,
+      });
+      const photoId = `${input.submissionId}-P${String(p.seqNo).padStart(2, "0")}`;
+      await upsertPhotoRow(client, siteId, photoListId, {
+        photoId,
+        submissionId: input.submissionId,
+        seqNo: p.seqNo,
+        originalPath: res.originalPath,
+        watermarkedPath: res.watermarkedPath,
+        captureTime: p.capturedAt,
+        latitude: p.latitude,
+        longitude: p.longitude,
+        address: p.address,
+      });
+      uploaded.push({ seqNo: p.seqNo, originalPath: res.originalPath, watermarkedPath: res.watermarkedPath });
+    }
+
+    await updateSubmissionSyncStatus(input.submissionId, "uploaded");
+    await writeSyncLog(queueId, input.submissionId, "uploaded", attempt, `Đã tải ${uploaded.length} ảnh.`);
+    return { submissionId: input.submissionId, syncStatus: "uploaded", photos: uploaded };
+  } catch (e) {
+    const msg = (e as Error)?.message ?? "Lỗi không xác định";
+    if (headerCreated) {
+      try { await updateSubmissionSyncStatus(input.submissionId, "failed"); } catch { /* ignore */ }
+    }
+    await writeSyncLog(queueId, input.submissionId, "failed", attempt, msg);
+    throw e;
+  }
+}

@@ -60,3 +60,23 @@
 | Lỗi xử lý ảnh (watermark) | Preview hiển thị lỗi, nút Giữ ảnh bị khoá, có thể Chụp lại |
 | Session trống | /session hiện empty state, "Hoàn tất" bị khoá |
 | Refresh giữa phiên | Draft hydrate lại từ localStorage; pending capture (transient) mất → quay về /camera |
+
+---
+
+## Phase 3.0 — Upload thật lên SharePoint (end-to-end)
+
+Luồng: /capture (chọn area được phép + hạng mục) -> /camera -> /preview (watermark Canvas, lưu
+original+watermarked+thumbnail vào IndexedDB; metadata vào localStorage) -> /session -> Hoàn tất ->
+completeSession() tạo CompletedSubmission (status local-only) + enqueue queue item + processQueue().
+
+SyncRunner (sync-engine, client): với mỗi item queued/failed -> đọc metadata (localStorage) + blob
+(IndexedDB) -> multipart POST /api/sync/submission. Server (app-only Graph): upsert Data_Submissions
+(SyncStatus uploading) -> upload original/watermarked vào 5S/Img/YYYY/MM/DD/Dept/SubmissionId/ ->
+upsert Data_SubmissionPhotos (lưu path) -> Data_Submissions SyncStatus=uploaded -> Data_SyncLogs.
+
+Trạng thái hàng đợi: queued -> uploading -> uploaded | failed.
+- Thành công: xoá blob cục bộ (ảnh đã ở SharePoint; History/Gallery đọc qua /api/photo proxy).
+- Lỗi / offline: giữ blob để retry; Home + /success hiển thị trạng thái, có nút thử lại.
+
+Folder path: Img/YYYY/MM/DD/<DepartmentCode>/<SubmissionId>/{original,watermarked}-NN.jpg (idempotent;
+retry ghi đè). SubmissionId = SUB-YYYYMMDD-XXXX dùng xuyên suốt queue/list/folder.

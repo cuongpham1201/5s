@@ -270,9 +270,19 @@ không trùng (email,areaCode). Gates tsc/lint/build PASS.
 
 ---
 
-## Phase 2C.7+ (TODO)
-Upload Engine (upload `5S/img` + ghi header/lines Data_Submissions/Data_SubmissionPhotos + offline
-queue + retry + Data_SyncLogs), gắn checkItem vào submission khi upload, Excel, notifications.
+## Phase 3.0 — End-to-end submission upload + shared history (DONE)
+Upload thật: SubmissionId SUB-YYYYMMDD-XXXX; photo-upload-service (5S/Img/YYYY/MM/DD/Dept/SubmissionId,
+PUT binary tự tạo folder, idempotent); submission-upload-service (upsert header/photo rows, SyncStatus,
+Data_SyncLogs). POST /api/sync/submission (multipart, app-only Graph, validate email/area/MIME/≤20 ảnh) +
+GET /api/photo proxy. sync-engine upload thật (queued->uploading->uploaded|failed; xoá blob khi xong,
+giữ khi lỗi). History/Gallery/Home đọc ảnh SharePoint qua proxy. /success + Home card trạng thái đồng bộ.
+Self-test upload/download/cleanup PASS. Gates tsc/lint/build PASS.
+
+---
+
+## Phase 3.1+ (TODO)
+Chunked upload cho ảnh lớn; cache/CDN ảnh; central SubmissionId sequence; Excel export; notifications;
+gắn checkItem vào Data_Submissions (cột mới) khi cần.
 
 ---
 

@@ -10,7 +10,7 @@
  * completed history strips the original data URL and keeps the watermarked
  * image (for thumbnails); a quota-exceeded write trims oldest entries.
  */
-import type { CompletedSubmission, SessionPhoto, SubmissionSession } from "@/types/submission";
+import type { CompletedSubmission, SessionPhoto, SubmissionSession, UploadStatus } from "@/types/submission";
 
 const SESSION_KEY = "5s.session.v3";
 const HISTORY_KEY = "5s.history.v3";
@@ -83,6 +83,20 @@ export function listCompletedSubmissions(): CompletedSubmission[] {
 
 export function getCompletedSubmissionById(id: string): CompletedSubmission | null {
   return listCompletedSubmissions().find((s) => s.submissionId === id) ?? null;
+}
+
+/** Update the upload status of a completed submission in local history. */
+export function setSubmissionUploadStatus(id: string, status: UploadStatus): void {
+  const list = listCompletedSubmissions();
+  let changed = false;
+  const next = list.map((s) => {
+    if (s.submissionId === id && s.status !== status) {
+      changed = true;
+      return { ...s, status };
+    }
+    return s;
+  });
+  if (changed) persistHistory(next);
 }
 
 /** Persist history, trimming oldest entries if the quota is exceeded. */

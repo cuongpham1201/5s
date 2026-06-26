@@ -7,6 +7,9 @@ import { AppHeader } from "@/components/layout/AppHeader";
 import { Icon } from "@/components/ui/Icon";
 import { MockPhoto } from "@/components/ui/MockPhoto";
 import type { TodaySummary } from "@/lib/sharepoint/report-service";
+import { getSummary } from "@/lib/queue/offline-queue";
+import { processQueue } from "@/lib/queue/sync-engine";
+import type { QueueSummary } from "@/lib/queue/queue-types";
 
 function hhmm(iso?: string): string {
   if (!iso) return "";
@@ -17,6 +20,8 @@ function hhmm(iso?: string): string {
 export default function HomePage() {
   const [data, setData] = useState<TodaySummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [queue, setQueue] = useState<QueueSummary | null>(null);
+  const [retrying, setRetrying] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -28,6 +33,20 @@ export default function HomePage() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    const tick = () => setQueue(getSummary());
+    tick();
+    void processQueue().then(tick); // resume any pending sync on open
+    const iv = setInterval(tick, 2000);
+    return () => clearInterval(iv);
+  }, []);
+
+  const retrySync = async () => {
+    setRetrying(true);
+    try { await processQueue(); setQueue(getSummary()); } finally { setRetrying(false); }
+  };
+  const pending = (queue?.uploading ?? 0) + (queue?.queued ?? 0) + (queue?.failed ?? 0);
 
   const expected = data?.expectedDepartments ?? 0;
   const submitted = data?.submittedDepartments ?? 0;
@@ -59,6 +78,21 @@ export default function HomePage() {
             <i className="block h-full rounded-pill bg-success" style={{ width: `${pct}%` }} />
           </div>
         </div>
+
+        {/* Sync queue status */}
+        {pending > 0 && (
+          <div className={`flex items-center gap-3 rounded-[14px] p-3 border ${queue?.failed ? "bg-danger-bg border-danger/30" : "bg-info-bg border-info/30"}`}>
+            <span className="text-[20px]">{queue?.failed ? "⚠️" : queue?.uploading ? "↻" : "⏳"}</span>
+            <span className="flex-1 min-w-0 text-[13px] font-medium text-ink">
+              {queue?.uploading ? "Đang đồng bộ ảnh lên SharePoint…" : queue?.failed ? `${queue.failed} lần gửi đồng bộ lỗi, sẽ thử lại` : `${queue?.queued ?? 0} lần gửi đang chờ đồng bộ`}
+            </span>
+            {(queue?.failed ?? 0) > 0 && (
+              <button onClick={retrySync} disabled={retrying} className="text-[12.5px] font-semibold text-primary-600 px-2 py-1">
+                {retrying ? "…" : "Thử lại"}
+              </button>
+            )}
+          </div>
+        )}
 
         {/* CTA */}
         <Link href="/capture" className="flex items-center gap-3 bg-white rounded-[16px] border border-line p-3 shadow-e2 active:bg-surface-2">
@@ -109,7 +143,12 @@ export default function HomePage() {
             <div className="card-flat divide-y divide-line overflow-hidden">
               {latest.map((f) => (
                 <div key={f.submissionId} className="flex items-center gap-3 p-2.5">
-                  <MockPhoto className="w-14 h-14 flex-none" rounded="12px" />
+                  {f.thumbnailPath ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={`/api/photo?path=${encodeURIComponent(f.thumbnailPath)}`} alt="" className="w-14 h-14 flex-none rounded-[12px] object-cover bg-surface" />
+                  ) : (
+                    <MockPhoto className="w-14 h-14 flex-none" rounded="12px" />
+                  )}
                   <span className="flex-1 min-w-0">
                     <span className="block text-[14px] font-semibold text-ink leading-tight">{f.departmentCode} · {f.areaName}</span>
                     <span className="block text-[12px] text-ink-muted mt-0.5">{f.photoCount} ảnh · {hhmm(f.submittedAt)}</span>

@@ -1058,3 +1058,57 @@ Mỗi nhân viên chỉ thấy khu vực được phép. Chỉ bổ sung, không
   "Bạn chưa được phân quyền khu vực chụp." + khoá nút.
 - Admin dashboard + nav: thêm "Phân quyền khu vực người dùng".
 - Gates tsc/lint/build PASS.
+
+---
+
+## End-to-end submission upload to SharePoint + shared history (2026-06-26)
+
+Phạm vi: MVP upload thật. Chụp -> watermark -> nộp -> upload ảnh gốc + watermark lên 5S/Img ->
+ghi Data_Submissions + Data_SubmissionPhotos + Data_SyncLogs -> History/Gallery/Home đọc dữ liệu
+SharePoint (xem chéo user/admin). App-only Graph cho mọi write; token KHÔNG ra client.
+
+### Submission ID (PART B)
+- src/lib/submissions/submission-id.ts: SUB-YYYYMMDD-XXXX (YYYYMMDD theo giờ VN, XXXX base36 time+random).
+  Dùng làm sessionId = queue key = folder name = Data_Submissions/Photos business key.
+
+### Upload services (PART C/D)
+- graph-client: thêm putContent (PUT binary) + getContent (GET binary). Không log token.
+- photo-upload-service: buildSubmissionFolder (Img/YYYY/MM/DD/Dept/SubmissionId), buildPhotoFileNames
+  (original-NN.jpg / watermarked-NN.jpg), uploadPhotoPair, uploadBytesToImgPath, getImgContent.
+  PUT-by-path tự tạo folder cha; retry ghi đè cùng path (idempotent). Đã self-test: drive "5S" OK,
+  nested folder auto-create OK, download OK, cleanup 204.
+- submission-upload-service: upsertSubmissionHeader (idempotent theo SubmissionId), upsert photo rows
+  (PhotoId = SubmissionId-PNN), updateSubmissionSyncStatus, writeSyncLog, processSubmissionUpload
+  (header uploading -> upload ảnh -> photo rows -> header uploaded -> sync log; lỗi -> header failed +
+  log failed). OriginalPhotoUrl/WatermarkedPhotoUrl lưu PATH drive-relative cho proxy.
+
+### Sync endpoint + proxy (PART E/J)
+- POST /api/sync/submission (multipart): meta JSON + original_<seq>/watermarked_<seq> blobs. Validate:
+  session tồn tại; email khớp; departmentCode/areaCode có; user được phép area (Config_UserAreaPermissions);
+  1..20 ảnh; MIME jpeg/png/webp. Server upload + ghi list, trả {syncStatus, photos}. 403/400 nếu fail.
+- GET /api/photo?path=Img/... : proxy auth, app-only Graph stream ảnh (không lộ token) -> render chéo user.
+
+### Client queue (PART F)
+- photo-store.listPhotosBySubmission; local-submission-store.setSubmissionUploadStatus.
+- sync-engine: thay mock bằng upload thật. queued/failed -> đọc completed + blob IndexedDB ->
+  FormData -> /api/sync/submission. queued->uploading->uploaded|failed. Thành công: xoá blob cục bộ
+  (ảnh đã ở SharePoint, đọc qua proxy); lỗi: giữ blob để retry. Online-gated, reentrancy-guarded.
+
+### Read pages (PART G)
+- report-service: join ảnh watermark đầu (thumbnailPath) vào LatestSubmission.
+- /history: thumbnail thật qua /api/photo + sync badge; fallback local nếu lỗi.
+- /admin/gallery: GET /api/admin/photos -> lưới ảnh watermark thật.
+- Home "Ảnh mới nhất": thumbnail thật.
+
+### UI feedback (PART I)
+- /success: trạng thái đồng bộ realtime (uploading/uploaded/failed/queued) + nút thử lại; không báo
+  "đồng bộ thành công" khi còn chờ.
+- Home: card hàng đợi đồng bộ (đang đồng bộ / chờ / lỗi + thử lại).
+
+### Known limits
+- PUT đơn (≤ ~4MB/ảnh); chưa chunked upload cho ảnh lớn.
+- Ảnh xem qua proxy app-only (cần đăng nhập); chưa có CDN/cache dài hạn.
+- SubmissionId suffix ngẫu nhiên cục bộ (chưa central sequence).
+
+### Gates
+tsc PASS · lint PASS · build PASS.

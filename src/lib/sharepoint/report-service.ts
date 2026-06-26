@@ -3,8 +3,8 @@
  * All KPIs derived from submission metadata. Safe fallback to empty on read fail.
  */
 import { listActiveDepartments } from "./department-service";
-import { getSubmissions } from "./submission-service";
-import type { SubmissionRecord } from "@/types/sharepoint";
+import { getSubmissions, getSubmissionPhotos } from "./submission-service";
+import type { SubmissionRecord, SubmissionPhotoRecord } from "@/types/sharepoint";
 
 /** Today's date key in Asia/Ho_Chi_Minh (YYYY-MM-DD). */
 export function vnDateKey(d: Date = new Date()): string {
@@ -39,6 +39,25 @@ export interface LatestSubmission {
   photoCount: number;
   submittedAt: string;
   syncStatus: string;
+  /** Drive-relative path of the first watermarked photo (for the /api/photo proxy). */
+  thumbnailPath: string | null;
+}
+
+/** Map submissionId -> first (lowest SeqNo) watermarked photo path. */
+async function firstPhotoPathMap(): Promise<Map<string, string>> {
+  let photos: SubmissionPhotoRecord[] = [];
+  try {
+    photos = await getSubmissionPhotos();
+  } catch {
+    photos = [];
+  }
+  const map = new Map<string, { seq: number; path: string }>();
+  for (const p of photos) {
+    if (!p.WatermarkedPhotoUrl) continue;
+    const cur = map.get(p.SubmissionId);
+    if (!cur || p.SeqNo < cur.seq) map.set(p.SubmissionId, { seq: p.SeqNo, path: p.WatermarkedPhotoUrl });
+  }
+  return new Map([...map].map(([k, v]) => [k, v.path]));
 }
 
 export interface TodaySummary {
@@ -52,7 +71,7 @@ export interface TodaySummary {
   hasData: boolean;
 }
 
-function toLatest(r: SubmissionRecord): LatestSubmission {
+function toLatest(r: SubmissionRecord, thumb?: Map<string, string>): LatestSubmission {
   return {
     submissionId: r.SubmissionId,
     departmentCode: r.DepartmentCode,
@@ -61,6 +80,7 @@ function toLatest(r: SubmissionRecord): LatestSubmission {
     photoCount: r.PhotoCount,
     submittedAt: r.SubmittedAt,
     syncStatus: r.SyncStatus,
+    thumbnailPath: thumb?.get(r.SubmissionId) ?? null,
   };
 }
 
@@ -73,11 +93,12 @@ export async function getTodaySubmissionSummary(): Promise<TodaySummary> {
   const todays = subs.filter((s) => dateKeyOf(s) === today && s.Status !== "flagged");
   const submittedCodes = new Set(todays.map((s) => s.DepartmentCode));
   const missing = active.filter((d) => !submittedCodes.has(d.code)).map((d) => ({ code: d.code, name: d.name }));
+  const thumbs = await firstPhotoPathMap();
   const latest = subs
     .slice()
     .sort((a, b) => (b.SubmittedAt || "").localeCompare(a.SubmittedAt || ""))
     .slice(0, 8)
-    .map(toLatest);
+    .map((r) => toLatest(r, thumbs));
   return {
     date: today,
     expectedDepartments: active.length,
@@ -91,12 +112,12 @@ export async function getTodaySubmissionSummary(): Promise<TodaySummary> {
 }
 
 export async function getLatestSubmissions(limit = 10): Promise<LatestSubmission[]> {
-  const subs = await safeSubmissions();
+  const [subs, thumbs] = await Promise.all([safeSubmissions(), firstPhotoPathMap()]);
   return subs
     .slice()
     .sort((a, b) => (b.SubmittedAt || "").localeCompare(a.SubmittedAt || ""))
     .slice(0, limit)
-    .map(toLatest);
+    .map((r) => toLatest(r, thumbs));
 }
 
 export async function getMissingDepartmentsForToday(): Promise<Array<{ code: string; name: string }>> {
@@ -104,11 +125,11 @@ export async function getMissingDepartmentsForToday(): Promise<Array<{ code: str
 }
 
 export async function getUserSubmissionHistory(email: string): Promise<LatestSubmission[]> {
-  const subs = await safeSubmissions();
+  const [subs, thumbs] = await Promise.all([safeSubmissions(), firstPhotoPathMap()]);
   return subs
     .filter((s) => (s.ReporterEmail || "").toLowerCase() === email.toLowerCase())
     .sort((a, b) => (b.SubmittedAt || "").localeCompare(a.SubmittedAt || ""))
-    .map(toLatest);
+    .map((r) => toLatest(r, thumbs));
 }
 
 export interface DailyStatusRow {

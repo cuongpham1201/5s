@@ -362,3 +362,17 @@ API: GET/POST/PATCH/DELETE /api/admin/config/user-areas (Admin; POST = set cả 
 PATCH = grant đơn, DELETE ?email=&areaCode= = soft revoke). GET /api/user/areas (user hiện tại; [] nếu
 chưa gán). Capture đọc /api/user/areas (không còn lấy toàn bộ khu vực phòng ban).
 UI: /admin/config/user-areas.
+
+---
+
+## End-to-end upload (Phase 3.0)
+
+SubmissionId = `SUB-YYYYMMDD-XXXX` (giờ VN) dùng cho: session/queue cục bộ, folder ảnh, Data_Submissions,
+Data_SubmissionPhotos. Folder ảnh: `Img/YYYY/MM/DD/<DepartmentCode>/<SubmissionId>/` chứa
+`original-NN.jpg` + `watermarked-NN.jpg` (idempotent, retry ghi đè).
+
+- Data_SubmissionPhotos.OriginalPhotoUrl / WatermarkedPhotoUrl = PATH drive-relative (vd
+  `Img/2026/06/26/TCKS/SUB-…/watermarked-01.jpg`), phục vụ proxy `GET /api/photo?path=`.
+- Data_Submissions.SyncStatus: uploading -> uploaded | failed. Data_SyncLogs ghi mỗi lần chuyển trạng thái.
+- Upload qua `POST /api/sync/submission` (multipart, app-only Graph server-side). History/Gallery/Home
+  đọc SharePoint nên user/admin khác xem được ảnh đã nộp.

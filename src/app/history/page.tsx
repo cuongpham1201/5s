@@ -7,6 +7,10 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { MockPhoto } from "@/components/ui/MockPhoto";
 import type { LatestSubmission } from "@/lib/sharepoint/report-service";
 
+function photoSrc(path: string | null): string | null {
+  return path ? `/api/photo?path=${encodeURIComponent(path)}` : null;
+}
+
 function fmt(iso?: string): string {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -52,7 +56,12 @@ export default function HistoryPage() {
           <div className="flex flex-col gap-2.5">
             {subs.map((s) => (
               <div key={s.submissionId} className="card-flat p-3 flex items-center gap-3">
-                <MockPhoto className="w-12 h-12 flex-none" rounded="10px" />
+                {photoSrc(s.thumbnailPath) ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={photoSrc(s.thumbnailPath)!} alt="" className="w-12 h-12 flex-none rounded-[10px] object-cover bg-surface" />
+                ) : (
+                  <MockPhoto className="w-12 h-12 flex-none" rounded="10px" />
+                )}
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold text-[15px]">{s.departmentCode} · {s.areaName}</div>
                   <div className="text-[12px] text-ink-muted">{fmt(s.submittedAt)} · {s.photoCount} ảnh</div>

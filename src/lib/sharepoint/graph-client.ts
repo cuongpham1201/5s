@@ -13,6 +13,10 @@ export interface SharePointGraphClient {
   get<T>(path: string): Promise<T>;
   post<T>(path: string, body: unknown): Promise<T>;
   patch<T>(path: string, body: unknown): Promise<T>;
+  /** Upload raw binary content (e.g. PUT .../content). */
+  putContent<T>(path: string, data: ArrayBuffer | Uint8Array, contentType: string): Promise<T>;
+  /** Download raw binary content (returns bytes + content type). */
+  getContent(path: string): Promise<{ data: ArrayBuffer; contentType: string }>;
 }
 
 interface CachedToken {
@@ -98,6 +102,48 @@ async function request<T>(method: string, accessToken: string, path: string, bod
   return (await res.json()) as T;
 }
 
+async function rawUpload<T>(
+  accessToken: string,
+  path: string,
+  data: ArrayBuffer | Uint8Array,
+  contentType: string,
+): Promise<T> {
+  const url = path.startsWith("http") ? path : `${GRAPH_BASE}${path}`;
+  const body: BodyInit = data instanceof Uint8Array ? new Blob([data]) : new Blob([data]);
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": contentType },
+    body,
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const errJson = (await res.json().catch(() => ({}))) as { error?: { code?: string; message?: string } };
+    throw new SharePointError(
+      `Graph PUT ${path} thất bại: ${res.status} ${errJson.error?.code ?? ""} ${(errJson.error?.message ?? "").slice(0, 160)}`.trim(),
+      res.status,
+    );
+  }
+  return (await res.json()) as T;
+}
+
+async function rawDownload(
+  accessToken: string,
+  path: string,
+): Promise<{ data: ArrayBuffer; contentType: string }> {
+  const url = path.startsWith("http") ? path : `${GRAPH_BASE}${path}`;
+  const res = await fetch(url, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: "no-store",
+    redirect: "follow",
+  });
+  if (!res.ok) {
+    throw new SharePointError(`Graph GET content ${path} thất bại: ${res.status}`, res.status);
+  }
+  const data = await res.arrayBuffer();
+  return { data, contentType: res.headers.get("content-type") ?? "application/octet-stream" };
+}
+
 /** Build a Graph client bound to a token (caller provides via getAppOnlyToken). */
 export function createSharePointGraphClient(accessToken: string): SharePointGraphClient {
   if (!accessToken) throw new SharePointError("Thiếu access token", 401);
@@ -105,6 +151,8 @@ export function createSharePointGraphClient(accessToken: string): SharePointGrap
     get: (path) => request("GET", accessToken, path),
     post: (path, body) => request("POST", accessToken, path, body),
     patch: (path, body) => request("PATCH", accessToken, path, body),
+    putContent: (path, data, contentType) => rawUpload(accessToken, path, data, contentType),
+    getContent: (path) => rawDownload(accessToken, path),
   };
 }
 
