@@ -71,7 +71,27 @@ export interface TodaySummary {
   hasData: boolean;
 }
 
+const STUCK_MINUTES = 15;
+
+/**
+ * Effective sync status — display reflects REALITY, not a possibly-stuck header:
+ *  - photos exist in SharePoint  -> "uploaded" (files are there)
+ *  - "uploading"/"queued" with no photos and older than STUCK_MINUTES -> "failed"
+ *    (a crashed/abandoned upload should NOT show "Đang đồng bộ" forever)
+ *  - otherwise the stored status.
+ */
+function effectiveStatus(r: SubmissionRecord, hasPhotos: boolean): string {
+  if (r.SyncStatus === "uploaded" || hasPhotos) return "uploaded";
+  if (r.SyncStatus === "uploading" || r.SyncStatus === "queued") {
+    const ts = Date.parse(r.SubmittedAt || r.SubmissionDate || "");
+    const ageMin = Number.isNaN(ts) ? Infinity : (Date.now() - ts) / 60000;
+    if (ageMin > STUCK_MINUTES) return "failed";
+  }
+  return r.SyncStatus;
+}
+
 function toLatest(r: SubmissionRecord, thumb?: Map<string, string>): LatestSubmission {
+  const hasPhotos = !!thumb?.has(r.SubmissionId);
   return {
     submissionId: r.SubmissionId,
     departmentCode: r.DepartmentCode,
@@ -79,7 +99,7 @@ function toLatest(r: SubmissionRecord, thumb?: Map<string, string>): LatestSubmi
     reporterName: r.ReporterName,
     photoCount: r.PhotoCount,
     submittedAt: r.SubmittedAt,
-    syncStatus: r.SyncStatus,
+    syncStatus: effectiveStatus(r, hasPhotos),
     thumbnailPath: thumb?.get(r.SubmissionId) ?? null,
   };
 }

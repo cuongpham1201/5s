@@ -74,12 +74,19 @@ export async function getRequestProfile(req: NextRequest, opts: { mode?: "read" 
   if (!input) return { profile: null, email: null, role };
   try {
     if (opts.mode === "sync") {
+      console.warn("[5S_PROFILE]", "sync", { email: input.email, departmentRaw: input.departmentRaw });
       return { profile: await syncProfileFromGraph(input), email: input.email, role };
     }
     const existing = await getProfile(input.email);
-    if (existing) return { profile: existing, email: input.email, role };
-    // On-demand creation when no profile exists yet (migration-free).
-    return { profile: await syncProfileFromGraph(input), email: input.email, role };
+    // Self-heal: read normally, BUT if the stored profile is missing OR was created
+    // unresolved (e.g. first-login Graph-token timing), re-sync now so the user does
+    // NOT have to logout/login. Writes only when unresolved — not on every call.
+    if (existing && existing.departmentResolved) {
+      return { profile: existing, email: input.email, role };
+    }
+    console.warn("[5S_PROFILE]", "self-heal", { email: input.email, hadProfile: !!existing, departmentRaw: input.departmentRaw });
+    const synced = await syncProfileFromGraph(input);
+    return { profile: synced.departmentResolved ? synced : existing ?? synced, email: input.email, role };
   } catch {
     const fallback = await getProfile(input.email).catch(() => null);
     return { profile: fallback, email: input.email, role };

@@ -114,6 +114,11 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  const t0 = Date.now();
+  console.warn("[5S_SYNC_TRACE]", "server.received", {
+    submissionId: meta.submissionId, departmentCode: meta.departmentCode, areaCode: meta.areaCode,
+    photoCount: photos.length, bytes: photos.reduce((s, p) => s + p.original.byteLength + p.watermarked.byteLength, 0),
+  });
   try {
     const result = await processSubmissionUpload({
       submissionId: meta.submissionId,
@@ -131,8 +136,10 @@ export async function POST(req: NextRequest) {
       queueId: meta.queueId,
       attemptCount: meta.attemptCount,
     });
+    console.warn("[5S_SYNC_TRACE]", "server.done", { submissionId: meta.submissionId, syncStatus: result.syncStatus, uploaded: result.photos.length, durationMs: Date.now() - t0 });
     return NextResponse.json({ ok: true, ...result });
   } catch (e) {
+    console.warn("[5S_SYNC_TRACE]", "server.failed", { submissionId: meta.submissionId, durationMs: Date.now() - t0, error: (e as Error).message });
     return NextResponse.json({ ok: false, syncStatus: "failed", error: (e as Error).message }, { status: 502 });
   }
 }

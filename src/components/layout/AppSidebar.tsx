@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { useEffect, useState } from "react";
 import { Icon, type IconName } from "@/components/ui/Icon";
-import { fetchMe } from "@/lib/client/me-cache";
+import { fetchMe, subscribeMe } from "@/lib/client/me-cache";
 import type { MeResponse } from "@/lib/graph/graph-types";
 
 const NAV: { href: string; label: string; icon: IconName }[] = [
@@ -29,8 +29,10 @@ export function AppSidebar() {
 
   useEffect(() => {
     fetchMe().then(setMe);
+    const unsub = subscribeMe(setMe); // refresh when dashboard busts the cache post-sync
     fetch("/api/admin/whoami").then((r) => (r.ok ? r.json() : null)).then((w) => setIsAdmin(!!w?.isAdmin)).catch(() => {});
     try { setCollapsed(localStorage.getItem("5s.sidebar.collapsed") === "1"); } catch {}
+    return () => unsub();
   }, []);
 
   const toggle = () => setCollapsed((c) => { try { localStorage.setItem("5s.sidebar.collapsed", c ? "0" : "1"); } catch {} return !c; });

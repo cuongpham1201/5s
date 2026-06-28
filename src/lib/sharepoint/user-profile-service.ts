@@ -84,7 +84,10 @@ async function findItem(
   const res = await client.get<GraphCollection<GraphListItem>>(
     `/sites/${siteId}/lists/${listId}/items?expand=fields&$top=999`,
   );
-  return res.value.find((it) => lc(rowToProfile(it).email) === lc(email));
+  const matches = res.value.filter((it) => lc(rowToProfile(it).email) === lc(email));
+  // If duplicate rows exist (concurrent first-login create), prefer a RESOLVED one
+  // so the UI never picks an unresolved straggler.
+  return matches.find((it) => !!rowToProfile(it).departmentCode) ?? matches[0];
 }
 
 // ---- READ ----

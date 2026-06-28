@@ -6,6 +6,7 @@ import { AppHeader } from "@/components/layout/AppHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { MockPhoto } from "@/components/ui/MockPhoto";
 import { PhotoViewerModal, type ViewerPhoto } from "@/components/media/PhotoViewerModal";
+import { processQueue } from "@/lib/queue/sync-engine";
 import type { LatestSubmission } from "@/lib/sharepoint/report-service";
 
 function photoSrc(path: string | null): string | null {
@@ -31,6 +32,9 @@ export default function HistoryPage() {
   const [subs, setSubs] = useState<LatestSubmission[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [viewer, setViewer] = useState<number | null>(null);
+  const [retrying, setRetrying] = useState(false);
+
+  const load = () => fetch("/api/history/mine").then((r) => (r.ok ? r.json() : null)).then((d) => setSubs(d?.submissions ?? []));
 
   useEffect(() => {
     let active = true;
@@ -38,10 +42,14 @@ export default function HistoryPage() {
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => active && setSubs(d?.submissions ?? []))
       .finally(() => active && setLoading(false));
-    return () => {
-      active = false;
-    };
+    return () => { active = false; };
   }, []);
+
+  const unsynced = (subs ?? []).filter((s) => s.syncStatus === "failed" || s.syncStatus === "uploading" || s.syncStatus === "queued").length;
+  const retry = async () => {
+    setRetrying(true);
+    try { await processQueue(); await load(); } finally { setRetrying(false); }
+  };
 
   // Only submissions with a watermarked thumbnail can be viewed full.
   const viewable = useMemo(() => (subs ?? []).filter((s) => s.thumbnailPath), [subs]);
@@ -62,6 +70,12 @@ export default function HistoryPage() {
     <AppShell>
       <AppHeader title="Lịch sử của tôi" subtitle="Các lần gửi của bạn" showHome />
       <div className="px-4 pb-6">
+        {unsynced > 0 && (
+          <div className="mb-3 flex items-center gap-2.5 rounded-md bg-warning-bg text-warning px-3.5 py-2.5">
+            <span className="flex-1 text-[13px] font-medium">{unsynced} lần gửi chưa đồng bộ xong.</span>
+            <button onClick={retry} disabled={retrying} className="text-[13px] font-semibold underline">{retrying ? "Đang thử…" : "Thử đồng bộ lại"}</button>
+          </div>
+        )}
         {loading ? (
           <div className="text-ink-muted text-[14px] px-1">Đang tải…</div>
         ) : !subs || subs.length === 0 ? (

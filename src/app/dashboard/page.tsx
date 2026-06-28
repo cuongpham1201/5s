@@ -34,15 +34,23 @@ export default function DashboardPage() {
   const [viewer, setViewer] = useState<number | null>(null);
 
   useEffect(() => {
-    void fetch("/api/profile/sync", { method: "POST" }).catch(() => {});
-    Promise.all([
-      fetchMe(),
-      fetch("/api/reports/today").then((r) => (r.ok ? r.json() : null)),
-      fetch("/api/history/mine").then((r) => (r.ok ? r.json() : null)),
-      fetch("/api/admin/whoami").then((r) => (r.ok ? r.json() : null)),
-    ])
-      .then(([m, t, h, w]) => { setMe(m); setToday(t); setMine(h?.submissions ?? []); setIsAdmin(!!(w as WhoAmI)?.isAdmin); })
-      .finally(() => setLoading(false));
+    let active = true;
+    // Post-login: AWAIT the profile sync first (resolve dept once token is settled),
+    // THEN force-refresh the shared /api/me cache so sidebar/header/dashboard all
+    // show the resolved department immediately — no logout/login needed.
+    (async () => {
+      try { await fetch("/api/profile/sync", { method: "POST" }); } catch {}
+      const [m, t, h, w] = await Promise.all([
+        fetchMe(true),
+        fetch("/api/reports/today").then((r) => (r.ok ? r.json() : null)),
+        fetch("/api/history/mine").then((r) => (r.ok ? r.json() : null)),
+        fetch("/api/admin/whoami").then((r) => (r.ok ? r.json() : null)),
+      ]);
+      if (!active) return;
+      setMe(m); setToday(t); setMine(h?.submissions ?? []); setIsAdmin(!!(w as WhoAmI)?.isAdmin);
+      setLoading(false);
+    })();
+    return () => { active = false; };
   }, []);
 
   const pct = Math.round((today?.completionRate ?? 0) * 100);
