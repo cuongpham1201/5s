@@ -8,9 +8,9 @@ import { useSessionCapture } from "@/features/capture/session-context";
 import { generateWatermarkedImage } from "@/lib/watermark/watermark-engine";
 import { buildWatermarkMetadata } from "@/lib/submissions/metadata";
 import { dataUrlToBlob, makeThumbnailDataUrl } from "@/lib/storage/image-utils";
-import { putPhoto, listPhotosBySubmission } from "@/lib/storage/photo-store";
+import { putPhoto, getPhoto, listPhotosBySubmission } from "@/lib/storage/photo-store";
 import * as store from "@/lib/submissions/local-submission-store";
-import { clog as dbg } from "@/lib/debug/capture-debug";
+import { clog as dbg, ctrace } from "@/lib/debug/capture-debug";
 import { CaptureDebugPanel } from "@/components/system/CaptureDebugPanel";
 import type { SessionPhoto, WatermarkMetadata } from "@/types/submission";
 
@@ -68,7 +68,7 @@ export default function PreviewPage() {
   };
 
   const keep = async () => {
-    dbg("preview.keep:begin", { sessionId: session.sessionId, submissionId: session.sessionId, photoCount: session.photos.length, hasPending: !!pendingCapture });
+    ctrace("preview.keep:begin", { sessionId: session.sessionId, photoCount: session.photos.length, hasPending: !!pendingCapture, originalDataUrlLen: originalUrl?.length ?? 0, watermarkedDataUrlLen: watermarkedUrl?.length ?? 0 });
     if (!watermarkedUrl || !originalUrl || !meta || saving) return;
     setSaving(true);
     try {
@@ -81,6 +81,7 @@ export default function PreviewPage() {
         dataUrlToBlob(watermarkedUrl),
         dataUrlToBlob(thumbnailDataUrl),
       ]);
+      ctrace("preview.blob", { photoId, originalBytes: originalBlob.size, originalType: originalBlob.type, watermarkedBytes: watermarkedBlob.size, watermarkedType: watermarkedBlob.type, thumbBytes: thumbnailBlob.size });
       dbg("preview.putPhoto:before", { photoId, submissionId, originalBytes: originalBlob.size, watermarkedBytes: watermarkedBlob.size, thumbBytes: thumbnailBlob.size });
       // Guard: a 0-byte blob means image decoding failed on this device — fail loud
       // instead of saving an empty photo that would later error at sync.
@@ -102,9 +103,18 @@ export default function PreviewPage() {
       dbg("preview.putPhoto:after", { photoId, saved });
       if (!saved) {
         dbg("preview.putPhoto:failed", { error: "IndexedDB unavailable" });
-        // IndexedDB unavailable (e.g. private mode) — do NOT add metadata pointing
-        // at a missing blob; surface the error so the user can retry.
         setError("Không lưu được ảnh trên thiết bị (bộ nhớ trình duyệt bị chặn). Vui lòng thử lại hoặc dùng trình duyệt khác.");
+        setSaving(false);
+        return;
+      }
+      // READBACK VERIFY (point 5): confirm the blob is actually persisted & non-empty
+      // on THIS device before adding it to the session. Catches iOS "write OK but
+      // read-back empty" so we never build a 0-photo submission.
+      const rb = await getPhoto(photoId);
+      ctrace("preview.putPhoto:readback", { photoId, found: !!rb, originalBytes: rb?.originalBlob?.size ?? 0, watermarkedBytes: rb?.watermarkedBlob?.size ?? 0 });
+      if (!rb || (rb.originalBlob?.size ?? 0) === 0 || (rb.watermarkedBlob?.size ?? 0) === 0) {
+        ctrace("preview.readback:empty", { photoId });
+        setError("Thiết bị không lưu được ảnh (bộ nhớ trình duyệt). Vui lòng thử lại, đóng bớt tab hoặc dùng trình duyệt khác.");
         setSaving(false);
         return;
       }
@@ -119,11 +129,18 @@ export default function PreviewPage() {
         address: pendingCapture.geo.address,
         status: "ready",
       };
-      dbg("preview.addPhoto:before", { photoCount: session.photos.length });
+      ctrace("preview.addPhoto:before", { sessionId: submissionId, currentPhotos: session.photos.length, newPhotoId: photoId });
       addPhoto(photo);
       const persisted = store.getCurrentSession();
       const idbCount = (await listPhotosBySubmission(submissionId)).length;
-      dbg("preview.addPhoto:after", { persistedCount: persisted?.photos.length ?? null, lsSessionId: persisted?.sessionId ?? null, idbPhotoCount: idbCount });
+      ctrace("preview.addPhoto:after", { persistedPhotos: persisted?.photos.length ?? null, lsSessionId: persisted?.sessionId ?? null, idbPhotoCount: idbCount });
+      // Guard: if the session did NOT actually gain the photo, do not navigate forward.
+      if (!persisted || persisted.photos.length === 0) {
+        ctrace("preview.session:notSaved", { sessionId: submissionId });
+        setError("Không lưu được vào phiên chụp trên thiết bị này. Vui lòng thử lại.");
+        setSaving(false);
+        return;
+      }
       // NOTE: do NOT clear pendingCapture here. Doing so re-fires the route guard
       // above (`!pendingCapture → replace("/camera")`) while still mounted on
       // /preview, which overrides this push and bounces the user out of the flow.

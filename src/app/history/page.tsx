@@ -7,6 +7,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { MockPhoto } from "@/components/ui/MockPhoto";
 import { PhotoViewerModal, type ViewerPhoto } from "@/components/media/PhotoViewerModal";
 import { processQueue } from "@/lib/queue/sync-engine";
+import { getQueue } from "@/lib/queue/offline-queue";
 import type { LatestSubmission } from "@/lib/sharepoint/report-service";
 
 function photoSrc(path: string | null): string | null {
@@ -46,9 +47,21 @@ export default function HistoryPage() {
   }, []);
 
   const unsynced = (subs ?? []).filter((s) => s.syncStatus === "failed" || s.syncStatus === "uploading" || s.syncStatus === "queued").length;
+  const [retryMsg, setRetryMsg] = useState<string | null>(null);
   const retry = async () => {
     setRetrying(true);
-    try { await processQueue(); await load(); } finally { setRetrying(false); }
+    setRetryMsg(null);
+    try {
+      // Honest retry: only items with local blobs can be re-sent. If nothing is
+      // locally retryable, say so clearly — never fake success.
+      const retryable = getQueue().filter((q) => q.status === "queued" || q.status === "failed");
+      if (retryable.length === 0) {
+        setRetryMsg("Không còn ảnh cục bộ để đồng bộ lại. Vui lòng chụp lại.");
+        return;
+      }
+      await processQueue();
+      await load();
+    } finally { setRetrying(false); }
   };
 
   // Only submissions with a watermarked thumbnail can be viewed full.
@@ -76,6 +89,7 @@ export default function HistoryPage() {
             <button onClick={retry} disabled={retrying} className="text-[13px] font-semibold underline">{retrying ? "Đang thử…" : "Thử đồng bộ lại"}</button>
           </div>
         )}
+        {retryMsg && <div className="mb-3 rounded-md bg-info-bg text-info px-3.5 py-2.5 text-[13px] font-medium">{retryMsg}</div>}
         {loading ? (
           <div className="text-ink-muted text-[14px] px-1">Đang tải…</div>
         ) : !subs || subs.length === 0 ? (

@@ -8,6 +8,7 @@ import { useCamera, makeSimulatedPhoto } from "@/hooks/useCamera";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { useSessionCapture } from "@/features/capture/session-context";
 import { PhotoThumb } from "@/components/media/PhotoThumb";
+import { ctrace } from "@/lib/debug/capture-debug";
 
 export default function CameraPage() {
   const router = useRouter();
@@ -44,6 +45,8 @@ export default function CameraPage() {
   const shoot = () => {
     const real = capture();
     const originalDataUrl = real ?? makeSimulatedPhoto(count + 1, label);
+    const mime = originalDataUrl.slice(5, originalDataUrl.indexOf(";") > 0 ? originalDataUrl.indexOf(";") : 20);
+    ctrace("camera.capture", { sessionId: session.sessionId, real: !!real, originalDataUrlLen: originalDataUrl.length, mime });
     setPendingCapture({ originalDataUrl, geo: snapshot, capturedAt: new Date().toISOString() });
     router.push("/preview");
   };

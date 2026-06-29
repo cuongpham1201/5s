@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { signOut } from "next-auth/react";
 import { useEffect, useState } from "react";
+import { fetchMe, ensureProfile, subscribeMe } from "@/lib/client/me-cache";
 import { AppShell } from "@/components/layout/AppShell";
 import { Card, InfoRow } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -17,17 +18,19 @@ function initials(name?: string | null): string {
 export default function MePage() {
   const [profile, setProfile] = useState<MeResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     let active = true;
-    fetch("/api/me")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => active && setProfile(data))
-      .finally(() => active && setLoading(false));
-    return () => {
-      active = false;
-    };
+    const unsub = subscribeMe((m) => active && setProfile(m));
+    fetchMe().then((m) => { if (active) { setProfile(m); setLoading(false); } });
+    return () => { active = false; unsub(); };
   }, []);
+
+  const resync = async () => {
+    setSyncing(true);
+    try { const m = await ensureProfile(); setProfile(m); } finally { setSyncing(false); }
+  };
 
   const dept5s = profile?.departmentResolved
     ? `${profile.departmentCode}${profile.departmentName ? " · " + profile.departmentName : ""}`
@@ -76,7 +79,10 @@ export default function MePage() {
           {profile?.employeeId && <InfoRow label="Mã nhân viên" value={profile.employeeId} />}
         </Card>
 
-        <button className="btn btn-secondary btn-block mt-6" onClick={() => signOut({ callbackUrl: "/signin" })}>
+        <button className="btn btn-secondary btn-block mt-6" onClick={resync} disabled={syncing}>
+          {syncing ? "Đang đồng bộ…" : "↻ Đồng bộ lại hồ sơ"}
+        </button>
+        <button className="btn btn-ghost btn-block mt-2 text-danger" onClick={() => signOut({ callbackUrl: "/signin" })}>
           Đăng xuất
         </button>
         <p className="text-[12px] text-ink-disabled mt-4 text-center">

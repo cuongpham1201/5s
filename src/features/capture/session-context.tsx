@@ -19,7 +19,7 @@ import { deletePhoto, deletePhotosBySubmission } from "@/lib/storage/photo-store
 import { enqueueSubmission } from "@/lib/queue/offline-queue";
 import { processQueue } from "@/lib/queue/sync-engine";
 import { generateSubmissionId } from "@/lib/submissions/submission-id";
-import { clog } from "@/lib/debug/capture-debug";
+import { clog, ctrace } from "@/lib/debug/capture-debug";
 
 /**
  * Capture session context (Phase 2A) — React state mirror over the local store.
@@ -114,18 +114,28 @@ export function SessionCaptureProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const completeSession = useCallback((): CompletedSubmission | null => {
+    const before = store.getCurrentSession();
+    ctrace("ctx.completeSession:before", { sessionId: before?.sessionId ?? null, photoCount: before?.photos.length ?? 0 });
+    // Hard guard: never create a completed/queued record with 0 photos.
+    if (!before || before.photos.length === 0) {
+      ctrace("ctx.completeSession:empty-blocked", { sessionId: before?.sessionId ?? null });
+      return null;
+    }
     const completed = store.completeCurrentSession();
-    clog("ctx.completeSession", { submissionId: completed?.submissionId ?? null, photoCount: completed?.photoCount ?? 0 });
-    if (completed) {
+    ctrace("ctx.completeSession:after", { submissionId: completed?.submissionId ?? null, photoCount: completed?.photoCount ?? 0 });
+    if (completed && completed.photoCount > 0) {
       setSession(null);
       setPendingCapture(null);
       setHistory(store.listCompletedSubmissions());
       setLastCompleted(completed);
-      // Create an offline queue item, then mock-sync if online (no network/SharePoint).
-      enqueueSubmission(completed.submissionId);
+      // Persist last-completed id so the success page survives a PWA reload.
+      try { window.localStorage.setItem("5s.lastCompletedId", completed.submissionId); } catch { /* ignore */ }
+      const q = enqueueSubmission(completed.submissionId);
+      ctrace("ctx.completeSession:queued", { submissionId: completed.submissionId, queueId: q.queueId, status: q.status });
       void processQueue();
+      return completed;
     }
-    return completed;
+    return null;
   }, []);
 
   return (

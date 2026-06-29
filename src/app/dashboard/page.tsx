@@ -6,7 +6,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { PhotoViewerModal, type ViewerPhoto } from "@/components/media/PhotoViewerModal";
-import { fetchMe } from "@/lib/client/me-cache";
+import { ensureProfile, subscribeMe } from "@/lib/client/me-cache";
 import type { MeResponse } from "@/lib/graph/graph-types";
 import type { TodaySummary, LatestSubmission } from "@/lib/sharepoint/report-service";
 
@@ -35,13 +35,11 @@ export default function DashboardPage() {
 
   useEffect(() => {
     let active = true;
-    // Post-login: AWAIT the profile sync first (resolve dept once token is settled),
-    // THEN force-refresh the shared /api/me cache so sidebar/header/dashboard all
-    // show the resolved department immediately — no logout/login needed.
+    const unsub = subscribeMe((m) => active && setMe(m)); // resume/refresh updates
+    // ensureProfile = refresh + (if incomplete) force server sync + refresh again.
     (async () => {
-      try { await fetch("/api/profile/sync", { method: "POST" }); } catch {}
       const [m, t, h, w] = await Promise.all([
-        fetchMe(true),
+        ensureProfile(),
         fetch("/api/reports/today").then((r) => (r.ok ? r.json() : null)),
         fetch("/api/history/mine").then((r) => (r.ok ? r.json() : null)),
         fetch("/api/admin/whoami").then((r) => (r.ok ? r.json() : null)),
@@ -50,7 +48,7 @@ export default function DashboardPage() {
       setMe(m); setToday(t); setMine(h?.submissions ?? []); setIsAdmin(!!(w as WhoAmI)?.isAdmin);
       setLoading(false);
     })();
-    return () => { active = false; };
+    return () => { active = false; unsub(); };
   }, []);
 
   const pct = Math.round((today?.completionRate ?? 0) * 100);
@@ -76,7 +74,10 @@ export default function DashboardPage() {
 
   return (
     <AppShell>
-      <AppHeader title={`Xin chào, ${loading ? "…" : me?.displayName ?? "bạn"}`} subtitle={me?.departmentResolved ? `${me.departmentCode} · ${me.departmentName}` : "Phòng ban: chưa xác định"} />
+      <AppHeader
+        title={`Xin chào, ${me?.displayName ?? (loading ? "…" : "bạn")}`}
+        subtitle={me?.departmentResolved ? `${me.departmentCode} · ${me.departmentName}` : (loading ? "Đang đồng bộ hồ sơ…" : "Phòng ban: chưa xác định")}
+      />
       <div className="px-4 pb-6 flex flex-col gap-4 lg:grid lg:grid-cols-3 lg:gap-4 lg:items-start">
 
         {/* My status today */}

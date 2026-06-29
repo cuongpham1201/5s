@@ -16,6 +16,14 @@ import type { CompletedSubmission, SessionPhoto } from "@/types/submission";
 
 let running = false;
 
+/** Max upload attempts before an item stays terminally "failed" (no infinite retry). */
+const MAX_ATTEMPTS = 5;
+
+const qlog = (action: string, data: Record<string, unknown>) => {
+  // eslint-disable-next-line no-console
+  console.warn("[5S_SYNC_TRACE]", action, data);
+};
+
 function isOffline(): boolean {
   return typeof navigator !== "undefined" && navigator.onLine === false;
 }
@@ -27,7 +35,8 @@ async function buildFormData(
   queueId: string,
 ): Promise<FormData | null> {
   const stored = await listPhotosBySubmission(sub.submissionId);
-  if (stored.length === 0) return null;
+  qlog("buildForm", { submissionId: sub.submissionId, sessionPhotos: sub.photos?.length ?? 0, idbPhotos: stored.length });
+  if (stored.length === 0) { qlog("buildForm:no-blobs", { submissionId: sub.submissionId }); return null; }
   const byId = new Map<string, StoredPhoto>(stored.map((p) => [p.photoId, p]));
 
   // Order photos by the session order; fall back to stored order.
@@ -68,7 +77,7 @@ async function buildFormData(
       address: sp.address ?? null,
     });
   }
-  if (metaPhotos.length === 0) return null;
+  if (metaPhotos.length === 0) { qlog("buildForm:no-matching-blobs", { submissionId: sub.submissionId, stored: stored.length }); return null; }
 
   const first = ordered[0];
   const meta = {
@@ -86,19 +95,12 @@ async function buildFormData(
     address: first?.address ?? null,
     photos: metaPhotos,
   };
+  qlog("buildForm:ready", { submissionId: sub.submissionId, photos: metaPhotos.length });
   form.append("meta", JSON.stringify(meta));
   return form;
 }
 
 /** Upload one submission. Throws on failure (caller marks queue failed). */
-/** Max upload attempts before an item stays terminally "failed" (no infinite retry). */
-const MAX_ATTEMPTS = 5;
-
-const qlog = (action: string, data: Record<string, unknown>) => {
-  // eslint-disable-next-line no-console
-  console.warn("[5S_SYNC_TRACE]", action, data);
-};
-
 async function uploadOne(submissionId: string, attemptCount: number, queueId: string): Promise<void> {
   const t0 = Date.now();
   const sub = getCompletedSubmissionById(submissionId);

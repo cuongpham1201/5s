@@ -35,3 +35,12 @@ export function clog(action: string, data: Record<string, unknown> = {}): void {
 export function getCaptureDebugState(): DebugState {
   return { ...state };
 }
+
+/** Always-on capture pipeline trace (prefix [5S_CAPTURE_TRACE]). Metadata only — no secrets/base64. */
+export function ctrace(step: string, data: Record<string, unknown> = {}): void {
+  state.lastAction = step;
+  state.lastActionAt = new Date().toISOString();
+  if (/error|fail|empty|lost/i.test(step)) state.lastError = step;
+  // eslint-disable-next-line no-console
+  console.warn("[5S_CAPTURE_TRACE]", step, data);
+}

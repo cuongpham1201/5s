@@ -7,6 +7,8 @@ import { Card, InfoRow } from "@/components/ui/Card";
 import { useSessionCapture } from "@/features/capture/session-context";
 import { findBySubmission } from "@/lib/queue/offline-queue";
 import { processQueue } from "@/lib/queue/sync-engine";
+import { getCompletedSubmissionById, listCompletedSubmissions } from "@/lib/submissions/local-submission-store";
+import type { CompletedSubmission } from "@/types/submission";
 import type { QueueStatus } from "@/lib/queue/queue-types";
 
 function fmt(iso?: string): string {
@@ -25,9 +27,20 @@ const STATUS_UI: Record<string, { icon: string; title: string; cls: string; note
 
 export default function SuccessPage() {
   const { lastCompleted } = useSessionCapture();
-  const s = lastCompleted;
+  const [s, setS] = useState<CompletedSubmission | null>(lastCompleted);
   const [status, setStatus] = useState<QueueStatus>("queued");
   const [retrying, setRetrying] = useState(false);
+
+  // lastCompleted lives only in memory; on a PWA reload it's null. Recover the
+  // record from local history (by stored id, else newest) so the success page
+  // never shows "— / 0 ảnh" for a real submission.
+  useEffect(() => {
+    if (lastCompleted) { setS(lastCompleted); return; }
+    let id: string | null = null;
+    try { id = window.localStorage.getItem("5s.lastCompletedId"); } catch { /* ignore */ }
+    const recovered = (id && getCompletedSubmissionById(id)) || listCompletedSubmissions()[0] || null;
+    setS(recovered);
+  }, [lastCompleted]);
 
   useEffect(() => {
     if (!s) return;
