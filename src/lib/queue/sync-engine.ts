@@ -28,102 +28,142 @@ function isOffline(): boolean {
   return typeof navigator !== "undefined" && navigator.onLine === false;
 }
 
-/** Build the multipart payload for one submission. Returns null if no blobs found. */
-async function buildFormData(
-  sub: CompletedSubmission,
-  attemptCount: number,
-  queueId: string,
-): Promise<FormData | null> {
+const UPLOAD_TIMEOUT_MS = 120_000;
+
+interface PayloadItem { seq: number; original: Blob; watermarked: Blob; name: { o: string; w: string } }
+interface Payload { meta: Record<string, unknown>; items: PayloadItem[]; totalBytes: number }
+
+/** Collect the ordered photo pairs + meta for a submission. null if no usable blobs. */
+async function collectPayload(sub: CompletedSubmission, attemptCount: number, queueId: string): Promise<Payload | null> {
   qlog("buildForm:start", { submissionId: sub.submissionId, sessionPhotos: sub.photos?.length ?? 0 });
   const stored = await listPhotosBySubmission(sub.submissionId);
-  qlog("buildForm", { submissionId: sub.submissionId, sessionPhotos: sub.photos?.length ?? 0, idbPhotos: stored.length });
+  qlog("buildForm", { submissionId: sub.submissionId, idbPhotos: stored.length });
   if (stored.length === 0) { qlog("buildForm:no-blobs", { submissionId: sub.submissionId }); return null; }
   const byId = new Map<string, StoredPhoto>(stored.map((p) => [p.photoId, p]));
-
-  // Order photos by the session order; fall back to stored order.
   const ordered: SessionPhoto[] = sub.photos?.length
     ? sub.photos.filter((p) => byId.has(p.photoId))
-    : stored.map((s) => ({
-        photoId: s.photoId,
-        submissionId: s.submissionId,
-        capturedAt: s.createdAt,
-        watermarkMetadata: undefined as never,
-        latitude: null,
-        longitude: null,
-        address: "",
-        status: "ready",
-      }));
+    : stored.map((s) => ({ photoId: s.photoId, submissionId: s.submissionId, capturedAt: s.createdAt, watermarkMetadata: undefined as never, latitude: null, longitude: null, address: "", status: "ready" }));
 
-  const form = new FormData();
+  const items: PayloadItem[] = [];
   const metaPhotos: Array<{ seqNo: number; capturedAt: string; latitude: number | null; longitude: number | null; address: string | null }> = [];
-  let seq = 0;
+  let seq = 0; let totalBytes = 0;
   for (const sp of ordered) {
     const blob = byId.get(sp.photoId);
-    if (!blob) continue;
+    if (!blob || (blob.originalBlob?.size ?? 0) === 0 || (blob.watermarkedBlob?.size ?? 0) === 0) continue;
     seq += 1;
-    qlog("buildForm:photo", {
-      submissionId: sub.submissionId, seq, photoId: sp.photoId,
-      originalBytes: blob.originalBlob?.size ?? 0, originalType: blob.originalBlob?.type ?? "",
-      watermarkedBytes: blob.watermarkedBlob?.size ?? 0, watermarkedType: blob.watermarkedBlob?.type ?? "",
-    });
-    form.append(`original_${seq}`, blob.originalBlob, `original-${seq}.jpg`);
-    form.append(`watermarked_${seq}`, blob.watermarkedBlob, `watermarked-${seq}.jpg`);
-    metaPhotos.push({
-      seqNo: seq,
-      capturedAt: sp.capturedAt ?? blob.createdAt,
-      latitude: sp.latitude ?? null,
-      longitude: sp.longitude ?? null,
-      address: sp.address ?? null,
-    });
+    qlog("buildForm:photo", { submissionId: sub.submissionId, seq, photoId: sp.photoId, originalBytes: blob.originalBlob.size, originalType: blob.originalBlob.type, watermarkedBytes: blob.watermarkedBlob.size, watermarkedType: blob.watermarkedBlob.type });
+    items.push({ seq, original: blob.originalBlob, watermarked: blob.watermarkedBlob, name: { o: `original-${String(seq).padStart(2, "0")}.jpg`, w: `watermarked-${String(seq).padStart(2, "0")}.jpg` } });
+    totalBytes += blob.originalBlob.size + blob.watermarkedBlob.size;
+    metaPhotos.push({ seqNo: seq, capturedAt: sp.capturedAt ?? blob.createdAt, latitude: sp.latitude ?? null, longitude: sp.longitude ?? null, address: sp.address ?? null });
   }
-  if (metaPhotos.length === 0) { qlog("buildForm:no-matching-blobs", { submissionId: sub.submissionId, stored: stored.length }); return null; }
+  if (items.length === 0) { qlog("buildForm:no-matching-blobs", { submissionId: sub.submissionId, stored: stored.length }); return null; }
 
   const first = ordered[0];
   const meta = {
-    submissionId: sub.submissionId,
-    departmentCode: sub.departmentCode,
-    areaCode: sub.areaCode,
-    areaName: sub.areaName,
-    reporterName: sub.reporterName,
-    reporterEmail: sub.reporterEmail,
-    submittedAt: sub.submittedAt,
-    queueId,
-    attemptCount,
-    latitude: first?.latitude ?? null,
-    longitude: first?.longitude ?? null,
-    address: first?.address ?? null,
-    photos: metaPhotos,
+    submissionId: sub.submissionId, departmentCode: sub.departmentCode, areaCode: sub.areaCode, areaName: sub.areaName,
+    reporterName: sub.reporterName, reporterEmail: sub.reporterEmail, submittedAt: sub.submittedAt, queueId, attemptCount,
+    latitude: first?.latitude ?? null, longitude: first?.longitude ?? null, address: first?.address ?? null, photos: metaPhotos,
   };
-  qlog("buildForm:ready", { submissionId: sub.submissionId, photos: metaPhotos.length });
-  form.append("meta", JSON.stringify(meta));
+  qlog("buildForm:ready", { submissionId: sub.submissionId, photos: items.length, totalBytes });
+  return { meta, items, totalBytes };
+}
+
+/** iOS Safari is more reliable with File than raw Blob in multipart. */
+function toFile(blob: Blob, name: string): File {
+  return new File([blob], name, { type: blob.type || "image/jpeg", lastModified: Date.now() });
+}
+
+function buildFormData(p: Payload): FormData {
+  const form = new FormData();
+  form.append("meta", JSON.stringify(p.meta));
+  for (const it of p.items) {
+    form.append(`original_${it.seq}`, toFile(it.original, it.name.o), it.name.o);
+    form.append(`watermarked_${it.seq}`, toFile(it.watermarked, it.name.w), it.name.w);
+  }
   return form;
 }
 
-/** Upload one submission. Throws on failure (caller marks queue failed). */
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => { const s = String(fr.result); resolve(s.slice(s.indexOf(",") + 1)); };
+    fr.onerror = () => reject(new Error("FileReader failed"));
+    fr.readAsDataURL(blob);
+  });
+}
+
+async function buildJsonBody(p: Payload): Promise<string> {
+  const files: Record<string, { filename: string; mime: string; base64: string }> = {};
+  for (const it of p.items) {
+    files[`original_${it.seq}`] = { filename: it.name.o, mime: it.original.type || "image/jpeg", base64: await blobToBase64(it.original) };
+    files[`watermarked_${it.seq}`] = { filename: it.name.w, mime: it.watermarked.type || "image/jpeg", base64: await blobToBase64(it.watermarked) };
+  }
+  return JSON.stringify({ meta: p.meta, files });
+}
+
+function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), UPLOAD_TIMEOUT_MS);
+  return fetch(url, { ...init, signal: ctrl.signal }).finally(() => clearTimeout(t));
+}
+
+function envDetail(): string {
+  const nav = typeof navigator !== "undefined" ? navigator : ({} as Navigator);
+  const standalone = (typeof window !== "undefined" && window.matchMedia?.("(display-mode: standalone)").matches) || (nav as unknown as { standalone?: boolean }).standalone === true;
+  const ios = /iPhone|iPad|iPod/i.test(nav.userAgent ?? "");
+  return `online=${typeof navigator !== "undefined" ? navigator.onLine : "?"} vis=${typeof document !== "undefined" ? document.visibilityState : "?"} pwa=${standalone} ios=${ios}`;
+}
+
+/** Parse a sync response; throw a structured error on HTTP/app failure. */
+async function handleResponse(res: Response, submissionId: string, mode: string, t0: number): Promise<void> {
+  const body = (await res.json().catch(() => ({}))) as { ok?: boolean; errorCode?: string; message?: string; error?: string };
+  if (!res.ok || body.ok === false) {
+    const msg = body.message ?? body.error ?? `HTTP ${res.status}`;
+    qlog(`upload.${mode}:response`, { submissionId, ok: false, status: res.status, errorCode: body.errorCode, message: msg, durationMs: Date.now() - t0 });
+    throw new Error(`${body.errorCode ?? "HTTP_" + res.status}: ${msg}`);
+  }
+  qlog(`upload.${mode}:response`, { submissionId, ok: true, status: res.status, durationMs: Date.now() - t0 });
+}
+
+/**
+ * Upload one submission. Tries multipart first; if the fetch THROWS (network /
+ * "Load failed" — common on iOS PWA) it falls back to the JSON/base64 endpoint.
+ * A normal HTTP error from the server is NOT retried via fallback.
+ */
 async function uploadOne(submissionId: string, attemptCount: number, queueId: string): Promise<void> {
   const t0 = Date.now();
   const sub = getCompletedSubmissionById(submissionId);
   if (!sub) throw new Error("Không tìm thấy dữ liệu lần gửi cục bộ.");
-  const form = await buildFormData(sub, attemptCount, queueId);
-  if (!form) throw new Error("Không tìm thấy ảnh cục bộ để tải lên (blob trống/mất).");
-  qlog("upload.request", { submissionId, queueId, attempt: attemptCount, photoCount: sub.photoCount });
+  const payload = await collectPayload(sub, attemptCount, queueId);
+  if (!payload) throw new Error("Không tìm thấy ảnh cục bộ để tải lên (blob trống/mất).");
+
+  qlog("upload.request.detail", {
+    url: "/api/sync/submission", method: "POST", photoCount: payload.items.length, totalBytes: payload.totalBytes, hasFormData: true,
+    files: payload.items.flatMap((it) => [{ key: `original_${it.seq}`, name: it.name.o, size: it.original.size, type: it.original.type }, { key: `watermarked_${it.seq}`, name: it.name.w, size: it.watermarked.size, type: it.watermarked.type }]),
+  });
 
   let res: Response;
   try {
-    res = await fetch("/api/sync/submission", { method: "POST", body: form });
+    res = await fetchWithTimeout("/api/sync/submission", { method: "POST", body: buildFormData(payload) });
   } catch (e) {
-    // Network/transport failure (never reached server) — common on flaky mobile.
-    qlog("upload.error", { submissionId, durationMs: Date.now() - t0, message: (e as Error)?.message ?? "network error" });
-    throw new Error(`NETWORK: ${(e as Error)?.message ?? "không gửi được yêu cầu"}`);
+    // fetch threw → transport failure (never reached server) → JSON fallback.
+    const err = e as Error;
+    qlog("upload.error", { submissionId, name: err?.name, message: err?.message, env: envDetail(), durationMs: Date.now() - t0 });
+    qlog("upload.fallback:start", { submissionId, reason: `${err?.name}: ${err?.message}` });
+    try {
+      const res2 = await fetchWithTimeout("/api/sync/submission-json", { method: "POST", headers: { "Content-Type": "application/json" }, body: await buildJsonBody(payload) });
+      await handleResponse(res2, submissionId, "fallback", t0);
+      return;
+    } catch (e2) {
+      const err2 = e2 as Error;
+      // If fallback itself threw at fetch (not a structured server error), tag NETWORK.
+      const isNet = err2?.name === "AbortError" || err2?.name === "TypeError" || /load failed|network|fetch/i.test(err2?.message ?? "");
+      qlog("upload.fallback:error", { submissionId, name: err2?.name, message: err2?.message, env: envDetail() });
+      if (isNet) throw new Error(`NETWORK: ${err2?.name ?? "Error"} ${err2?.message ?? ""} | ${envDetail()}`.trim());
+      throw err2; // structured server error from handleResponse
+    }
   }
-  const duration = Date.now() - t0;
-  const body = (await res.json().catch(() => ({}))) as { ok?: boolean; errorCode?: string; message?: string; error?: string };
-  if (!res.ok || body.ok === false) {
-    const msg = body.message ?? body.error ?? `HTTP ${res.status}`;
-    qlog("upload.response", { submissionId, ok: false, status: res.status, errorCode: body.errorCode, message: msg, durationMs: duration });
-    throw new Error(`${body.errorCode ?? "HTTP_" + res.status}: ${msg}`);
-  }
-  qlog("upload.response", { submissionId, ok: true, status: res.status, durationMs: duration });
+  await handleResponse(res, submissionId, "request", t0);
 }
 
 /**
