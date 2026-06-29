@@ -14,8 +14,11 @@ export interface QueueItem {
   submissionId: string;
   createdAt: string; // ISO
   lastAttemptAt?: string; // ISO
+  updatedAt?: string; // ISO
   attemptCount: number;
   status: QueueStatus;
+  /** Last error message/code from a failed sync attempt (no secrets). */
+  lastError?: string;
 }
 
 export interface QueueSummary {

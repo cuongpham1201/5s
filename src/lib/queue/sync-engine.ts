@@ -34,6 +34,7 @@ async function buildFormData(
   attemptCount: number,
   queueId: string,
 ): Promise<FormData | null> {
+  qlog("buildForm:start", { submissionId: sub.submissionId, sessionPhotos: sub.photos?.length ?? 0 });
   const stored = await listPhotosBySubmission(sub.submissionId);
   qlog("buildForm", { submissionId: sub.submissionId, sessionPhotos: sub.photos?.length ?? 0, idbPhotos: stored.length });
   if (stored.length === 0) { qlog("buildForm:no-blobs", { submissionId: sub.submissionId }); return null; }
@@ -60,10 +61,8 @@ async function buildFormData(
     const blob = byId.get(sp.photoId);
     if (!blob) continue;
     seq += 1;
-    // Device-diagnostic: surface blob size/type (catches the iOS empty-blob bug).
-    // eslint-disable-next-line no-console
-    console.warn("[5S_IMAGE_DEBUG]", "client.blob", {
-      submissionId: sub.submissionId, seq,
+    qlog("buildForm:photo", {
+      submissionId: sub.submissionId, seq, photoId: sp.photoId,
       originalBytes: blob.originalBlob?.size ?? 0, originalType: blob.originalBlob?.type ?? "",
       watermarkedBytes: blob.watermarkedBlob?.size ?? 0, watermarkedType: blob.watermarkedBlob?.type ?? "",
     });
@@ -109,12 +108,20 @@ async function uploadOne(submissionId: string, attemptCount: number, queueId: st
   if (!form) throw new Error("Không tìm thấy ảnh cục bộ để tải lên (blob trống/mất).");
   qlog("upload.request", { submissionId, queueId, attempt: attemptCount, photoCount: sub.photoCount });
 
-  const res = await fetch("/api/sync/submission", { method: "POST", body: form });
+  let res: Response;
+  try {
+    res = await fetch("/api/sync/submission", { method: "POST", body: form });
+  } catch (e) {
+    // Network/transport failure (never reached server) — common on flaky mobile.
+    qlog("upload.error", { submissionId, durationMs: Date.now() - t0, message: (e as Error)?.message ?? "network error" });
+    throw new Error(`NETWORK: ${(e as Error)?.message ?? "không gửi được yêu cầu"}`);
+  }
   const duration = Date.now() - t0;
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    qlog("upload.response", { submissionId, ok: false, status: res.status, durationMs: duration, error: (err as { error?: string }).error });
-    throw new Error((err as { error?: string }).error ?? `Upload thất bại (${res.status}).`);
+  const body = (await res.json().catch(() => ({}))) as { ok?: boolean; errorCode?: string; message?: string; error?: string };
+  if (!res.ok || body.ok === false) {
+    const msg = body.message ?? body.error ?? `HTTP ${res.status}`;
+    qlog("upload.response", { submissionId, ok: false, status: res.status, errorCode: body.errorCode, message: msg, durationMs: duration });
+    throw new Error(`${body.errorCode ?? "HTTP_" + res.status}: ${msg}`);
   }
   qlog("upload.response", { submissionId, ok: true, status: res.status, durationMs: duration });
 }
@@ -145,9 +152,10 @@ export async function processQueue(): Promise<number> {
         processed += 1;
         qlog("queue.item:uploaded", { submissionId: item.submissionId, attempt });
       } catch (e) {
-        updateStatus(item.queueId, "failed");
+        const msg = (e as Error)?.message ?? "unknown";
+        updateStatus(item.queueId, "failed", false, msg);
         setSubmissionUploadStatus(item.submissionId, "failed");
-        qlog("queue.item:failed", { submissionId: item.submissionId, attempt, exhausted: attempt + 1 >= MAX_ATTEMPTS, error: (e as Error)?.message });
+        qlog("queue.item:failed", { submissionId: item.submissionId, attempt, exhausted: attempt + 1 >= MAX_ATTEMPTS, error: msg });
       }
       pending = getQueue().filter(retryable);
       // Stop if the same item is still first (avoid tight loop within one pass).

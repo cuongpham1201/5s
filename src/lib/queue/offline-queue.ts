@@ -29,14 +29,18 @@ export function enqueueSubmission(submissionId: string): QueueItem {
   return item;
 }
 
-export function updateStatus(queueId: string, status: QueueStatus, touchAttempt = false): void {
+export function updateStatus(queueId: string, status: QueueStatus, touchAttempt = false, lastError?: string): void {
+  const now = new Date().toISOString();
   const items = listQueue().map((q) =>
     q.queueId === queueId
       ? {
           ...q,
           status,
-          lastAttemptAt: touchAttempt ? new Date().toISOString() : q.lastAttemptAt,
+          updatedAt: now,
+          lastAttemptAt: touchAttempt ? now : q.lastAttemptAt,
           attemptCount: touchAttempt ? q.attemptCount + 1 : q.attemptCount,
+          // Set on failure; cleared on success/uploading.
+          lastError: status === "failed" ? (lastError ?? q.lastError) : status === "uploaded" ? undefined : q.lastError,
         }
       : q,
   );

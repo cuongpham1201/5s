@@ -8,6 +8,7 @@ import { MockPhoto } from "@/components/ui/MockPhoto";
 import { PhotoViewerModal, type ViewerPhoto } from "@/components/media/PhotoViewerModal";
 import { processQueue } from "@/lib/queue/sync-engine";
 import { getQueue } from "@/lib/queue/offline-queue";
+import { SyncErrorDetail } from "@/components/system/SyncErrorDetail";
 import type { LatestSubmission } from "@/lib/sharepoint/report-service";
 
 function photoSrc(path: string | null): string | null {
@@ -34,6 +35,7 @@ export default function HistoryPage() {
   const [loading, setLoading] = useState(true);
   const [viewer, setViewer] = useState<number | null>(null);
   const [retrying, setRetrying] = useState(false);
+  const [openDetail, setOpenDetail] = useState<string | null>(null);
 
   const load = () => fetch("/api/history/mine").then((r) => (r.ok ? r.json() : null)).then((d) => setSubs(d?.submissions ?? []));
 
@@ -99,23 +101,34 @@ export default function HistoryPage() {
           </div>
         ) : (
           <div className="flex flex-col gap-2.5">
-            {subs.map((s) => (
-              <div key={s.submissionId} className="card-flat p-3 flex items-center gap-3">
-                {photoSrc(s.thumbnailPath) ? (
-                  <button onClick={() => openViewer(s.submissionId)} className="w-12 h-12 flex-none rounded-[10px] overflow-hidden bg-surface" aria-label="Xem ảnh">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={photoSrc(s.thumbnailPath)!} alt="" className="w-full h-full object-cover" />
-                  </button>
-                ) : (
-                  <MockPhoto className="w-12 h-12 flex-none" rounded="10px" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-[15px]">{s.departmentCode} · {s.areaName}</div>
-                  <div className="text-[12px] text-ink-muted">{fmt(s.submittedAt)} · {s.photoCount} ảnh</div>
+            {subs.map((s) => {
+              const failed = s.syncStatus === "failed" || s.syncStatus === "uploading" || s.syncStatus === "queued";
+              return (
+                <div key={s.submissionId} className="card-flat p-3">
+                  <div className="flex items-center gap-3">
+                    {photoSrc(s.thumbnailPath) ? (
+                      <button onClick={() => openViewer(s.submissionId)} className="w-12 h-12 flex-none rounded-[10px] overflow-hidden bg-surface" aria-label="Xem ảnh">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={photoSrc(s.thumbnailPath)!} alt="" className="w-full h-full object-cover" />
+                      </button>
+                    ) : (
+                      <MockPhoto className="w-12 h-12 flex-none" rounded="10px" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-[15px]">{s.departmentCode} · {s.areaName}</div>
+                      <div className="text-[12px] text-ink-muted">{fmt(s.submittedAt)} · {s.photoCount} ảnh</div>
+                    </div>
+                    <StatusBadge tone={syncTone(s.syncStatus)}>{syncLabel(s.syncStatus)}</StatusBadge>
+                  </div>
+                  {failed && (
+                    <button onClick={() => setOpenDetail(openDetail === s.submissionId ? null : s.submissionId)} className="mt-2 text-[12px] font-semibold text-primary-600">
+                      {openDetail === s.submissionId ? "Ẩn chi tiết lỗi" : "Chi tiết lỗi"}
+                    </button>
+                  )}
+                  {failed && openDetail === s.submissionId && <SyncErrorDetail submissionId={s.submissionId} />}
                 </div>
-                <StatusBadge tone={syncTone(s.syncStatus)}>{syncLabel(s.syncStatus)}</StatusBadge>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

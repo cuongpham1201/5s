@@ -38,51 +38,53 @@ interface SyncMeta {
  * fields: meta=<JSON SyncMeta>, original_<seq>=<blob>, watermarked_<seq>=<blob>
  * Server-side upload to SharePoint (app-only Graph). Graph token never leaves server.
  */
+/** Structured error response (client stores message in queue.lastError). */
+function fail(errorCode: string, message: string, status: number) {
+  return NextResponse.json({ ok: false, errorCode, message, error: message }, { status });
+}
+
 export async function POST(req: NextRequest) {
   const me = await resolveRequestUser(req);
   const sessionEmail = me?.email?.toLowerCase();
-  if (!sessionEmail) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!sessionEmail) return fail("UNAUTHORIZED", "Chưa đăng nhập", 401);
 
   let form: FormData;
   try {
     form = await req.formData();
   } catch {
-    return NextResponse.json({ error: "multipart/form-data bắt buộc" }, { status: 400 });
+    return fail("BAD_MULTIPART", "multipart/form-data bắt buộc", 400);
   }
 
   let meta: SyncMeta;
   try {
     meta = JSON.parse(String(form.get("meta") ?? ""));
   } catch {
-    return NextResponse.json({ error: "meta JSON không hợp lệ" }, { status: 400 });
+    return fail("BAD_META", "meta JSON không hợp lệ", 400);
   }
 
-  // --- validation (PART J) ---
+  // --- validation ---
   if (!meta.submissionId || !meta.departmentCode || !meta.areaCode) {
-    return NextResponse.json({ error: "thiếu submissionId/departmentCode/areaCode" }, { status: 400 });
+    return fail("MISSING_META", "thiếu submissionId/departmentCode/areaCode", 400);
   }
   if ((meta.reporterEmail ?? "").toLowerCase() !== sessionEmail) {
-    return NextResponse.json({ error: "email không khớp người dùng đăng nhập" }, { status: 403 });
+    return fail("EMAIL_MISMATCH", "email không khớp người dùng đăng nhập", 403);
   }
   if (!Array.isArray(meta.photos) || meta.photos.length === 0) {
-    return NextResponse.json({ error: "cần ít nhất 1 ảnh" }, { status: 400 });
+    return fail("NO_PHOTOS", "cần ít nhất 1 ảnh", 400);
   }
   if (meta.photos.length > MAX_PHOTOS) {
-    return NextResponse.json({ error: `tối đa ${MAX_PHOTOS} ảnh mỗi lần gửi` }, { status: 400 });
+    return fail("TOO_MANY_PHOTOS", `tối đa ${MAX_PHOTOS} ảnh mỗi lần gửi`, 400);
   }
-
-  // Department scope: a user submits only under their own resolved department.
-  // (Area is a label, not a permission — but it must belong to that department.)
   if (!me?.departmentResolved || !me.departmentCode) {
-    return NextResponse.json({ error: "chưa xác định được phòng ban của bạn" }, { status: 400 });
+    return fail("DEPT_UNRESOLVED", "chưa xác định được phòng ban của bạn", 400);
   }
   if (meta.departmentCode !== me.departmentCode) {
-    return NextResponse.json({ error: "không thể gửi cho phòng ban khác" }, { status: 403 });
+    return fail("DEPT_MISMATCH", `không thể gửi cho phòng ban khác (${meta.departmentCode} ≠ ${me.departmentCode})`, 403);
   }
   try {
     const deptAreas = await listAreasByDepartmentCode(me.departmentCode);
     if (deptAreas.length > 0 && !deptAreas.some((a) => a.code === meta.areaCode)) {
-      return NextResponse.json({ error: "khu vực không thuộc phòng ban của bạn" }, { status: 403 });
+      return fail("AREA_NOT_IN_DEPT", `khu vực ${meta.areaCode} không thuộc phòng ban ${me.departmentCode}`, 403);
     }
   } catch {
     // Non-fatal: if the area list can't be read, proceed (area is a label).
@@ -94,13 +96,10 @@ export async function POST(req: NextRequest) {
     const orig = form.get(`original_${mp.seqNo}`);
     const wm = form.get(`watermarked_${mp.seqNo}`);
     if (!(orig instanceof Blob) || !(wm instanceof Blob)) {
-      return NextResponse.json({ error: `thiếu file ảnh cho seq ${mp.seqNo}` }, { status: 400 });
+      return fail("MISSING_FILE", `thiếu file ảnh cho seq ${mp.seqNo}`, 400);
     }
-    // Reject only when a type IS declared and is clearly not an allowed image.
-    // Empty/octet-stream is allowed here — the server verifies real bytes (magic
-    // numbers) in submission-upload-service before any list write.
     if ((orig.type && !ALLOWED_MIME.has(orig.type)) || (wm.type && !ALLOWED_MIME.has(wm.type))) {
-      return NextResponse.json({ error: "chỉ chấp nhận ảnh jpeg/png/webp" }, { status: 400 });
+      return fail("BAD_MIME", `loại ảnh không hợp lệ (${orig.type || "?"}/${wm.type || "?"})`, 400);
     }
     photos.push({
       seqNo: mp.seqNo,
@@ -139,7 +138,14 @@ export async function POST(req: NextRequest) {
     console.warn("[5S_SYNC_TRACE]", "server.done", { submissionId: meta.submissionId, syncStatus: result.syncStatus, uploaded: result.photos.length, durationMs: Date.now() - t0 });
     return NextResponse.json({ ok: true, ...result });
   } catch (e) {
-    console.warn("[5S_SYNC_TRACE]", "server.failed", { submissionId: meta.submissionId, durationMs: Date.now() - t0, error: (e as Error).message });
-    return NextResponse.json({ ok: false, syncStatus: "failed", error: (e as Error).message }, { status: 502 });
+    const msg = (e as Error).message ?? "lỗi không xác định";
+    // Classify for the client lastError (no secrets — messages are app-generated).
+    const code = /không hợp lệ|JPEG|PNG|WEBP/i.test(msg) ? "IMAGE_INVALID"
+      : /toàn vẹn|byte/i.test(msg) ? "VERIFY_FAILED"
+      : /provision|list .* chưa/i.test(msg) ? "LIST_MISSING"
+      : /Graph|drive|thư viện|PUT|upload/i.test(msg) ? "GRAPH_UPLOAD_FAILED"
+      : "UPLOAD_FAILED";
+    console.warn("[5S_SYNC_TRACE]", "server.failed", { submissionId: meta.submissionId, errorCode: code, durationMs: Date.now() - t0, error: msg });
+    return NextResponse.json({ ok: false, syncStatus: "failed", errorCode: code, message: msg, error: msg }, { status: 502 });
   }
 }
