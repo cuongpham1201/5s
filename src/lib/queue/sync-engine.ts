@@ -54,9 +54,18 @@ async function collectPayload(sub: CompletedSubmission, attemptCount: number, qu
     const blob = byId.get(sp.photoId);
     if (!blob || (blob.originalBlob?.size ?? 0) === 0 || (blob.watermarkedBlob?.size ?? 0) === 0) continue;
     seq += 1;
-    qlog("buildForm:photo", { submissionId: sub.submissionId, seq, photoId: sp.photoId, originalBytes: blob.originalBlob.size, originalType: blob.originalBlob.type, watermarkedBytes: blob.watermarkedBlob.size, watermarkedType: blob.watermarkedBlob.type });
-    items.push({ seq, original: blob.originalBlob, watermarked: blob.watermarkedBlob, name: { o: `original-${String(seq).padStart(2, "0")}.jpg`, w: `watermarked-${String(seq).padStart(2, "0")}.jpg` } });
-    totalBytes += blob.originalBlob.size + blob.watermarkedBlob.size;
+    // ROOT-CAUSE FIX (Safari): a Blob read back from IndexedDB is disk-backed and
+    // lazily resolved. WebKit's multipart encoder can stream such a Blob as 0
+    // bytes (most often the FIRST file part) even though .size is correct, which
+    // the server then rejects as BAD_FILE. Reading arrayBuffer() once and wrapping
+    // the bytes in a fresh in-memory Blob removes the disk-backed handle, so every
+    // part carries real bytes. Blink/Gecko (desktop) buffer eagerly → never hit this.
+    const [oBuf, wBuf] = await Promise.all([blob.originalBlob.arrayBuffer(), blob.watermarkedBlob.arrayBuffer()]);
+    const original = new Blob([oBuf], { type: blob.originalBlob.type || "image/jpeg" });
+    const watermarked = new Blob([wBuf], { type: blob.watermarkedBlob.type || "image/jpeg" });
+    qlog("buildForm:photo", { submissionId: sub.submissionId, seq, photoId: sp.photoId, originalBytes: original.size, originalType: original.type, watermarkedBytes: watermarked.size, watermarkedType: watermarked.type, materialized: true });
+    items.push({ seq, original, watermarked, name: { o: `original-${String(seq).padStart(2, "0")}.jpg`, w: `watermarked-${String(seq).padStart(2, "0")}.jpg` } });
+    totalBytes += original.size + watermarked.size;
     metaPhotos.push({ seqNo: seq, capturedAt: sp.capturedAt ?? blob.createdAt, latitude: sp.latitude ?? null, longitude: sp.longitude ?? null, address: sp.address ?? null });
   }
   if (items.length === 0) { qlog("buildForm:no-matching-blobs", { submissionId: sub.submissionId, stored: stored.length }); return null; }
@@ -128,10 +137,20 @@ async function uploadOne(submissionId: string, attemptCount: number, queueId: st
   if (!payload) throw new Error("UNRECOVERABLE_NO_BLOB: Ảnh cục bộ không còn (đã bị xoá hoặc hỏng). Vui lòng chụp lại.");
   ulog("client.blobs.ready", { submissionId, photoCount: payload.items.length, totalBytes: payload.totalBytes });
 
+  // Build the multipart body, then PROVE what the browser actually holds for each
+  // part (key, filename, size, type) right before sending — this is the client
+  // half of the BAD_FILE client↔server comparison.
+  const form = buildFormData(payload);
+  for (const [key, v] of form.entries()) {
+    if (typeof v !== "string") {
+      ulog("client.formdata.entry", { submissionId, key, filename: (v as File).name ?? null, size: (v as File).size, type: (v as File).type, isBlob: v instanceof Blob });
+    }
+  }
+
   let res: Response;
   try {
     ulog("client.upload.request", { submissionId, url: "/api/upload/photos", photoCount: payload.items.length });
-    res = await fetchWithTimeout("/api/upload/photos", { method: "POST", body: buildFormData(payload) });
+    res = await fetchWithTimeout("/api/upload/photos", { method: "POST", body: form });
   } catch (e) {
     const err = e as Error;
     ulog("client.upload.response", { submissionId, ok: false, transport: "throw", name: err?.name, message: err?.message, env: envDetail(), durationMs: Date.now() - t0 });

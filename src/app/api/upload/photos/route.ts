@@ -47,6 +47,12 @@ export async function POST(req: NextRequest) {
   // 2) Parse multipart + meta.
   let form: FormData;
   try { form = await req.formData(); } catch { return err("NO_PHOTOS", "multipart/form-data bắt buộc.", 400); }
+  // PROOF (server half of the client↔server file comparison): log every received
+  // file part as actually parsed — key, name, size, type. A part the client sent
+  // with size>0 but that lands here with size 0 is a transport truncation.
+  for (const [key, v] of form.entries()) {
+    if (typeof v !== "string") ulog("server.formdata.entry", { key, name: (v as File).name, size: (v as File).size, type: (v as File).type });
+  }
   let meta: MetaIn;
   try { meta = JSON.parse(String(form.get("meta") ?? "")); } catch { return err("NO_PHOTOS", "meta JSON không hợp lệ.", 400); }
 
