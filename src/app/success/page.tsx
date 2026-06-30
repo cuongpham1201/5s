@@ -7,7 +7,7 @@ import { Card, InfoRow } from "@/components/ui/Card";
 import { useSessionCapture } from "@/features/capture/session-context";
 import { findBySubmission } from "@/lib/queue/offline-queue";
 import { processQueue } from "@/lib/queue/sync-engine";
-import { getCompletedSubmissionById, listCompletedSubmissions } from "@/lib/submissions/local-submission-store";
+import { getCompletedSubmissionById, getUploadResult, listCompletedSubmissions, type StoredUploadResult } from "@/lib/submissions/local-submission-store";
 import type { CompletedSubmission } from "@/types/submission";
 import type { QueueStatus } from "@/lib/queue/queue-types";
 
@@ -29,6 +29,7 @@ export default function SuccessPage() {
   const { lastCompleted } = useSessionCapture();
   const [s, setS] = useState<CompletedSubmission | null>(lastCompleted);
   const [status, setStatus] = useState<QueueStatus>("queued");
+  const [result, setResult] = useState<StoredUploadResult | null>(null);
   const [retrying, setRetrying] = useState(false);
 
   // lastCompleted lives only in memory; on a PWA reload it's null. Recover the
@@ -47,6 +48,7 @@ export default function SuccessPage() {
     const tick = () => {
       const q = findBySubmission(s.submissionId);
       if (q) setStatus(q.status);
+      setResult(getUploadResult(s.submissionId));
     };
     tick();
     const iv = setInterval(tick, 1500);
@@ -77,9 +79,22 @@ export default function SuccessPage() {
           <InfoRow label="Khu vực" value={s?.areaName ?? "—"} />
           {s?.checkItemName && <InfoRow label="Hạng mục" value={s.checkItemName} />}
           <InfoRow label="Số ảnh" value={`${s?.photoCount ?? 0} ảnh`} />
+          {result && <InfoRow label="Đã gửi thành công" value={`${result.uploadedPhotoCount} ảnh`} />}
+          {result && result.failedPhotoCount > 0 && <InfoRow label="Ảnh lỗi" value={`${result.failedPhotoCount} ảnh`} />}
           <InfoRow label="Thời gian nộp" value={fmt(s?.submittedAt)} />
           <InfoRow label="Đồng bộ" value={ui.title} />
         </Card>
+
+        {result && result.errors.length > 0 && (
+          <div className="mt-3 w-full rounded-md bg-danger-bg text-danger px-3.5 py-2.5 text-left text-[13px]">
+            <div className="font-semibold mb-1">Chi tiết ảnh lỗi:</div>
+            <ul className="list-disc pl-5 space-y-0.5">
+              {result.errors.map((e, i) => (
+                <li key={i}>Ảnh #{e.seqNo}: {e.message} <span className="opacity-70">({e.errorCode})</span></li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <div className="w-full flex flex-col gap-3 mt-8">
           {status === "failed" && (

@@ -31,18 +31,27 @@ function pad2(n: number): string {
   return String(n).padStart(2, "0");
 }
 
+/** Date key (YYYY-MM-DD) in Asia/Ho_Chi_Minh — same TZ as reporting "today". */
+function vnDateSegment(submittedAt: string): string {
+  const d = submittedAt ? new Date(submittedAt) : new Date();
+  const safe = Number.isNaN(d.getTime()) ? new Date() : d;
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Ho_Chi_Minh", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(safe);
+}
+
 /**
- * Drive-relative folder for a submission. Department-first, then date, then
- * submission — Area is NOT part of the path (Area is only a watermark/report label):
- *   Img/<DepartmentCode>/YYYY/MM/DD/<SubmissionId>
+ * Drive-relative folder for a submission (Phase R1 — FLAT date segment):
+ *   Img/<DepartmentCode>/<YYYY-MM-DD>/<SubmissionId>
+ * The path encodes department + date so reporting can treat Data_SubmissionPhotos
+ * as the source of truth WITHOUT a header lookup. Deterministic → retries
+ * overwrite the same files (idempotent). Area/user/check-item are metadata only.
+ * (Old layout Img/<Dept>/<YYYY>/<MM>/<DD>/<Sub> is still READ — see report-service
+ * parsePhotoPath — but never written by new code.)
  */
 export function buildSubmissionFolder(submissionId: string, submittedAt: string, departmentCode: string): string {
-  const d = new Date(submittedAt);
-  const yyyy = String(d.getFullYear());
-  const mm = pad2(d.getMonth() + 1);
-  const dd = pad2(d.getDate());
   const dept = (departmentCode || "UNKNOWN").replace(/[^\w-]/g, "_");
-  return `${FOLDERS.img}/${dept}/${yyyy}/${mm}/${dd}/${submissionId}`;
+  return `${FOLDERS.img}/${dept}/${vnDateSegment(submittedAt)}/${submissionId}`;
 }
 
 /** Deterministic file names for a photo pair (1-based seq) using the REAL ext. */

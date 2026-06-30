@@ -18,16 +18,21 @@ export async function GET(req: NextRequest) {
     const [subs, photos] = await Promise.all([getSubmissions(999), getSubmissionPhotos(999)]);
     const byId = new Map(subs.map((s) => [s.SubmissionId, s]));
     const items = photos
-      .filter((p) => p.WatermarkedPhotoUrl && !p.IsDeleted)
+      // Same "has photo" rule as report-service: watermarked OR original present.
+      .filter((p) => (p.WatermarkedPhotoUrl || p.OriginalPhotoUrl) && !p.IsDeleted)
       .map((p) => {
         const s = byId.get(p.SubmissionId);
+        const path = p.WatermarkedPhotoUrl || p.OriginalPhotoUrl;
+        // Department from the path (Img/<Dept>/...), header only as fallback —
+        // keeps gallery/department in sync with Overview counts.
+        const fromPath = path.split("/")[0] === "Img" ? path.split("/")[1] : "";
         return {
           submissionId: p.SubmissionId,
           seqNo: p.SeqNo,
-          watermarkedPath: p.WatermarkedPhotoUrl,
-          departmentCode: s?.DepartmentCode ?? "",
+          watermarkedPath: path,
+          departmentCode: fromPath || s?.DepartmentCode || "",
           areaName: s?.AreaName ?? "",
-          submittedAt: s?.SubmittedAt ?? "",
+          submittedAt: s?.SubmittedAt ?? p.CaptureTime ?? "",
         };
       })
       .filter((x) => !departmentCode || x.departmentCode === departmentCode)

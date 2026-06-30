@@ -14,6 +14,7 @@ import type { CompletedSubmission, SessionPhoto, SubmissionSession, UploadStatus
 
 const SESSION_KEY = "5s.session.v3";
 const HISTORY_KEY = "5s.history.v3";
+const UPLOAD_RESULT_KEY = "5s.uploadResult.v1";
 
 function hasWindow(): boolean {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
@@ -37,6 +38,27 @@ function writeJSON(key: string, value: unknown): boolean {
   } catch {
     return false; // quota / private mode
   }
+}
+
+// ---- Last upload result (per submission) — drives the success page detail ----
+
+export interface StoredUploadResult {
+  submissionId: string;
+  ok: boolean;
+  uploadedPhotoCount: number;
+  failedPhotoCount: number;
+  errors: Array<{ seqNo: number; errorCode: string; message: string }>;
+  at: string; // ISO
+}
+
+export function setUploadResult(r: StoredUploadResult): void {
+  const all = readJSON<Record<string, StoredUploadResult>>(UPLOAD_RESULT_KEY, {});
+  all[r.submissionId] = r;
+  writeJSON(UPLOAD_RESULT_KEY, all);
+}
+
+export function getUploadResult(submissionId: string): StoredUploadResult | null {
+  return readJSON<Record<string, StoredUploadResult>>(UPLOAD_RESULT_KEY, {})[submissionId] ?? null;
 }
 
 // ---- Current (draft) session ----

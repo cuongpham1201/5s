@@ -1,17 +1,19 @@
 /**
- * Sync engine (Phase 3.0) — REAL upload to SharePoint via /api/sync/submission.
+ * Sync engine (Phase R1) — REAL upload to SharePoint via POST /api/upload/photos.
  *
  * For each queued/failed submission it reads the completed metadata
  * (localStorage) + photo blobs (IndexedDB), posts them as multipart/form-data to
- * the server sync endpoint (which holds the app-only Graph token), and updates
- * queue + local-history status. On success the local blobs are dropped (the
- * photos now live in SharePoint and read pages load them via the proxy); on
+ * the single upload endpoint (which holds the app-only Graph token), and updates
+ * queue + local-history status. SUCCESS = server stored ≥1 photo row
+ * (uploadedPhotoCount >= 1). No JSON/base64/FileReader fallback. On success the
+ * local blobs are dropped (photos now live in SharePoint, read via the proxy); on
  * failure the blobs are kept for a later retry. Online-gated, reentrancy-guarded.
  */
 import { getQueue, updateStatus, findBySubmission, recoverStuckUploads, markUnrecoverable, resetFailedForRetry } from "./offline-queue";
-import { getCompletedSubmissionById, setSubmissionUploadStatus } from "@/lib/submissions/local-submission-store";
+import { getCompletedSubmissionById, setSubmissionUploadStatus, setUploadResult } from "@/lib/submissions/local-submission-store";
 import { listPhotosBySubmission, deletePhotosBySubmission } from "@/lib/storage/photo-store";
 import { trace } from "@/lib/debug/trace";
+import { ulog } from "@/lib/debug/upload-log";
 import type { StoredPhoto } from "@/lib/storage/storage-types";
 import type { CompletedSubmission, SessionPhoto } from "@/types/submission";
 
@@ -84,64 +86,6 @@ function buildFormData(p: Payload): FormData {
   return form;
 }
 
-/** Bytes → base64 (chunked btoa; safe for large arrays without arg-limit overflow). */
-function bytesToBase64(bytes: Uint8Array): string {
-  let bin = "";
-  const CH = 0x8000;
-  for (let i = 0; i < bytes.length; i += CH) {
-    bin += String.fromCharCode(...bytes.subarray(i, i + CH));
-  }
-  return btoa(bin);
-}
-
-/**
- * Blob → base64 with a 3-step conversion chain (only size/type/error are logged,
- * never base64 content):
- *   1) blob.arrayBuffer()            — fastest, reliable on most engines
- *   2) new Response(blob).arrayBuffer() — different code path; succeeds on iOS
- *      Safari/PWA when (1) rejects for a Blob rehydrated from IndexedDB
- *   3) FileReader.readAsDataURL()    — last resort (was the lone "FileReader failed")
- */
-async function blobToBase64(blob: Blob): Promise<{ base64: string; method: string }> {
-  try {
-    const buf = await blob.arrayBuffer();
-    return { base64: bytesToBase64(new Uint8Array(buf)), method: "arrayBuffer" };
-  } catch (e1) {
-    qlog("base64.arrayBuffer:failed", { size: blob.size, type: blob.type, message: (e1 as Error)?.message });
-  }
-  try {
-    const buf = await new Response(blob).arrayBuffer();
-    return { base64: bytesToBase64(new Uint8Array(buf)), method: "response" };
-  } catch (e2) {
-    qlog("base64.response:failed", { size: blob.size, type: blob.type, message: (e2 as Error)?.message });
-  }
-  try {
-    const b64 = await new Promise<string>((resolve, reject) => {
-      const fr = new FileReader();
-      fr.onload = () => { const s = String(fr.result); resolve(s.slice(s.indexOf(",") + 1)); };
-      fr.onerror = () => reject(new Error("FileReader failed"));
-      fr.readAsDataURL(blob);
-    });
-    return { base64: b64, method: "filereader" };
-  } catch (e3) {
-    throw new Error(`BASE64_FAILED: ${(e3 as Error)?.message ?? "encode error"} (size=${blob.size}, type=${blob.type || "?"})`);
-  }
-}
-
-async function buildJsonBody(p: Payload): Promise<string> {
-  const files: Record<string, { filename: string; mime: string; base64: string }> = {};
-  let method = "";
-  for (const it of p.items) {
-    const o = await blobToBase64(it.original);
-    const w = await blobToBase64(it.watermarked);
-    method = w.method;
-    files[`original_${it.seq}`] = { filename: it.name.o, mime: it.original.type || "image/jpeg", base64: o.base64 };
-    files[`watermarked_${it.seq}`] = { filename: it.name.w, mime: it.watermarked.type || "image/jpeg", base64: w.base64 };
-  }
-  qlog("upload.fallback:encode", { submissionId: String(p.meta.submissionId), method, totalBytes: p.totalBytes, env: envDetail() });
-  return JSON.stringify({ meta: p.meta, files });
-}
-
 function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), UPLOAD_TIMEOUT_MS);
@@ -158,58 +102,55 @@ function envDetail(): string {
   return `online=${typeof navigator !== "undefined" ? navigator.onLine : "?"} vis=${typeof document !== "undefined" ? document.visibilityState : "?"} pwa=${standalone} ios=${ios} safari=${safari} teams=${teams}`;
 }
 
-/** Parse a sync response; throw a structured error on HTTP/app failure. */
-async function handleResponse(res: Response, submissionId: string, mode: string, t0: number): Promise<void> {
-  const body = (await res.json().catch(() => ({}))) as { ok?: boolean; errorCode?: string; message?: string; error?: string };
-  if (!res.ok || body.ok === false) {
-    const msg = body.message ?? body.error ?? `HTTP ${res.status}`;
-    qlog(`upload.${mode}:response`, { submissionId, ok: false, status: res.status, errorCode: body.errorCode, message: msg, durationMs: Date.now() - t0 });
-    throw new Error(`${body.errorCode ?? "HTTP_" + res.status}: ${msg}`);
-  }
-  qlog(`upload.${mode}:response`, { submissionId, ok: true, status: res.status, durationMs: Date.now() - t0 });
+interface UploadResponse {
+  ok?: boolean;
+  uploadedPhotoCount?: number;
+  failedPhotoCount?: number;
+  errors?: Array<{ seqNo: number; errorCode: string; message: string }>;
+  errorCode?: string;
+  message?: string;
 }
 
 /**
- * Upload one submission. Tries multipart first; if the fetch THROWS (network /
- * "Load failed" — common on iOS PWA) it falls back to the JSON/base64 endpoint.
- * A normal HTTP error from the server is NOT retried via fallback.
+ * Upload one submission to the single primary endpoint POST /api/upload/photos
+ * (multipart). NO JSON/base64/FileReader fallback. Success = server stored ≥1
+ * photo row (uploadedPhotoCount >= 1). The structured result is persisted for the
+ * success page. A thrown fetch (offline / "Load failed") → retryable NETWORK error.
  */
 async function uploadOne(submissionId: string, attemptCount: number, queueId: string): Promise<void> {
   const t0 = Date.now();
+  ulog("client.submit.start", { submissionId, attemptCount });
   const sub = getCompletedSubmissionById(submissionId);
   if (!sub) throw new Error("Không tìm thấy dữ liệu lần gửi cục bộ.");
   const payload = await collectPayload(sub, attemptCount, queueId);
   // No usable local blob → cannot ever succeed by retrying; mark unrecoverable
   // (UI tells the user to re-capture) instead of looping retries.
   if (!payload) throw new Error("UNRECOVERABLE_NO_BLOB: Ảnh cục bộ không còn (đã bị xoá hoặc hỏng). Vui lòng chụp lại.");
-
-  qlog("upload.request.detail", {
-    url: "/api/sync/submission", method: "POST", photoCount: payload.items.length, totalBytes: payload.totalBytes, hasFormData: true,
-    files: payload.items.flatMap((it) => [{ key: `original_${it.seq}`, name: it.name.o, size: it.original.size, type: it.original.type }, { key: `watermarked_${it.seq}`, name: it.name.w, size: it.watermarked.size, type: it.watermarked.type }]),
-  });
+  ulog("client.blobs.ready", { submissionId, photoCount: payload.items.length, totalBytes: payload.totalBytes });
 
   let res: Response;
   try {
-    res = await fetchWithTimeout("/api/sync/submission", { method: "POST", body: buildFormData(payload) });
+    ulog("client.upload.request", { submissionId, url: "/api/upload/photos", photoCount: payload.items.length });
+    res = await fetchWithTimeout("/api/upload/photos", { method: "POST", body: buildFormData(payload) });
   } catch (e) {
-    // fetch threw → transport failure (never reached server) → JSON fallback.
     const err = e as Error;
-    qlog("upload.error", { submissionId, name: err?.name, message: err?.message, env: envDetail(), durationMs: Date.now() - t0 });
-    qlog("upload.fallback:start", { submissionId, reason: `${err?.name}: ${err?.message}` });
-    try {
-      const res2 = await fetchWithTimeout("/api/sync/submission-json", { method: "POST", headers: { "Content-Type": "application/json" }, body: await buildJsonBody(payload) });
-      await handleResponse(res2, submissionId, "fallback", t0);
-      return;
-    } catch (e2) {
-      const err2 = e2 as Error;
-      // If fallback itself threw at fetch (not a structured server error), tag NETWORK.
-      const isNet = err2?.name === "AbortError" || err2?.name === "TypeError" || /load failed|network|fetch/i.test(err2?.message ?? "");
-      qlog("upload.fallback:error", { submissionId, name: err2?.name, message: err2?.message, env: envDetail() });
-      if (isNet) throw new Error(`NETWORK: ${err2?.name ?? "Error"} ${err2?.message ?? ""} | ${envDetail()}`.trim());
-      throw err2; // structured server error from handleResponse
-    }
+    ulog("client.upload.response", { submissionId, ok: false, transport: "throw", name: err?.name, message: err?.message, env: envDetail(), durationMs: Date.now() - t0 });
+    throw new Error(`NETWORK: ${err?.name ?? "Error"} ${err?.message ?? ""} | ${envDetail()}`.trim());
   }
-  await handleResponse(res, submissionId, "request", t0);
+
+  const body = (await res.json().catch(() => ({}))) as UploadResponse;
+  const uploaded = body.uploadedPhotoCount ?? 0;
+  const failed = body.failedPhotoCount ?? (body.errors?.length ?? 0);
+  setUploadResult({ submissionId, ok: !!body.ok && uploaded >= 1, uploadedPhotoCount: uploaded, failedPhotoCount: failed, errors: body.errors ?? [], at: new Date().toISOString() });
+  ulog("client.upload.response", { submissionId, status: res.status, ok: body.ok, uploaded, failed, durationMs: Date.now() - t0 });
+
+  // Success requires the server to have actually stored at least one photo row.
+  if (res.ok && body.ok && uploaded >= 1) return;
+
+  const first = body.errors?.[0];
+  const code = body.errorCode ?? first?.errorCode ?? `HTTP_${res.status}`;
+  const msg = body.message ?? first?.message ?? `Tải lên thất bại (HTTP ${res.status}).`;
+  throw new Error(`${code}: ${msg}`);
 }
 
 /**

@@ -5,6 +5,10 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 /**
+ * @deprecated Phase R1 — superseded by POST /api/upload/photos (per-photo, no
+ * verify-download-back, no JSON/base64 fallback). The client no longer calls this
+ * route; it is kept only for backward compatibility and may be removed later.
+ *
  * POST /api/sync/submission (multipart/form-data)
  * fields: meta=<JSON SyncMeta>, original_<seq>=<file>, watermarked_<seq>=<file>
  * Shares validation + upload with the JSON fallback via runSyncIntake.

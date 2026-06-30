@@ -15,6 +15,7 @@ import { findListId, resolveSite } from "./site-context";
 import { ensureSubmissionFolder, uploadPhotoPair, downloadFromImgPath } from "./photo-upload-service";
 import { detectImageType, edgeHex, bytesRoundTripOk } from "./image-bytes";
 import { trace } from "@/lib/debug/trace";
+import { ulog } from "@/lib/debug/upload-log";
 import type { GraphCollection, GraphListItem } from "./sharepoint-types";
 import type { SubmissionStatus, SyncStatus } from "@/types/sharepoint";
 
@@ -185,8 +186,101 @@ export async function writeSyncLog(
   }
 }
 
-// ---- orchestrator ----
+// ---- orchestrator (Phase R1 — simple, per-photo, never throws on photo error) ----
 
+export interface PhotoUploadResult {
+  ok: boolean;
+  submissionId: string;
+  uploadedPhotoCount: number;
+  failedPhotoCount: number;
+  photos: Array<{ seqNo: number; originalPath: string; watermarkedPath: string }>;
+  errors: Array<{ seqNo: number; errorCode: string; message: string }>;
+}
+
+/**
+ * Upload each photo pair INDEPENDENTLY: detect type → Graph PUT → upsert the
+ * Data_SubmissionPhotos row immediately. A failure on one photo records an error
+ * for that photo and continues (never fails the whole submission). NO verify
+ * download-back, NO base64. Data_SubmissionPhotos is the source of truth; the
+ * Data_Submissions header is written best-effort afterwards (optional log only).
+ *
+ *   uploadedPhotoCount >= 1  → ok:true
+ *   uploadedPhotoCount === 0 → ok:false (caller keeps local blobs for retry)
+ */
+export async function uploadSubmissionPhotos(input: UploadSubmissionInput): Promise<PhotoUploadResult> {
+  const queueId = input.queueId ?? input.submissionId;
+  const attempt = input.attemptCount ?? 1;
+  const { client, siteId } = await ctx();
+  const photoListId = await requireList(client, siteId, DATA_LISTS.submissionPhotos);
+  const { driveId, folder } = await ensureSubmissionFolder(input.submissionId, input.submittedAt, input.departmentCode);
+
+  const photos: PhotoUploadResult["photos"] = [];
+  const errors: PhotoUploadResult["errors"] = [];
+
+  for (const p of input.photos) {
+    const oType = detectImageType(p.original);
+    const wType = detectImageType(p.watermarked);
+    if (!oType || !wType) {
+      errors.push({ seqNo: p.seqNo, errorCode: "BAD_FILE", message: `Ảnh #${p.seqNo} không phải JPEG/PNG/WEBP.` });
+      ulog("server.failed", { submissionId: input.submissionId, seq: p.seqNo, step: "detect", errorCode: "BAD_FILE" });
+      continue;
+    }
+    let res: Awaited<ReturnType<typeof uploadPhotoPair>>;
+    try {
+      ulog("server.graph.upload.start", { submissionId: input.submissionId, seq: p.seqNo, originalBytes: p.original.byteLength, watermarkedBytes: p.watermarked.byteLength });
+      res = await uploadPhotoPair({
+        client, driveId, folder, seqNo: p.seqNo,
+        original: p.original, watermarked: p.watermarked,
+        originalExt: oType.ext, watermarkedExt: wType.ext, originalType: oType.mime, watermarkedType: wType.mime,
+      });
+      ulog("server.graph.upload.done", { submissionId: input.submissionId, seq: p.seqNo });
+    } catch (ue) {
+      errors.push({ seqNo: p.seqNo, errorCode: "GRAPH_UPLOAD_FAILED", message: (ue as Error)?.message ?? "Graph upload lỗi" });
+      ulog("server.failed", { submissionId: input.submissionId, seq: p.seqNo, step: "graph.upload", message: (ue as Error)?.message ?? "error" });
+      continue;
+    }
+    const photoId = `${input.submissionId}-P${String(p.seqNo).padStart(2, "0")}`;
+    try {
+      await upsertPhotoRow(client, siteId, photoListId, {
+        photoId, submissionId: input.submissionId, seqNo: p.seqNo,
+        originalPath: res.originalPath, watermarkedPath: res.watermarkedPath,
+        captureTime: p.capturedAt, latitude: p.latitude, longitude: p.longitude, address: p.address,
+      });
+      ulog("server.photoRow.upsert.done", { submissionId: input.submissionId, seq: p.seqNo });
+    } catch (re) {
+      errors.push({ seqNo: p.seqNo, errorCode: "PHOTO_ROW_FAILED", message: (re as Error)?.message ?? "Lưu dòng ảnh lỗi" });
+      ulog("server.failed", { submissionId: input.submissionId, seq: p.seqNo, step: "photoRow.upsert", message: (re as Error)?.message ?? "error" });
+      continue;
+    }
+    photos.push({ seqNo: p.seqNo, originalPath: res.originalPath, watermarkedPath: res.watermarkedPath });
+  }
+
+  const ok = photos.length > 0;
+  // Best-effort header + sync log. Optional metadata only — NEVER source of truth,
+  // and a failure here must not change the upload outcome.
+  try {
+    await upsertSubmissionHeader({
+      submissionId: input.submissionId, departmentCode: input.departmentCode, areaCode: input.areaCode,
+      areaName: input.areaName, reporterName: input.reporterName, reporterEmail: input.reporterEmail,
+      submittedAt: input.submittedAt, submissionDate: input.submissionDate,
+      latitude: input.latitude, longitude: input.longitude, address: input.address,
+      photoCount: photos.length, status: input.status ?? "complete", syncStatus: ok ? "uploaded" : "failed",
+    });
+  } catch (he) {
+    ulog("server.header:warn", { submissionId: input.submissionId, message: (he as Error)?.message ?? "header optional" });
+  }
+  await writeSyncLog(queueId, input.submissionId, ok ? "uploaded" : "failed", attempt,
+    ok ? `Đã tải ${photos.length} ảnh (${errors.length} lỗi).` : `Không tải được ảnh nào (${errors.length} lỗi).`);
+
+  ulog(ok ? "server.done" : "server.failed", { submissionId: input.submissionId, uploadedPhotoCount: photos.length, failedPhotoCount: errors.length });
+  return { ok, submissionId: input.submissionId, uploadedPhotoCount: photos.length, failedPhotoCount: errors.length, photos, errors };
+}
+
+// ---- orchestrator (legacy multipart/JSON path via runSyncIntake — DEPRECATED) ----
+
+/** @deprecated Phase R1 replaced this with uploadSubmissionPhotos (per-photo, no
+ * verify-download-back). Kept only for the legacy /api/sync/* routes, which the
+ * client no longer calls. Do not use in new code. */
 export async function processSubmissionUpload(input: UploadSubmissionInput): Promise<UploadResult> {
   const queueId = input.queueId ?? input.submissionId;
   const attempt = input.attemptCount ?? 1;

@@ -5,10 +5,13 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 /**
- * POST /api/sync/submission-json — iOS-safe fallback when multipart fetch fails
- * ("Load failed") on iPhone PWA. Body:
+ * @deprecated Phase R1 — the JSON/base64 fallback is REMOVED from the main flow.
+ * POST /api/upload/photos (multipart) is the only endpoint the client calls. This
+ * route is retained but unused; do not add new callers. The base64/FileReader path
+ * was a primary source of iPhone BASE64_FAILED errors.
+ *
+ * POST /api/sync/submission-json — (legacy) iOS fallback. Body:
  *   { meta, files: { "original_1": {filename,mime,base64}, "watermarked_1": {...}, ... } }
- * Same auth/validation/upload as the multipart route (via runSyncIntake).
  */
 interface B64File { filename?: string; mime?: string; base64: string }
 

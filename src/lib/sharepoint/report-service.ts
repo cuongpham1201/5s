@@ -67,6 +67,61 @@ async function firstPhotoPathMap(): Promise<Map<string, string>> {
   return new Map([...map].map(([k, v]) => [k, v.path]));
 }
 
+/**
+ * Parse DepartmentCode + date (YYYY-MM-DD) directly from a stored photo path.
+ * Supports BOTH layouts during transition:
+ *   new: Img/<Dept>/<YYYY-MM-DD>/<Sub>/file
+ *   old: Img/<Dept>/<YYYY>/<MM>/<DD>/<Sub>/file
+ * Returns null when neither shape matches (caller falls back to the header).
+ */
+function parsePhotoPath(path: string): { dept: string; dateKey: string } | null {
+  const parts = path.split("/");
+  if (parts[0] !== "Img" || parts.length < 4) return null;
+  const dept = parts[1];
+  if (/^\d{4}-\d{2}-\d{2}$/.test(parts[2])) return { dept, dateKey: parts[2] };
+  if (/^\d{4}$/.test(parts[2]) && /^\d{2}$/.test(parts[3]) && /^\d{2}$/.test(parts[4])) {
+    return { dept, dateKey: `${parts[2]}-${parts[3]}-${parts[4]}` };
+  }
+  return null;
+}
+
+export interface PhotoFact {
+  submissionId: string;
+  departmentCode: string;
+  dateKey: string;
+  firstPath: string;
+}
+
+/**
+ * SOURCE OF TRUTH for "đã chụp": one fact per submission that has ≥1 non-deleted
+ * Data_SubmissionPhotos row with a usable URL. Department + date come from the
+ * photo PATH (header is only a fallback for legacy rows / unparseable paths).
+ * Returns the per-submission first-photo path map (thumbnails) alongside.
+ */
+async function buildPhotoFacts(subs: SubmissionRecord[]): Promise<{ thumbs: Map<string, string>; facts: Map<string, PhotoFact> }> {
+  let photos: SubmissionPhotoRecord[] = [];
+  try { photos = await getSubmissionPhotos(); } catch { photos = []; }
+  const headerById = new Map(subs.map((s) => [s.SubmissionId, s]));
+  const firstBySub = new Map<string, { seq: number; path: string }>();
+  const facts = new Map<string, PhotoFact>();
+  for (const p of photos) {
+    if (p.IsDeleted) continue;
+    const path = p.WatermarkedPhotoUrl || p.OriginalPhotoUrl;
+    if (!path) continue;
+    const cur = firstBySub.get(p.SubmissionId);
+    if (!cur || p.SeqNo < cur.seq) firstBySub.set(p.SubmissionId, { seq: p.SeqNo, path });
+    if (!facts.has(p.SubmissionId)) {
+      const parsed = parsePhotoPath(path);
+      const header = headerById.get(p.SubmissionId);
+      const departmentCode = parsed?.dept || header?.DepartmentCode || "";
+      const dateKey = parsed?.dateKey || (p.CaptureTime ? vnDateKey(new Date(p.CaptureTime)) : header ? dateKeyOf(header) : "");
+      facts.set(p.SubmissionId, { submissionId: p.SubmissionId, departmentCode, dateKey, firstPath: path });
+    }
+  }
+  const thumbs = new Map([...firstBySub].map(([k, v]) => [k, v.path]));
+  return { thumbs, facts };
+}
+
 export interface TodaySummary {
   date: string;
   expectedDepartments: number;
@@ -117,13 +172,16 @@ export async function getTodaySubmissionSummary(): Promise<TodaySummary> {
     listActiveDepartments().catch(() => []),
     safeSubmissions(),
   ]);
-  const thumbs = await firstPhotoPathMap();
-  // SOURCE OF TRUTH: a department counts as "đã chụp" ONLY when it has a today
-  // submission with ≥1 non-deleted photo actually present in Data_SubmissionPhotos
-  // (thumbs keys). A header alone / SyncStatus=uploaded / 0-photo record does NOT count.
-  const todays = subs.filter((s) => dateKeyOf(s) === today && s.Status !== "flagged" && thumbs.has(s.SubmissionId));
-  const submittedCodes = new Set(todays.map((s) => s.DepartmentCode));
-  const missing = active.filter((d) => !submittedCodes.has(d.code)).map((d) => ({ code: d.code, name: d.name }));
+  // SOURCE OF TRUTH = Data_SubmissionPhotos. A department is "đã chụp" today iff
+  // it has ≥1 non-deleted photo fact whose path-derived date is today. The
+  // Data_Submissions header is NOT consulted for this decision.
+  const { thumbs, facts } = await buildPhotoFacts(subs);
+  const submittedToday = new Set<string>();
+  for (const f of facts.values()) {
+    if (f.dateKey === today && f.departmentCode) submittedToday.add(f.departmentCode);
+  }
+  const submittedActive = active.filter((d) => submittedToday.has(d.code));
+  const missing = active.filter((d) => !submittedToday.has(d.code)).map((d) => ({ code: d.code, name: d.name }));
   const latest = subs
     .slice()
     .sort((a, b) => (b.SubmittedAt || "").localeCompare(a.SubmittedAt || ""))
@@ -132,12 +190,12 @@ export async function getTodaySubmissionSummary(): Promise<TodaySummary> {
   return {
     date: today,
     expectedDepartments: active.length,
-    submittedDepartments: submittedCodes.size,
+    submittedDepartments: submittedActive.length,
     missingDepartments: missing,
-    submittedDepartmentCodes: [...submittedCodes],
-    completionRate: active.length ? submittedCodes.size / active.length : 0,
+    submittedDepartmentCodes: submittedActive.map((d) => d.code),
+    completionRate: active.length ? submittedActive.length / active.length : 0,
     latestSubmissions: latest,
-    hasData: subs.length > 0,
+    hasData: facts.size > 0 || subs.length > 0,
   };
 }
 
@@ -170,17 +228,16 @@ export interface DailyStatusRow {
 
 /** Department × date matrix for a given month (YYYY-MM). Empty when no data. */
 export async function getDepartmentDailyStatus(month: string): Promise<DailyStatusRow[]> {
-  const [active, subs, thumbs] = await Promise.all([
+  const [active, subs] = await Promise.all([
     listActiveDepartments().catch(() => []),
     safeSubmissions(),
-    firstPhotoPathMap(),
   ]);
+  // Same source of truth: build the dept×date matrix from photo facts, not headers.
+  const { facts } = await buildPhotoFacts(subs);
   const byDeptDate = new Set<string>();
-  for (const s of subs) {
-    // Same rule: only count a day "submitted" when the submission has photos.
-    if (!thumbs.has(s.SubmissionId)) continue;
-    const k = dateKeyOf(s);
-    if (k.startsWith(month)) byDeptDate.add(`${s.DepartmentCode}|${k}`);
+  for (const f of facts.values()) {
+    if (!f.departmentCode || !f.dateKey) continue;
+    if (f.dateKey.startsWith(month)) byDeptDate.add(`${f.departmentCode}|${f.dateKey}`);
   }
   return active.map((d) => {
     const days: Record<string, boolean> = {};
