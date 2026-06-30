@@ -76,6 +76,22 @@ async function buildGraphInput(req: NextRequest): Promise<{ input: GraphProfileI
 }
 
 export async function getRequestProfile(req: NextRequest, opts: { mode?: "read" | "sync" } = {}): Promise<RequestProfile> {
+  // READ fast-path: serve the app-owned stored profile WITHOUT a delegated Graph
+  // call. Data_UserProfiles is the stable source after first sync; this avoids
+  // hitting Graph on every request (and avoids the token-expiry failure path).
+  if (opts.mode !== "sync") {
+    const session = await auth();
+    const email = lc(session?.user?.email);
+    if (!session?.user) return { profile: null, email: null };
+    if (email) {
+      const existing = await getProfile(email).catch(() => null);
+      if (existing && existing.departmentResolved) {
+        return { profile: existing, email, role: session.user.role };
+      }
+    }
+  }
+
+  // Graph needed: explicit sync, OR profile missing/unresolved (self-heal).
   const { input, role } = await buildGraphInput(req);
   if (!input) return { profile: null, email: null, role };
   try {
@@ -84,9 +100,6 @@ export async function getRequestProfile(req: NextRequest, opts: { mode?: "read" 
       return { profile: await syncProfileFromGraph(input), email: input.email, role };
     }
     const existing = await getProfile(input.email);
-    // Self-heal: read normally, BUT if the stored profile is missing OR was created
-    // unresolved (e.g. first-login Graph-token timing), re-sync now so the user does
-    // NOT have to logout/login. Writes only when unresolved — not on every call.
     if (existing && existing.departmentResolved) {
       return { profile: existing, email: input.email, role };
     }

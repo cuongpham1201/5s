@@ -3,6 +3,7 @@ import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
 import Credentials from "next-auth/providers/credentials";
 import { resolveRole } from "@/lib/auth/roles";
 import { mapEntraDepartment } from "@/lib/department-mapping";
+import { trace } from "@/lib/debug/trace";
 
 /**
  * Auth.js (NextAuth v5) configuration — Phase 1B.
@@ -26,6 +27,8 @@ declare module "next-auth" {
       department?: string; // 5S department code (mapped)
       role?: AppRole;
     } & DefaultSession["user"];
+    /** Set to "RefreshAccessTokenError" when the Graph token could not be refreshed. */
+    error?: string;
   }
   interface User {
     department?: string;
@@ -38,7 +41,11 @@ declare module "next-auth/jwt" {
     role?: AppRole;
     department?: string;
     accessToken?: string;
+    refreshToken?: string;
+    /** Epoch SECONDS when the access token expires (matches account.expires_at). */
     accessTokenExpires?: number;
+    /** "RefreshAccessTokenError" when refresh failed → UI/API should force re-login. */
+    error?: string;
   }
 }
 
@@ -95,6 +102,49 @@ if (allowDevLogin || !entraConfigured) {
   );
 }
 
+/** Refresh window: renew when within this many seconds of expiry. */
+const REFRESH_SKEW_SEC = 300;
+const GRAPH_SCOPE = "openid profile email offline_access User.Read";
+
+/**
+ * Exchange the stored refresh_token for a new Entra access_token (delegated).
+ * Never logs token values. On failure marks the JWT with RefreshAccessTokenError
+ * and clears the dead access token so callers fall back / force re-login.
+ */
+async function refreshEntraAccessToken(token: import("next-auth/jwt").JWT): Promise<import("next-auth/jwt").JWT> {
+  try {
+    if (!token.refreshToken || !tenantId) throw new Error("missing_refresh_token");
+    const res = await fetch(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: process.env.AUTH_AZURE_AD_CLIENT_ID ?? "",
+        client_secret: process.env.AUTH_AZURE_AD_CLIENT_SECRET ?? "",
+        grant_type: "refresh_token",
+        refresh_token: token.refreshToken,
+        scope: GRAPH_SCOPE,
+      }),
+      cache: "no-store",
+    });
+    const data = (await res.json().catch(() => ({}))) as {
+      access_token?: string; expires_in?: number; refresh_token?: string; error?: string;
+    };
+    if (!res.ok || !data.access_token) throw new Error(data.error || `http_${res.status}`);
+    return {
+      ...token,
+      accessToken: data.access_token,
+      accessTokenExpires: Math.floor(Date.now() / 1000) + (data.expires_in ?? 3600),
+      // Entra rotates refresh tokens — keep the new one (fall back to old if absent).
+      refreshToken: data.refresh_token ?? token.refreshToken,
+      error: undefined,
+    };
+  } catch (e) {
+    // Event name + provider error code only — NO token values.
+    trace("[5S_PROFILE]", "token.refresh:failed", { error: (e as Error)?.message ?? "error" });
+    return { ...token, accessToken: undefined, error: "RefreshAccessTokenError" };
+  }
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers,
   // Homelab runs behind Cloudflare Tunnel (reverse proxy), so the host header
@@ -104,16 +154,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "jwt" },
   callbacks: {
     async jwt({ token, account, user, profile }) {
-      // Capture the Graph access token at sign-in (Entra only).
+      // (1) Initial sign-in (Entra): capture access + refresh token + expiry.
       if (account?.access_token) {
         token.accessToken = account.access_token;
-        token.accessTokenExpires = account.expires_at;
+        token.accessTokenExpires = account.expires_at; // epoch seconds
+        token.refreshToken = account.refresh_token;
+        token.error = undefined;
       }
       if (user) {
         token.role = (user as { role?: AppRole }).role;
         token.department = (user as { department?: string }).department;
       }
-      // Derive role + 5S department from the Entra profile on first sign-in.
       if (profile) {
         const email = (profile.email as string) || (profile.preferred_username as string) || "";
         token.role = token.role ?? resolveRole(email);
@@ -121,6 +172,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.department = token.department ?? mapEntraDepartment(entraDept);
       }
       token.role = token.role ?? "employee";
+
+      // (2) Subsequent calls: rotate the Graph token BEFORE it expires so we never
+      // reach the "logged in but Graph token dead" state. Only when we actually
+      // have a refresh token (Entra); dev Credentials login has none → skipped.
+      if (!account && token.refreshToken && token.accessTokenExpires) {
+        const nowSec = Math.floor(Date.now() / 1000);
+        if (nowSec >= token.accessTokenExpires - REFRESH_SKEW_SEC) {
+          return await refreshEntraAccessToken(token);
+        }
+      }
       return token;
     },
     async session({ session, token }) {
@@ -128,7 +189,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.role = (token.role as AppRole) ?? "employee";
         session.user.department = token.department;
       }
+      // Surface refresh failure so UI/API can force a clean re-login.
       // accessToken intentionally NOT attached to the client session.
+      session.error = token.error;
       return session;
     },
   },
