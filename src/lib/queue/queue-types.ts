@@ -19,6 +19,8 @@ export interface QueueItem {
   status: QueueStatus;
   /** Last error message/code from a failed sync attempt (no secrets). */
   lastError?: string;
+  /** True when the item cannot be retried automatically (e.g. local blob gone). */
+  unrecoverable?: boolean;
 }
 
 export interface QueueSummary {

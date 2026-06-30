@@ -71,7 +71,7 @@ function DebugSyncInner() {
 
   useEffect(() => { void scan(); }, [scan]);
 
-  const forceSync = async () => { setBusy(true); try { await processQueue(); await scan(); } finally { setBusy(false); } };
+  const forceSync = async () => { setBusy(true); try { await processQueue({ manual: true }); await scan(); } finally { setBusy(false); } };
 
   return (
     <AppShell>

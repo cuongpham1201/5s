@@ -56,7 +56,7 @@ export default function SuccessPage() {
 
   const retry = async () => {
     setRetrying(true);
-    try { await processQueue(); } finally { setRetrying(false); }
+    try { await processQueue({ manual: true }); } finally { setRetrying(false); }
   };
 
   const ui = STATUS_UI[status] ?? STATUS_UI.queued;

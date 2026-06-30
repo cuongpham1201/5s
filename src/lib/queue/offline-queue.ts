@@ -47,6 +47,54 @@ export function updateStatus(queueId: string, status: QueueStatus, touchAttempt 
   saveQueue(items);
 }
 
+/**
+ * Reset crashed "uploading" items back to a retryable "failed" state. An item
+ * stuck in "uploading" means the app was killed mid-upload (common on iOS PWA):
+ * the normal retry filter never picks "uploading", so it would be stuck forever.
+ * Only items older than maxAgeMs are touched (never an in-flight upload).
+ */
+export function recoverStuckUploads(maxAgeMs: number): number {
+  const now = Date.now();
+  let recovered = 0;
+  const items = listQueue().map((q) => {
+    if (q.status !== "uploading") return q;
+    const ts = Date.parse(q.updatedAt ?? q.lastAttemptAt ?? q.createdAt ?? "");
+    if (!Number.isNaN(ts) && now - ts <= maxAgeMs) return q; // still possibly in-flight
+    recovered += 1;
+    return { ...q, status: "failed" as QueueStatus, updatedAt: new Date().toISOString(), lastError: "Tải lên bị gián đoạn — sẽ thử lại." };
+  });
+  if (recovered > 0) saveQueue(items);
+  return recovered;
+}
+
+/** Mark an item terminally failed (no auto-retry) — e.g. local blob gone/corrupt. */
+export function markUnrecoverable(queueId: string, message: string): void {
+  const items = listQueue().map((q) =>
+    q.queueId === queueId
+      ? { ...q, status: "failed" as QueueStatus, unrecoverable: true, updatedAt: new Date().toISOString(), lastError: message }
+      : q,
+  );
+  saveQueue(items);
+}
+
+/**
+ * User-initiated retry: clear the attempt count on recoverable failed/uploading
+ * items so a manual "Thử đồng bộ lại" gets a fresh set of attempts. Never touches
+ * items flagged unrecoverable (local blob gone). Returns how many were reset.
+ */
+export function resetFailedForRetry(): number {
+  let reset = 0;
+  const items = listQueue().map((q) => {
+    if ((q.status === "failed" || q.status === "uploading") && !q.unrecoverable) {
+      reset += 1;
+      return { ...q, status: "queued" as QueueStatus, attemptCount: 0, updatedAt: new Date().toISOString() };
+    }
+    return q;
+  });
+  if (reset > 0) saveQueue(items);
+  return reset;
+}
+
 export function removeBySubmission(submissionId: string): void {
   saveQueue(listQueue().filter((q) => q.submissionId !== submissionId));
 }

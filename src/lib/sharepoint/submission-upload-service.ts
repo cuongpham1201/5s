@@ -240,20 +240,29 @@ export async function processSubmissionUpload(input: UploadSubmissionInput): Pro
         originalType: oType.mime, watermarkedType: wType.mime,
       });
 
-      // 3) Verify integrity: download back and compare bytes + magic (both files).
-      const [dlO, dlW] = await Promise.all([
-        downloadFromImgPath(client, driveId, res.originalPath),
-        downloadFromImgPath(client, driveId, res.watermarkedPath),
-      ]);
-      const okO = bytesRoundTripOk(p.original, dlO.data) && !!detectImageType(dlO.data);
-      const okW = bytesRoundTripOk(p.watermarked, dlW.data) && !!detectImageType(dlW.data);
-      ilog("upload.verify", {
-        submissionId: input.submissionId, seq: p.seqNo,
-        originalUploaded: p.original.byteLength, originalDownloaded: dlO.data.byteLength, originalOk: okO,
-        watermarkedUploaded: p.watermarked.byteLength, watermarkedDownloaded: dlW.data.byteLength, watermarkedOk: okW,
-      });
-      if (!okO || !okW) {
-        throw new Error(`Ảnh #${p.seqNo} tải lên không toàn vẹn (byte không khớp). Sẽ thử lại.`);
+      // 3) Integrity check (BEST-EFFORT, non-fatal). A successful Graph PUT means
+      //    the bytes are stored; a failed or disagreeing read-back (transient
+      //    Graph GET, eventual consistency right after PUT, proxy/Cloudflare
+      //    timeout) must NOT fail the whole submission — that was the HTTP_502
+      //    that left iPhone uploads stuck despite the file being present. We log a
+      //    warning and proceed to record the photo row.
+      try {
+        const [dlO, dlW] = await Promise.all([
+          downloadFromImgPath(client, driveId, res.originalPath),
+          downloadFromImgPath(client, driveId, res.watermarkedPath),
+        ]);
+        const okO = bytesRoundTripOk(p.original, dlO.data) && !!detectImageType(dlO.data);
+        const okW = bytesRoundTripOk(p.watermarked, dlW.data) && !!detectImageType(dlW.data);
+        ilog("upload.verify", {
+          submissionId: input.submissionId, seq: p.seqNo,
+          originalUploaded: p.original.byteLength, originalDownloaded: dlO.data.byteLength, originalOk: okO,
+          watermarkedUploaded: p.watermarked.byteLength, watermarkedDownloaded: dlW.data.byteLength, watermarkedOk: okW,
+        });
+        if (!okO || !okW) {
+          ilog("upload.verify:warn", { submissionId: input.submissionId, seq: p.seqNo, reason: "byte mismatch after PUT (non-fatal)", originalOk: okO, watermarkedOk: okW });
+        }
+      } catch (ve) {
+        ilog("upload.verify:warn", { submissionId: input.submissionId, seq: p.seqNo, reason: "verify read-back failed (non-fatal)", message: (ve as Error)?.message ?? "error" });
       }
 
       const photoId = `${input.submissionId}-P${String(p.seqNo).padStart(2, "0")}`;
@@ -269,6 +278,12 @@ export async function processSubmissionUpload(input: UploadSubmissionInput): Pro
         address: p.address,
       });
       uploaded.push({ seqNo: p.seqNo, originalPath: res.originalPath, watermarkedPath: res.watermarkedPath });
+    }
+
+    // Never mark a submission synced without at least one stored photo row
+    // (keeps the Phase-1 reporting rule: "đã chụp" = ≥1 photo line).
+    if (uploaded.length === 0) {
+      throw new Error("Không có ảnh nào tải lên thành công.");
     }
 
     await updateSubmissionSyncStatus(input.submissionId, "uploaded");

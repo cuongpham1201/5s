@@ -7,7 +7,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { MockPhoto } from "@/components/ui/MockPhoto";
 import { PhotoViewerModal, type ViewerPhoto } from "@/components/media/PhotoViewerModal";
 import { processQueue } from "@/lib/queue/sync-engine";
-import { getQueue, updateStatus } from "@/lib/queue/offline-queue";
+import { getQueue } from "@/lib/queue/offline-queue";
 import { SyncErrorDetail } from "@/components/system/SyncErrorDetail";
 import type { LatestSubmission } from "@/lib/sharepoint/report-service";
 
@@ -54,16 +54,18 @@ export default function HistoryPage() {
     setRetrying(true);
     setRetryMsg(null);
     try {
-      // Reset any stuck "uploading" items back to queued so they re-process.
-      getQueue().filter((q) => q.status === "uploading").forEach((q) => updateStatus(q.queueId, "queued"));
-      // Honest retry: only items with local blobs can be re-sent. If nothing is
-      // locally retryable, say so clearly — never fake success.
-      const retryable = getQueue().filter((q) => q.status === "queued" || q.status === "failed");
-      if (retryable.length === 0) {
-        setRetryMsg("Không còn ảnh cục bộ để đồng bộ lại. Vui lòng chụp lại.");
+      // Honest retry: only items that are not flagged unrecoverable (local blob
+      // gone) can be re-sent. processQueue({manual}) recovers stuck "uploading"
+      // items and resets attempt counts; if nothing is recoverable, say so.
+      const q = getQueue();
+      const recoverable = q.filter((it) => !it.unrecoverable && (it.status === "queued" || it.status === "failed" || it.status === "uploading"));
+      if (recoverable.length === 0) {
+        setRetryMsg(q.some((it) => it.unrecoverable)
+          ? "Một số lần gửi không thể đồng bộ lại (ảnh cục bộ đã mất). Vui lòng chụp lại."
+          : "Không còn lần gửi nào cần đồng bộ.");
         return;
       }
-      await processQueue();
+      await processQueue({ manual: true });
       await load();
     } finally { setRetrying(false); }
   };

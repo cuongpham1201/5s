@@ -8,7 +8,7 @@
  * photos now live in SharePoint and read pages load them via the proxy); on
  * failure the blobs are kept for a later retry. Online-gated, reentrancy-guarded.
  */
-import { getQueue, updateStatus, findBySubmission } from "./offline-queue";
+import { getQueue, updateStatus, findBySubmission, recoverStuckUploads, markUnrecoverable, resetFailedForRetry } from "./offline-queue";
 import { getCompletedSubmissionById, setSubmissionUploadStatus } from "@/lib/submissions/local-submission-store";
 import { listPhotosBySubmission, deletePhotosBySubmission } from "@/lib/storage/photo-store";
 import { trace } from "@/lib/debug/trace";
@@ -19,6 +19,9 @@ let running = false;
 
 /** Max upload attempts before an item stays terminally "failed" (no infinite retry). */
 const MAX_ATTEMPTS = 5;
+
+/** An "uploading" item older than this was crashed mid-upload → recover it. */
+const STUCK_UPLOADING_MS = 180_000; // > UPLOAD_TIMEOUT_MS (120s) + margin
 
 const qlog = (action: string, data: Record<string, unknown>) => trace("[5S_SYNC_TRACE]", action, data);
 
@@ -92,26 +95,36 @@ function bytesToBase64(bytes: Uint8Array): string {
 }
 
 /**
- * Blob → base64. PRIMARY path is blob.arrayBuffer() (reliable in iOS/Teams WebView);
- * FileReader is only a last-resort fallback (it was the cause of "FileReader failed").
+ * Blob → base64 with a 3-step conversion chain (only size/type/error are logged,
+ * never base64 content):
+ *   1) blob.arrayBuffer()            — fastest, reliable on most engines
+ *   2) new Response(blob).arrayBuffer() — different code path; succeeds on iOS
+ *      Safari/PWA when (1) rejects for a Blob rehydrated from IndexedDB
+ *   3) FileReader.readAsDataURL()    — last resort (was the lone "FileReader failed")
  */
 async function blobToBase64(blob: Blob): Promise<{ base64: string; method: string }> {
   try {
     const buf = await blob.arrayBuffer();
     return { base64: bytesToBase64(new Uint8Array(buf)), method: "arrayBuffer" };
   } catch (e1) {
-    qlog("base64.arrayBuffer:failed", { size: blob.size, message: (e1 as Error)?.message });
-    try {
-      const b64 = await new Promise<string>((resolve, reject) => {
-        const fr = new FileReader();
-        fr.onload = () => { const s = String(fr.result); resolve(s.slice(s.indexOf(",") + 1)); };
-        fr.onerror = () => reject(new Error("FileReader failed"));
-        fr.readAsDataURL(blob);
-      });
-      return { base64: b64, method: "filereader" };
-    } catch (e2) {
-      throw new Error(`BASE64_FAILED: ${(e2 as Error)?.message ?? "encode error"} (size=${blob.size})`);
-    }
+    qlog("base64.arrayBuffer:failed", { size: blob.size, type: blob.type, message: (e1 as Error)?.message });
+  }
+  try {
+    const buf = await new Response(blob).arrayBuffer();
+    return { base64: bytesToBase64(new Uint8Array(buf)), method: "response" };
+  } catch (e2) {
+    qlog("base64.response:failed", { size: blob.size, type: blob.type, message: (e2 as Error)?.message });
+  }
+  try {
+    const b64 = await new Promise<string>((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onload = () => { const s = String(fr.result); resolve(s.slice(s.indexOf(",") + 1)); };
+      fr.onerror = () => reject(new Error("FileReader failed"));
+      fr.readAsDataURL(blob);
+    });
+    return { base64: b64, method: "filereader" };
+  } catch (e3) {
+    throw new Error(`BASE64_FAILED: ${(e3 as Error)?.message ?? "encode error"} (size=${blob.size}, type=${blob.type || "?"})`);
   }
 }
 
@@ -166,7 +179,9 @@ async function uploadOne(submissionId: string, attemptCount: number, queueId: st
   const sub = getCompletedSubmissionById(submissionId);
   if (!sub) throw new Error("Không tìm thấy dữ liệu lần gửi cục bộ.");
   const payload = await collectPayload(sub, attemptCount, queueId);
-  if (!payload) throw new Error("Không tìm thấy ảnh cục bộ để tải lên (blob trống/mất).");
+  // No usable local blob → cannot ever succeed by retrying; mark unrecoverable
+  // (UI tells the user to re-capture) instead of looping retries.
+  if (!payload) throw new Error("UNRECOVERABLE_NO_BLOB: Ảnh cục bộ không còn (đã bị xoá hoặc hỏng). Vui lòng chụp lại.");
 
   qlog("upload.request.detail", {
     url: "/api/sync/submission", method: "POST", photoCount: payload.items.length, totalBytes: payload.totalBytes, hasFormData: true,
@@ -201,12 +216,18 @@ async function uploadOne(submissionId: string, attemptCount: number, queueId: st
  * Process queued + retryable-failed items. Online-gated, reentrancy-guarded.
  * Items that exhausted MAX_ATTEMPTS stay terminally "failed" (never stuck/looping).
  */
-export async function processQueue(): Promise<number> {
+export async function processQueue(opts: { manual?: boolean } = {}): Promise<number> {
   if (running || isOffline()) return 0;
   running = true;
   let processed = 0;
-  const retryable = (q: { status: string; attemptCount: number }) =>
-    q.status === "queued" || (q.status === "failed" && q.attemptCount < MAX_ATTEMPTS);
+  // Rescue items left "uploading" by a killed app (iOS PWA) so they retry.
+  const recovered = recoverStuckUploads(STUCK_UPLOADING_MS);
+  // A user-initiated retry gives terminally-failed (but recoverable) items a
+  // fresh set of attempts; auto runs keep the bounded MAX_ATTEMPTS behaviour.
+  const reset = opts.manual ? resetFailedForRetry() : 0;
+  if (recovered || reset) qlog("queue.recover", { recovered, reset, manual: !!opts.manual });
+  const retryable = (q: { status: string; attemptCount: number; unrecoverable?: boolean }) =>
+    q.status === "queued" || (q.status === "failed" && !q.unrecoverable && q.attemptCount < MAX_ATTEMPTS);
   try {
     let pending = getQueue().filter(retryable);
     qlog("queue.process:start", { pending: pending.length });
@@ -224,9 +245,15 @@ export async function processQueue(): Promise<number> {
         qlog("queue.item:uploaded", { submissionId: item.submissionId, attempt });
       } catch (e) {
         const msg = (e as Error)?.message ?? "unknown";
-        updateStatus(item.queueId, "failed", false, msg);
         setSubmissionUploadStatus(item.submissionId, "failed");
-        qlog("queue.item:failed", { submissionId: item.submissionId, attempt, exhausted: attempt + 1 >= MAX_ATTEMPTS, error: msg });
+        if (msg.startsWith("UNRECOVERABLE")) {
+          const clean = msg.replace(/^UNRECOVERABLE_[A-Z_]+:\s*/, "");
+          markUnrecoverable(item.queueId, clean);
+          qlog("queue.item:unrecoverable", { submissionId: item.submissionId, attempt, error: clean });
+        } else {
+          updateStatus(item.queueId, "failed", false, msg);
+          qlog("queue.item:failed", { submissionId: item.submissionId, attempt, exhausted: attempt + 1 >= MAX_ATTEMPTS, error: msg });
+        }
       }
       pending = getQueue().filter(retryable);
       // Stop if the same item is still first (avoid tight loop within one pass).
