@@ -83,21 +83,51 @@ function buildFormData(p: Payload): FormData {
   return form;
 }
 
-function blobToBase64(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const fr = new FileReader();
-    fr.onload = () => { const s = String(fr.result); resolve(s.slice(s.indexOf(",") + 1)); };
-    fr.onerror = () => reject(new Error("FileReader failed"));
-    fr.readAsDataURL(blob);
-  });
+/** Bytes → base64 (chunked btoa; safe for large arrays without arg-limit overflow). */
+function bytesToBase64(bytes: Uint8Array): string {
+  let bin = "";
+  const CH = 0x8000;
+  for (let i = 0; i < bytes.length; i += CH) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + CH));
+  }
+  return btoa(bin);
+}
+
+/**
+ * Blob → base64. PRIMARY path is blob.arrayBuffer() (reliable in iOS/Teams WebView);
+ * FileReader is only a last-resort fallback (it was the cause of "FileReader failed").
+ */
+async function blobToBase64(blob: Blob): Promise<{ base64: string; method: string }> {
+  try {
+    const buf = await blob.arrayBuffer();
+    return { base64: bytesToBase64(new Uint8Array(buf)), method: "arrayBuffer" };
+  } catch (e1) {
+    qlog("base64.arrayBuffer:failed", { size: blob.size, message: (e1 as Error)?.message });
+    try {
+      const b64 = await new Promise<string>((resolve, reject) => {
+        const fr = new FileReader();
+        fr.onload = () => { const s = String(fr.result); resolve(s.slice(s.indexOf(",") + 1)); };
+        fr.onerror = () => reject(new Error("FileReader failed"));
+        fr.readAsDataURL(blob);
+      });
+      return { base64: b64, method: "filereader" };
+    } catch (e2) {
+      throw new Error(`BASE64_FAILED: ${(e2 as Error)?.message ?? "encode error"} (size=${blob.size})`);
+    }
+  }
 }
 
 async function buildJsonBody(p: Payload): Promise<string> {
   const files: Record<string, { filename: string; mime: string; base64: string }> = {};
+  let method = "";
   for (const it of p.items) {
-    files[`original_${it.seq}`] = { filename: it.name.o, mime: it.original.type || "image/jpeg", base64: await blobToBase64(it.original) };
-    files[`watermarked_${it.seq}`] = { filename: it.name.w, mime: it.watermarked.type || "image/jpeg", base64: await blobToBase64(it.watermarked) };
+    const o = await blobToBase64(it.original);
+    const w = await blobToBase64(it.watermarked);
+    method = w.method;
+    files[`original_${it.seq}`] = { filename: it.name.o, mime: it.original.type || "image/jpeg", base64: o.base64 };
+    files[`watermarked_${it.seq}`] = { filename: it.name.w, mime: it.watermarked.type || "image/jpeg", base64: w.base64 };
   }
+  qlog("upload.fallback:encode", { submissionId: String(p.meta.submissionId), method, totalBytes: p.totalBytes, env: envDetail() });
   return JSON.stringify({ meta: p.meta, files });
 }
 
@@ -109,9 +139,12 @@ function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
 
 function envDetail(): string {
   const nav = typeof navigator !== "undefined" ? navigator : ({} as Navigator);
+  const ua = nav.userAgent ?? "";
   const standalone = (typeof window !== "undefined" && window.matchMedia?.("(display-mode: standalone)").matches) || (nav as unknown as { standalone?: boolean }).standalone === true;
-  const ios = /iPhone|iPad|iPod/i.test(nav.userAgent ?? "");
-  return `online=${typeof navigator !== "undefined" ? navigator.onLine : "?"} vis=${typeof document !== "undefined" ? document.visibilityState : "?"} pwa=${standalone} ios=${ios}`;
+  const ios = /iPhone|iPad|iPod/i.test(ua);
+  const safari = /Safari/i.test(ua) && !/CriOS|FxiOS|Chrome|Edg/i.test(ua);
+  const teams = /Teams|MSTeams/i.test(ua);
+  return `online=${typeof navigator !== "undefined" ? navigator.onLine : "?"} vis=${typeof document !== "undefined" ? document.visibilityState : "?"} pwa=${standalone} ios=${ios} safari=${safari} teams=${teams}`;
 }
 
 /** Parse a sync response; throw a structured error on HTTP/app failure. */

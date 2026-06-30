@@ -34,6 +34,9 @@ export interface GraphProfileInput {
   departmentRaw: string | null;
   jobTitle: string | null;
   officeLocation: string | null;
+  /** TRUE only when these fields came from a live Graph /me call. When false
+   *  (session fallback / expired token) we must NOT downgrade stored data. */
+  fromGraph: boolean;
 }
 
 function str(f: GraphListItemFields, k: string): string {
@@ -184,32 +187,39 @@ export async function syncProfileFromGraph(input: GraphProfileInput): Promise<Us
     };
   }
 
-  const rawChanged = lc(existing.departmentRaw) !== lc(input.departmentRaw);
-  if (rawChanged) {
-    const { code, name } = await resolveDept(input.departmentRaw);
-    await updateProfile(input.email, {
-      DisplayName: input.displayName,
-      DepartmentRaw: input.departmentRaw,
-      DepartmentCode: code,
-      DepartmentName: name,
-      JobTitle: input.jobTitle,
-      OfficeLocation: input.officeLocation,
-      LastDepartmentSync: now,
-      LastLogin: now,
-      IsActive: true,
-    });
-    return { ...existing, displayName: input.displayName, departmentRaw: input.departmentRaw, departmentCode: code, departmentName: name, jobTitle: input.jobTitle, officeLocation: input.officeLocation, lastDepartmentSync: now, lastLogin: now, departmentResolved: !!code };
+  // EXISTING profile — NEVER downgrade resolved data.
+  // - Only re-resolve the department from a TRUSTWORTHY Graph value (fromGraph) and
+  //   only when that value is non-empty (avoids the PWA-resume / expired-token
+  //   downgrade where the fallback departmentRaw is null → wiped to "chưa xác định").
+  // - Only fill MISSING fields from fallback input; never null out existing values.
+  const fields: Partial<WriteFields> = { LastLogin: now, IsActive: true };
+  if (input.displayName) fields.DisplayName = input.displayName; // never overwrite with empty
+  if (input.jobTitle) fields.JobTitle = input.jobTitle;
+  if (input.officeLocation) fields.OfficeLocation = input.officeLocation;
+
+  let code = existing.departmentCode;
+  let name = existing.departmentName;
+  let raw = existing.departmentRaw;
+
+  const trustworthy = input.fromGraph && !!input.departmentRaw;
+  const rawChanged = trustworthy && lc(existing.departmentRaw) !== lc(input.departmentRaw);
+  const fillMissing = trustworthy && !existing.departmentCode;
+  if (rawChanged || fillMissing) {
+    const r = await resolveDept(input.departmentRaw);
+    if (r.code) { code = r.code; name = r.name; raw = input.departmentRaw; fields.DepartmentCode = code; fields.DepartmentName = name; fields.DepartmentRaw = raw; fields.LastDepartmentSync = now; }
+    else if (rawChanged && !existing.departmentCode) { raw = input.departmentRaw; fields.DepartmentRaw = raw; fields.LastDepartmentSync = now; }
+    // If resolve yields null but we already had a code, KEEP the existing code (no downgrade).
   }
 
-  // Raw department unchanged → do NOT re-resolve; refresh light fields + login.
-  await updateProfile(input.email, {
-    DisplayName: input.displayName ?? existing.displayName,
-    JobTitle: input.jobTitle ?? existing.jobTitle,
-    OfficeLocation: input.officeLocation ?? existing.officeLocation,
-    LastLogin: now,
-    IsActive: true,
-  });
-  return { ...existing, displayName: input.displayName ?? existing.displayName, jobTitle: input.jobTitle ?? existing.jobTitle, officeLocation: input.officeLocation ?? existing.officeLocation, lastLogin: now };
+  await updateProfile(input.email, fields);
+  return {
+    ...existing,
+    displayName: fields.DisplayName ?? existing.displayName,
+    jobTitle: fields.JobTitle ?? existing.jobTitle,
+    officeLocation: fields.OfficeLocation ?? existing.officeLocation,
+    departmentCode: code, departmentName: name, departmentRaw: raw,
+    lastLogin: now, departmentResolved: !!code,
+  };
 }
 
 /** Force a department re-resolve for a profile (admin "Sync lại"). */

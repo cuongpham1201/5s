@@ -50,19 +50,24 @@ async function buildGraphInput(req: NextRequest): Promise<{ input: GraphProfileI
         departmentRaw: me.entraDepartment,
         jobTitle: me.jobTitle,
         officeLocation: me.officeLocation,
+        fromGraph: true, // trustworthy — live Graph /me
       };
-    } catch {
+      console.warn("[5S_PROFILE]", "graph.me", { email: input.email, hasDisplayName: !!me.displayName, hasDept: !!me.entraDepartment });
+    } catch (e) {
+      console.warn("[5S_PROFILE]", "graph.me:failed", { message: (e as Error)?.message ?? "error" });
       input = null;
     }
   }
   if (!input) {
-    // Dev login / Graph unavailable: derive from session.
+    // Dev login / Graph unavailable / expired token: derive from session.
+    // fromGraph=false → syncProfileFromGraph will NOT downgrade stored data.
     input = {
       email: lc(session.user.email),
       displayName: session.user.name ?? null,
       departmentRaw: session.user.department ?? null,
       jobTitle: null,
       officeLocation: null,
+      fromGraph: false,
     };
   }
   if (!input.email) input = null;

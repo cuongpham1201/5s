@@ -2,14 +2,21 @@
 
 import { useState } from "react";
 
+const MAX_RETRY = 2;
+
 /**
- * Lazy thumbnail via the authenticated photo proxy. Shows a shimmer skeleton
- * while loading, fades in on load, and renders a clean placeholder on error
- * (never the broken-image icon). Native lazy-loading (IntersectionObserver).
+ * Lazy thumbnail via the authenticated photo proxy. Uses the SAME canonical
+ * source as the viewer (/api/photo?path=…). On a transient load failure it
+ * retries (with cache-bust) up to MAX_RETRY before showing a clean placeholder,
+ * so a momentary proxy hiccup no longer permanently shows "Ảnh lỗi" while the
+ * viewer opens the same image fine.
  */
 export function Thumb({ path, alt = "", className = "" }: { path: string; alt?: string; className?: string }) {
   const [state, setState] = useState<"loading" | "ok" | "error">("loading");
-  const src = `/api/photo?path=${encodeURIComponent(path)}`;
+  const [tries, setTries] = useState(0);
+  const base = `/api/photo?path=${encodeURIComponent(path)}`;
+  const src = tries > 0 ? `${base}&r=${tries}` : base;
+
   return (
     <span className={`relative block bg-surface overflow-hidden ${className}`}>
       {state === "loading" && <span className="absolute inset-0 animate-pulse bg-line/50" aria-hidden />}
@@ -20,11 +27,15 @@ export function Thumb({ path, alt = "", className = "" }: { path: string; alt?: 
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
         <img
+          key={src}
           src={src}
           alt={alt}
           loading="lazy"
           onLoad={() => setState("ok")}
-          onError={() => setState("error")}
+          onError={() => {
+            if (tries < MAX_RETRY) { setTries((t) => t + 1); setState("loading"); }
+            else setState("error");
+          }}
           className={`w-full h-full object-cover transition-opacity duration-300 ${state === "ok" ? "opacity-100" : "opacity-0"}`}
         />
       )}
