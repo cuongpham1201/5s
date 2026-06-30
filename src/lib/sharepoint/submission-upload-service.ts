@@ -14,10 +14,11 @@ import { getAppOnlyClient, type SharePointGraphClient } from "./graph-client";
 import { findListId, resolveSite } from "./site-context";
 import { ensureSubmissionFolder, uploadPhotoPair, downloadFromImgPath } from "./photo-upload-service";
 import { detectImageType, edgeHex, bytesRoundTripOk } from "./image-bytes";
+import { trace } from "@/lib/debug/trace";
 import type { GraphCollection, GraphListItem } from "./sharepoint-types";
 import type { SubmissionStatus, SyncStatus } from "@/types/sharepoint";
 
-const ilog = (action: string, data: Record<string, unknown>) => console.warn("[5S_IMAGE_DEBUG]", action, data);
+const ilog = (action: string, data: Record<string, unknown>) => trace("[5S_IMAGE_DEBUG]", action, data);
 
 export interface UploadPhotoInput {
   seqNo: number;

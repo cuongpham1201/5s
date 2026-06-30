@@ -8,6 +8,7 @@ import { listAreasByDepartmentCode } from "./area-service";
 import { resolveRequestUser } from "@/lib/auth/request-department";
 import { processSubmissionUpload, type UploadPhotoInput } from "./submission-upload-service";
 import { vnDateKey } from "./report-service";
+import { trace } from "@/lib/debug/trace";
 import type { NextRequest } from "next/server";
 
 export const MAX_PHOTOS = 20;
@@ -99,7 +100,7 @@ export async function runSyncIntake(
 
   const t0 = Date.now();
   const totalBytes = photos.reduce((s, p) => s + p.original.byteLength + p.watermarked.byteLength, 0);
-  console.warn("[5S_SYNC_TRACE]", "server.received", { mode, submissionId: meta.submissionId, photoCount: photos.length, totalBytes });
+  trace("[5S_SYNC_TRACE]", "server.received", { mode, submissionId: meta.submissionId, photoCount: photos.length, totalBytes });
   try {
     const result = await processSubmissionUpload({
       submissionId: meta.submissionId,
@@ -117,7 +118,7 @@ export async function runSyncIntake(
       queueId: meta.queueId,
       attemptCount: meta.attemptCount,
     });
-    console.warn("[5S_SYNC_TRACE]", "server.done", { mode, submissionId: meta.submissionId, syncStatus: result.syncStatus, uploaded: result.photos.length, durationMs: Date.now() - t0 });
+    trace("[5S_SYNC_TRACE]", "server.done", { mode, submissionId: meta.submissionId, syncStatus: result.syncStatus, uploaded: result.photos.length, durationMs: Date.now() - t0 });
     return { status: 200, body: { ok: true, ...result } };
   } catch (e) {
     const msg = (e as Error).message ?? "lỗi không xác định";
@@ -126,7 +127,7 @@ export async function runSyncIntake(
       : /provision|list .* chưa/i.test(msg) ? "LIST_MISSING"
       : /Graph|drive|thư viện|PUT|upload/i.test(msg) ? "GRAPH_UPLOAD_FAILED"
       : "UPLOAD_FAILED";
-    console.warn("[5S_SYNC_TRACE]", "server.failed", { mode, submissionId: meta.submissionId, errorCode: code, durationMs: Date.now() - t0, error: msg });
+    trace("[5S_SYNC_TRACE]", "server.failed", { mode, submissionId: meta.submissionId, errorCode: code, durationMs: Date.now() - t0, error: msg });
     return { status: 502, body: { ok: false, syncStatus: "failed", errorCode: code, message: msg, error: msg } };
   }
 }

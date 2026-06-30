@@ -2,21 +2,19 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { auth } from "@/auth";
 import { getMe } from "@/lib/graph/graph-user";
+import { denyIfNotAdmin } from "@/lib/sharepoint/admin-guard";
 
 export const dynamic = "force-dynamic";
 
 /**
  * GET /api/debug/me — RAW Graph /me fields for diagnosing department mapping.
- * Dev or admin/environment only. No tokens returned.
+ * ADMIN ONLY (dev bypass). No tokens returned.
  */
 export async function GET(req: NextRequest) {
+  const denied = await denyIfNotAdmin();
+  if (denied) return denied;
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  const isDev = process.env.NODE_ENV !== "production";
-  const role = session.user.role;
-  if (!isDev && role !== "admin" && role !== "environment") {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
 
   const useSecure = (process.env.NEXTAUTH_URL ?? "").startsWith("https://");
   const cookieName = useSecure ? "__Secure-authjs.session-token" : "authjs.session-token";

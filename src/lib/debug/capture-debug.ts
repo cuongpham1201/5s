@@ -7,6 +7,8 @@
  *   (inlined at build time). When false/missing the panel is hidden but logs
  *   keep flowing.
  */
+import { traceEnabled } from "./trace";
+
 export const DEBUG_PREFIX = "[5S_CAPTURE_DEBUG]";
 
 export function captureDebugEnabled(): boolean {
@@ -28,8 +30,9 @@ export function clog(action: string, data: Record<string, unknown> = {}): void {
   if ("error" in data && data.error) state.lastError = String(data.error);
   else if ("message" in data && data.message) state.lastError = String(data.message);
   else if (/error|fail/i.test(action)) state.lastError = action;
+  // Keep panel state updated always; only print when a debug flag is enabled.
   // eslint-disable-next-line no-console
-  console.warn(DEBUG_PREFIX, action, data);
+  if (traceEnabled()) console.warn(DEBUG_PREFIX, action, data);
 }
 
 export function getCaptureDebugState(): DebugState {
@@ -42,5 +45,5 @@ export function ctrace(step: string, data: Record<string, unknown> = {}): void {
   state.lastActionAt = new Date().toISOString();
   if (/error|fail|empty|lost/i.test(step)) state.lastError = step;
   // eslint-disable-next-line no-console
-  console.warn("[5S_CAPTURE_TRACE]", step, data);
+  if (traceEnabled()) console.warn("[5S_CAPTURE_TRACE]", step, data);
 }

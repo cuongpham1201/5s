@@ -43,7 +43,12 @@ export interface LatestSubmission {
   thumbnailPath: string | null;
 }
 
-/** Map submissionId -> first (lowest SeqNo) watermarked photo path. */
+/**
+ * Map submissionId -> first (lowest SeqNo) usable photo path. A submission is
+ * considered "has a photo" when it has a non-deleted Data_SubmissionPhotos row
+ * with a watermarked OR original path (watermarked preferred for thumbnails).
+ * The KEYS of this map are the authoritative "has ≥1 photo" set used by reports.
+ */
 async function firstPhotoPathMap(): Promise<Map<string, string>> {
   let photos: SubmissionPhotoRecord[] = [];
   try {
@@ -53,9 +58,11 @@ async function firstPhotoPathMap(): Promise<Map<string, string>> {
   }
   const map = new Map<string, { seq: number; path: string }>();
   for (const p of photos) {
-    if (!p.WatermarkedPhotoUrl || p.IsDeleted) continue;
+    if (p.IsDeleted) continue;
+    const path = p.WatermarkedPhotoUrl || p.OriginalPhotoUrl;
+    if (!path) continue;
     const cur = map.get(p.SubmissionId);
-    if (!cur || p.SeqNo < cur.seq) map.set(p.SubmissionId, { seq: p.SeqNo, path: p.WatermarkedPhotoUrl });
+    if (!cur || p.SeqNo < cur.seq) map.set(p.SubmissionId, { seq: p.SeqNo, path });
   }
   return new Map([...map].map(([k, v]) => [k, v.path]));
 }
@@ -110,10 +117,13 @@ export async function getTodaySubmissionSummary(): Promise<TodaySummary> {
     listActiveDepartments().catch(() => []),
     safeSubmissions(),
   ]);
-  const todays = subs.filter((s) => dateKeyOf(s) === today && s.Status !== "flagged");
+  const thumbs = await firstPhotoPathMap();
+  // SOURCE OF TRUTH: a department counts as "đã chụp" ONLY when it has a today
+  // submission with ≥1 non-deleted photo actually present in Data_SubmissionPhotos
+  // (thumbs keys). A header alone / SyncStatus=uploaded / 0-photo record does NOT count.
+  const todays = subs.filter((s) => dateKeyOf(s) === today && s.Status !== "flagged" && thumbs.has(s.SubmissionId));
   const submittedCodes = new Set(todays.map((s) => s.DepartmentCode));
   const missing = active.filter((d) => !submittedCodes.has(d.code)).map((d) => ({ code: d.code, name: d.name }));
-  const thumbs = await firstPhotoPathMap();
   const latest = subs
     .slice()
     .sort((a, b) => (b.SubmittedAt || "").localeCompare(a.SubmittedAt || ""))
@@ -160,9 +170,15 @@ export interface DailyStatusRow {
 
 /** Department × date matrix for a given month (YYYY-MM). Empty when no data. */
 export async function getDepartmentDailyStatus(month: string): Promise<DailyStatusRow[]> {
-  const [active, subs] = await Promise.all([listActiveDepartments().catch(() => []), safeSubmissions()]);
+  const [active, subs, thumbs] = await Promise.all([
+    listActiveDepartments().catch(() => []),
+    safeSubmissions(),
+    firstPhotoPathMap(),
+  ]);
   const byDeptDate = new Set<string>();
   for (const s of subs) {
+    // Same rule: only count a day "submitted" when the submission has photos.
+    if (!thumbs.has(s.SubmissionId)) continue;
     const k = dateKeyOf(s);
     if (k.startsWith(month)) byDeptDate.add(`${s.DepartmentCode}|${k}`);
   }

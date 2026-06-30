@@ -7,7 +7,12 @@ import { getQueue } from "@/lib/queue/offline-queue";
 import { processQueue } from "@/lib/queue/sync-engine";
 import { listCompletedSubmissions } from "@/lib/submissions/local-submission-store";
 import { listPhotosBySubmission } from "@/lib/storage/photo-store";
+import { AdminOnly } from "@/components/system/AdminOnly";
 import type { QueueItem } from "@/lib/queue/queue-types";
+
+export default function DebugSyncPage() {
+  return <AdminOnly><DebugSyncInner /></AdminOnly>;
+}
 
 interface Row {
   submissionId: string;
@@ -21,7 +26,7 @@ interface Row {
   canBuildFormData: boolean;
 }
 
-export default function DebugSyncPage() {
+function DebugSyncInner() {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);

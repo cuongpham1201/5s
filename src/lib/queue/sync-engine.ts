@@ -11,6 +11,7 @@
 import { getQueue, updateStatus, findBySubmission } from "./offline-queue";
 import { getCompletedSubmissionById, setSubmissionUploadStatus } from "@/lib/submissions/local-submission-store";
 import { listPhotosBySubmission, deletePhotosBySubmission } from "@/lib/storage/photo-store";
+import { trace } from "@/lib/debug/trace";
 import type { StoredPhoto } from "@/lib/storage/storage-types";
 import type { CompletedSubmission, SessionPhoto } from "@/types/submission";
 
@@ -19,10 +20,7 @@ let running = false;
 /** Max upload attempts before an item stays terminally "failed" (no infinite retry). */
 const MAX_ATTEMPTS = 5;
 
-const qlog = (action: string, data: Record<string, unknown>) => {
-  // eslint-disable-next-line no-console
-  console.warn("[5S_SYNC_TRACE]", action, data);
-};
+const qlog = (action: string, data: Record<string, unknown>) => trace("[5S_SYNC_TRACE]", action, data);
 
 function isOffline(): boolean {
   return typeof navigator !== "undefined" && navigator.onLine === false;

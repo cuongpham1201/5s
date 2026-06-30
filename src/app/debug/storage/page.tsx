@@ -16,8 +16,13 @@ import { generateMockPhotos } from "@/lib/storage/stress-test";
 import type { CompletedSubmission, SubmissionSession } from "@/types/submission";
 import type { QueueItem } from "@/lib/queue/queue-types";
 import type { StorageUsage } from "@/lib/storage/storage-types";
+import { AdminOnly } from "@/components/system/AdminOnly";
 
 const IS_DEV = process.env.NODE_ENV !== "production";
+
+export default function DebugStoragePage() {
+  return <AdminOnly><DebugStorageInner /></AdminOnly>;
+}
 
 function fmtBytes(n: number): string {
   if (!n) return "0";
@@ -37,7 +42,7 @@ function Indicator({ ok, warn, children }: { ok?: boolean; warn?: boolean; child
   );
 }
 
-export default function DebugStoragePage() {
+function DebugStorageInner() {
   const [session, setSession] = useState<SubmissionSession | null>(null);
   const [history, setHistory] = useState<CompletedSubmission[]>([]);
   const [queue, setQueue] = useState<QueueItem[]>([]);

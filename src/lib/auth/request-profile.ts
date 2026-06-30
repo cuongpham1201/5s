@@ -15,6 +15,7 @@ import {
   type UserProfile,
   type GraphProfileInput,
 } from "@/lib/sharepoint/user-profile-service";
+import { trace } from "@/lib/debug/trace";
 import type { NextRequest } from "next/server";
 
 const lc = (s?: string | null) => (s ?? "").trim().toLowerCase();
@@ -52,9 +53,9 @@ async function buildGraphInput(req: NextRequest): Promise<{ input: GraphProfileI
         officeLocation: me.officeLocation,
         fromGraph: true, // trustworthy — live Graph /me
       };
-      console.warn("[5S_PROFILE]", "graph.me", { email: input.email, hasDisplayName: !!me.displayName, hasDept: !!me.entraDepartment });
+      trace("[5S_PROFILE]", "graph.me", { email: input.email, hasDisplayName: !!me.displayName, hasDept: !!me.entraDepartment });
     } catch (e) {
-      console.warn("[5S_PROFILE]", "graph.me:failed", { message: (e as Error)?.message ?? "error" });
+      trace("[5S_PROFILE]", "graph.me:failed", { message: (e as Error)?.message ?? "error" });
       input = null;
     }
   }
@@ -79,7 +80,7 @@ export async function getRequestProfile(req: NextRequest, opts: { mode?: "read" 
   if (!input) return { profile: null, email: null, role };
   try {
     if (opts.mode === "sync") {
-      console.warn("[5S_PROFILE]", "sync", { email: input.email, departmentRaw: input.departmentRaw });
+      trace("[5S_PROFILE]", "sync", { email: input.email, departmentRaw: input.departmentRaw });
       return { profile: await syncProfileFromGraph(input), email: input.email, role };
     }
     const existing = await getProfile(input.email);
@@ -89,7 +90,7 @@ export async function getRequestProfile(req: NextRequest, opts: { mode?: "read" 
     if (existing && existing.departmentResolved) {
       return { profile: existing, email: input.email, role };
     }
-    console.warn("[5S_PROFILE]", "self-heal", { email: input.email, hadProfile: !!existing, departmentRaw: input.departmentRaw });
+    trace("[5S_PROFILE]", "self-heal", { email: input.email, hadProfile: !!existing, departmentRaw: input.departmentRaw });
     const synced = await syncProfileFromGraph(input);
     return { profile: synced.departmentResolved ? synced : existing ?? synced, email: input.email, role };
   } catch {
