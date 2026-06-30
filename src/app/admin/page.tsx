@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AdminShell } from "@/components/layout/AdminShell";
+import { displayNameFrom, initialsFrom } from "@/lib/profile/display";
 
 interface WhoAmI { email: string | null; displayName: string | null; isAdmin: boolean; source: string; mappedRole: string | null }
 interface Dashboard { date: string; expected: number; submitted: number; missingCount: number; completionRate: number; hasData: boolean }
@@ -42,10 +43,10 @@ export default function AdminHome() {
       {/* Identity panel */}
       <div className="bg-white rounded-lg border border-line shadow-e2 p-4 mb-4 flex flex-wrap items-center gap-3">
         <div className="w-10 h-10 rounded-full grid place-items-center bg-primary-100 text-primary-700 font-bold">
-          {(me?.displayName ?? me?.email ?? "?").slice(0, 1).toUpperCase()}
+          {me ? initialsFrom(me.displayName, me.email) : "…"}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="font-semibold text-[15px] truncate">{me?.displayName ?? me?.email ?? "…"}</div>
+          <div className="font-semibold text-[15px] truncate">{me ? displayNameFrom({ displayName: me.displayName, email: me.email }) : "…"}</div>
           <div className="text-[12.5px] text-ink-muted truncate">{me?.email ?? ""}</div>
         </div>
         <div className="flex items-center gap-2">

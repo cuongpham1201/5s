@@ -7,13 +7,8 @@ import { fetchMe, ensureProfile, subscribeMe } from "@/lib/client/me-cache";
 import { AppShell } from "@/components/layout/AppShell";
 import { Card, InfoRow } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { displayNameFrom, initialsFrom } from "@/lib/profile/display";
 import type { MeResponse } from "@/lib/graph/graph-types";
-
-function initials(name?: string | null): string {
-  if (!name) return "?";
-  const parts = name.trim().split(/\s+/);
-  return ((parts[0]?.[0] ?? "") + (parts[parts.length - 1]?.[0] ?? "")).toUpperCase() || "?";
-}
 
 export default function MePage() {
   const [profile, setProfile] = useState<MeResponse | null>(null);
@@ -35,6 +30,7 @@ export default function MePage() {
   const dept5s = profile?.departmentResolved
     ? `${profile.departmentCode}${profile.departmentName ? " · " + profile.departmentName : ""}`
     : "Chưa xác định";
+  const name = profile ? displayNameFrom({ displayName: profile.displayName, email: profile.email }) : "—";
 
   return (
     <AppShell>
@@ -52,10 +48,10 @@ export default function MePage() {
 
       <div className="px-5 pb-6 flex flex-col items-center">
         <span className="w-20 h-20 rounded-pill grid place-items-center text-white text-2xl font-bold bg-gradient-to-br from-[#7aa6d6] to-[#4f7fb5]">
-          {loading ? "…" : initials(profile?.displayName)}
+          {loading ? "…" : initialsFrom(profile?.displayName, profile?.email)}
         </span>
         <div className="text-[18px] font-semibold mt-3">
-          {loading ? "Đang tải hồ sơ…" : profile?.displayName ?? "Người dùng"}
+          {loading ? "Đang tải hồ sơ…" : name}
         </div>
         {!loading && profile?.jobTitle && <div className="text-[13px] text-ink-muted">{profile.jobTitle}</div>}
 
@@ -69,7 +65,7 @@ export default function MePage() {
         )}
 
         <Card className="w-full mt-5">
-          <InfoRow label="Tên hiển thị" value={profile?.displayName ?? "—"} />
+          <InfoRow label="Tên hiển thị" value={name} />
           <InfoRow label="Email" value={profile?.email ?? "—"} />
           <InfoRow label="Phòng ban (M365)" value={profile?.departmentRaw ?? "—"} />
           <InfoRow label="Phòng ban (5S)" value={loading ? "…" : dept5s} />

@@ -6,6 +6,7 @@ import { signOut } from "next-auth/react";
 import { useEffect, useState } from "react";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { fetchMe, subscribeMe } from "@/lib/client/me-cache";
+import { displayNameFrom, initialsFrom } from "@/lib/profile/display";
 import type { MeResponse } from "@/lib/graph/graph-types";
 
 const NAV: { href: string; label: string; icon: IconName }[] = [
@@ -43,7 +44,8 @@ export function AppSidebar() {
 
   const items = isAdmin ? [...NAV, { href: "/admin", label: "Quản trị", icon: "building" as IconName }] : NAV;
   const active = (href: string) => pathname === href || pathname.startsWith(href + "/");
-  const initials = (me?.displayName ?? "?").trim().split(/\s+/).map((p) => p[0]).slice(-2).join("").toUpperCase() || "?";
+  const name = me ? displayNameFrom({ displayName: me.displayName, email: me.email }) : "…";
+  const initials = me ? initialsFrom(me.displayName, me.email) : "…";
   const role = me?.role ? ROLE_LABEL[me.role] ?? me.role : null;
 
   return (
@@ -80,7 +82,7 @@ export function AppSidebar() {
           <span className="sidebar-avatar relative">{initials}<span className="sidebar-online" /></span>
           {!collapsed && (
             <span className="min-w-0 flex-1 text-left">
-              <span className="block text-[13px] font-semibold truncate">{me?.displayName ?? "…"}</span>
+              <span className="block text-[13px] font-semibold truncate">{name}</span>
               <span className="block text-[11px] text-ink-muted truncate">
                 {me?.departmentResolved ? me.departmentCode : "—"}{role ? ` · ${role}` : ""}
               </span>

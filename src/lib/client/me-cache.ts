@@ -17,7 +17,10 @@ const TTL_MS = 120_000;
 const subs = new Set<(m: MeResponse | null) => void>();
 
 function complete(m: MeResponse | null): boolean {
-  return !!(m && m.departmentResolved && m.departmentCode && m.displayName);
+  // Completeness = department resolved. The display name is always normalized by
+  // /api/me (never empty), so it must NOT gate completeness or it would force
+  // endless re-syncs for accounts whose stored DisplayName was never backfilled.
+  return !!(m && m.departmentResolved && m.departmentCode);
 }
 
 export function fetchMe(force = false): Promise<MeResponse | null> {

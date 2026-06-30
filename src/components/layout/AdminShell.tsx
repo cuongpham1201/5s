@@ -2,7 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { fetchMe, subscribeMe } from "@/lib/client/me-cache";
+import { displayNameFrom, initialsFrom } from "@/lib/profile/display";
+import type { MeResponse } from "@/lib/graph/graph-types";
+
+const ROLE_LABEL: Record<string, string> = {
+  admin: "Quản trị viên",
+  environment: "Phụ trách môi trường",
+  employee: "Nhân viên",
+};
 
 const NAV = [
   { section: "Tổng quan" },
@@ -35,6 +44,18 @@ export function AdminShell({
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [me, setMe] = useState<MeResponse | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetchMe().then((m) => active && setMe(m));
+    const unsub = subscribeMe((m) => active && setMe(m));
+    return () => { active = false; unsub(); };
+  }, []);
+
+  const name = me ? displayNameFrom({ displayName: me.displayName, email: me.email }) : "…";
+  const initials = me ? initialsFrom(me.displayName, me.email) : "…";
+  const roleLabel = me?.role ? ROLE_LABEL[me.role] ?? me.role : "—";
 
   return (
     <div className="min-h-screen md:grid md:grid-cols-[248px_1fr] bg-surface-app">
@@ -78,11 +99,11 @@ export function AdminShell({
         )}
         <Link href="/me" className="mt-auto flex items-center gap-2.5 p-2.5 rounded-md bg-surface">
           <span className="w-7 h-7 rounded-pill grid place-items-center text-white text-xs font-bold bg-gradient-to-br from-[#7aa6d6] to-[#4f7fb5]">
-            MT
+            {initials}
           </span>
-          <span className="flex-1">
-            <span className="block text-[13px] font-semibold leading-tight">Trần Thị B</span>
-            <span className="block text-[13px] text-ink-muted leading-tight">Quản trị viên</span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-[13px] font-semibold leading-tight truncate">{name}</span>
+            <span className="block text-[13px] text-ink-muted leading-tight truncate">{roleLabel}</span>
           </span>
         </Link>
       </aside>

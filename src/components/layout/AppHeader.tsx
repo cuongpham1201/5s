@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Icon } from "@/components/ui/Icon";
 import { fetchMe, subscribeMe } from "@/lib/client/me-cache";
+import { displayNameFrom, initialsFrom } from "@/lib/profile/display";
 import type { MeResponse } from "@/lib/graph/graph-types";
 
 /** Compact app header — avatar + greeting + resolved department (from /api/me). */
@@ -27,13 +28,13 @@ export function AppHeader({
     return () => { active = false; unsub(); };
   }, []);
 
-  const name = me?.displayName ?? "…";
+  const name = me ? displayNameFrom({ displayName: me.displayName, email: me.email }) : "…";
   const deptLine = me
     ? me.departmentResolved
       ? `${me.departmentCode} · ${me.departmentName}`
       : "Phòng ban: chưa xác định"
     : "…";
-  const initials = (name === "…" ? "?" : name).trim().split(/\s+/).map((p) => p[0]).slice(-2).join("").toUpperCase() || "?";
+  const initials = me ? initialsFrom(me.displayName, me.email) : "?";
 
   return (
     <div className="flex items-center gap-3 px-4 pt-3 pb-2.5">

@@ -7,6 +7,7 @@ import { AppHeader } from "@/components/layout/AppHeader";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { PhotoViewerModal, type ViewerPhoto } from "@/components/media/PhotoViewerModal";
 import { ensureProfile, subscribeMe } from "@/lib/client/me-cache";
+import { displayNameFrom } from "@/lib/profile/display";
 import type { MeResponse } from "@/lib/graph/graph-types";
 import type { TodaySummary, LatestSubmission } from "@/lib/sharepoint/report-service";
 
@@ -75,7 +76,7 @@ export default function DashboardPage() {
   return (
     <AppShell>
       <AppHeader
-        title={`Xin chào, ${me?.displayName ?? (loading ? "…" : "bạn")}`}
+        title={`Xin chào, ${me ? displayNameFrom({ displayName: me.displayName, email: me.email }) : (loading ? "…" : "bạn")}`}
         subtitle={me?.departmentResolved ? `${me.departmentCode} · ${me.departmentName}` : (loading ? "Đang đồng bộ hồ sơ…" : "Phòng ban: chưa xác định")}
       />
       <div className="px-4 pb-6 flex flex-col gap-4 lg:grid lg:grid-cols-3 lg:gap-4 lg:items-start">
