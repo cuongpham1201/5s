@@ -39,7 +39,12 @@ function expandNames(): string[] {
 }
 
 export async function GET(req: NextRequest) {
-  const res = NextResponse.redirect(new URL("/signin?cleared=1", req.nextUrl.origin));
+  // In a route handler req.nextUrl.origin is the INTERNAL bind (localhost:3002)
+  // behind Cloudflare — build the public origin from forwarded headers so the
+  // browser is redirected to she.biahalong.com, not localhost.
+  const proto = req.headers.get("x-forwarded-proto") ?? "https";
+  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? req.nextUrl.host;
+  const res = NextResponse.redirect(new URL("/signin?cleared=1", `${proto}://${host}`));
   for (const name of expandNames()) {
     // Expire with maxAge:0 + path:/ + Secure so __Host-/__Secure- prefixed cookies
     // are validly deleted on https (deletion matches by name+domain+path).
