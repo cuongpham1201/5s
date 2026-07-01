@@ -1,72 +1,73 @@
 /* 5S Daily — service worker.
- * App-shell caching + offline fallback. MUST stay out of the auth path:
- * /api/* and /signin are always network passthrough (never intercepted/cached) so
- * the OAuth PKCE flow (authorize → Entra → callback) is never served from cache.
+ * CRITICAL: never cache HTML navigations or any authenticated response. A cached
+ * navigation carries its Set-Cookie headers, and replaying it re-injects cookies
+ * (e.g. __Secure-authjs.session-token.*) into the browser even after the user
+ * cleared cookies — which caused phantom session cookies + HTTP 431. So:
+ *   - navigations  → network-only (offline fallback to /offline, never cached)
+ *   - /api/*, /signin, /clear-auth → always network passthrough (never touched)
+ *   - static hashed assets (/_next/static, images) → stale-while-revalidate only
  */
-// Bump on any change that must invalidate previously cached assets.
-const CACHE = "5s-daily-v3";
-const APP_SHELL = ["/offline", "/manifest.webmanifest", "/icons/icon-192.svg"];
+const CACHE = "5s-daily-v4";
+const PRECACHE = ["/offline", "/manifest.webmanifest", "/icons/icon-192.svg"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(APP_SHELL)).catch(() => {}),
+    caches.open(CACHE).then((cache) => cache.addAll(PRECACHE)).catch(() => {}),
   );
   self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
+  // Purge ALL old caches (including any that cached authenticated navigations).
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))),
-    ),
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim()),
   );
-  self.clients.claim();
 });
+
+function isStaticAsset(url) {
+  return (
+    url.pathname.startsWith("/_next/static/") ||
+    url.pathname.startsWith("/icons/") ||
+    /\.(?:css|js|woff2?|png|jpe?g|svg|webp|ico)$/i.test(url.pathname)
+  );
+}
 
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;
-
   const url = new URL(request.url);
 
-  // NEVER touch auth/API/sign-in — let the network handle them untouched so
-  // cookies (CSRF, PKCE code_verifier, session) and redirects are never cached
-  // or replayed. This is the guard against auth breaking after a deploy.
-  if (
-    url.pathname.startsWith("/api/") ||
-    url.pathname === "/signin" ||
-    url.pathname.startsWith("/signin/")
-  ) {
+  // Never touch auth/API — cookies & redirects must reach the browser untouched.
+  if (url.pathname.startsWith("/api/") || url.pathname === "/signin" || url.pathname === "/clear-auth") {
     return;
   }
 
-  // Navigations: network-first; cache only clean, non-redirected same-origin HTML.
+  // Navigations (HTML): NETWORK-ONLY. Never cache (avoids replaying Set-Cookie).
   if (request.mode === "navigate") {
+    event.respondWith(fetch(request).catch(() => caches.match("/offline")));
+    return;
+  }
+
+  // Static hashed assets only: stale-while-revalidate.
+  if (isStaticAsset(url) && url.origin === self.location.origin) {
     event.respondWith(
-      fetch(request)
-        .then((res) => {
-          if (res.ok && !res.redirected && url.origin === self.location.origin) {
-            const copy = res.clone();
-            caches.open(CACHE).then((c) => c.put(request, copy)).catch(() => {});
-          }
-          return res;
-        })
-        .catch(() => caches.match(request).then((r) => r || caches.match("/offline"))),
+      caches.match(request).then((cached) => {
+        const network = fetch(request)
+          .then((res) => {
+            if (res.ok) {
+              const copy = res.clone();
+              caches.open(CACHE).then((c) => c.put(request, copy)).catch(() => {});
+            }
+            return res;
+          })
+          .catch(() => cached);
+        return cached || network;
+      }),
     );
     return;
   }
 
-  // Static assets: stale-while-revalidate.
-  event.respondWith(
-    caches.match(request).then((cached) => {
-      const network = fetch(request)
-        .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(request, copy)).catch(() => {});
-          return res;
-        })
-        .catch(() => cached);
-      return cached || network;
-    }),
-  );
+  // Everything else: passthrough (no caching).
 });
