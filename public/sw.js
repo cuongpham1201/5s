@@ -1,7 +1,8 @@
 /* 5S Daily — service worker (Phase 1A)
  * App-shell caching + offline fallback. No upload/background-sync yet (Phase 1B).
  */
-const CACHE = "5s-daily-v1";
+// Bump on client changes that must not be masked by a stale cached bundle.
+const CACHE = "5s-daily-v2";
 const APP_SHELL = ["/", "/offline", "/manifest.webmanifest", "/icons/icon-192.svg"];
 
 self.addEventListener("install", (event) => {

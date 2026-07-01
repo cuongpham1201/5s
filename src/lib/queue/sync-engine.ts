@@ -49,6 +49,9 @@ async function collectPayload(sub: CompletedSubmission, attemptCount: number, qu
 
   const items: PayloadItem[] = [];
   const metaPhotos: Array<{ seqNo: number; capturedAt: string; latitude: number | null; longitude: number | null; address: string | null }> = [];
+  // Client's claim of the bytes it is sending per seq — echoed back by the server
+  // (diag) so a truncated part is provable from the response alone (no DEBUG_LOG).
+  const clientParts: Array<{ seqNo: number; originalSize: number; watermarkedSize: number }> = [];
   let seq = 0; let totalBytes = 0;
   for (const sp of ordered) {
     const blob = byId.get(sp.photoId);
@@ -67,6 +70,7 @@ async function collectPayload(sub: CompletedSubmission, attemptCount: number, qu
     items.push({ seq, original, watermarked, name: { o: `original-${String(seq).padStart(2, "0")}.jpg`, w: `watermarked-${String(seq).padStart(2, "0")}.jpg` } });
     totalBytes += original.size + watermarked.size;
     metaPhotos.push({ seqNo: seq, capturedAt: sp.capturedAt ?? blob.createdAt, latitude: sp.latitude ?? null, longitude: sp.longitude ?? null, address: sp.address ?? null });
+    clientParts.push({ seqNo: seq, originalSize: original.size, watermarkedSize: watermarked.size });
   }
   if (items.length === 0) { qlog("buildForm:no-matching-blobs", { submissionId: sub.submissionId, stored: stored.length }); return null; }
 
@@ -75,6 +79,7 @@ async function collectPayload(sub: CompletedSubmission, attemptCount: number, qu
     submissionId: sub.submissionId, departmentCode: sub.departmentCode, areaCode: sub.areaCode, areaName: sub.areaName,
     reporterName: sub.reporterName, reporterEmail: sub.reporterEmail, submittedAt: sub.submittedAt, queueId, attemptCount,
     latitude: first?.latitude ?? null, longitude: first?.longitude ?? null, address: first?.address ?? null, photos: metaPhotos,
+    clientParts,
   };
   qlog("buildForm:ready", { submissionId: sub.submissionId, photos: items.length, totalBytes });
   return { meta, items, totalBytes };

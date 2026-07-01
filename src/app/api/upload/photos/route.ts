@@ -32,6 +32,7 @@ interface MetaIn {
   submittedAt?: string;
   reporterName?: string;
   photos?: Array<{ seqNo: number; capturedAt?: string; latitude?: number | null; longitude?: number | null; address?: string | null }>;
+  clientParts?: Array<{ seqNo: number; originalSize: number; watermarkedSize: number }>;
 }
 
 function err(errorCode: string, message: string, status: number) {
@@ -69,13 +70,31 @@ export async function POST(req: NextRequest) {
   const departmentCode = me.departmentCode;
 
   // 4) Resolve declared photos to byte pairs; skip missing/empty files (BAD_FILE).
+  // Build a client↔server byte comparison (diag) so a truncated part is provable
+  // from the RESPONSE alone — no DEBUG_LOG needed.
+  const clientBySeq = new Map((meta.clientParts ?? []).map((c) => [c.seqNo, c]));
+  const serverParts: Array<{ seqNo: number; originalSize: number; watermarkedSize: number }> = [];
   const photos: Array<{ seqNo: number; capturedAt: string; latitude: number | null; longitude: number | null; address: string | null; original: ArrayBuffer; watermarked: ArrayBuffer; contentType: string }> = [];
   const preErrors: PhotoUploadResult["errors"] = [];
   for (const mp of meta.photos) {
     const o = form.get(`original_${mp.seqNo}`);
     const w = form.get(`watermarked_${mp.seqNo}`);
-    if (!(o instanceof Blob) || !(w instanceof Blob) || o.size === 0 || w.size === 0) {
-      preErrors.push({ seqNo: mp.seqNo, errorCode: "BAD_FILE", message: `Thiếu/rỗng file ảnh cho seq ${mp.seqNo}.` });
+    const oSize = o instanceof Blob ? o.size : 0;
+    const wSize = w instanceof Blob ? w.size : 0;
+    serverParts.push({ seqNo: mp.seqNo, originalSize: oSize, watermarkedSize: wSize });
+    ulog("server.file.received", { submissionId: meta.submissionId, seq: mp.seqNo, originalBytes: oSize, watermarkedBytes: wSize });
+    if (!(o instanceof Blob) || !(w instanceof Blob) || oSize === 0 || wSize === 0) {
+      const c = clientBySeq.get(mp.seqNo);
+      // If the client claimed bytes but the server received 0, this is transport
+      // truncation — name it explicitly so the cause is unambiguous.
+      const truncated = !!c && (c.originalSize > 0 || c.watermarkedSize > 0);
+      preErrors.push({
+        seqNo: mp.seqNo,
+        errorCode: truncated ? "TRANSPORT_TRUNCATED" : "BAD_FILE",
+        message: truncated
+          ? `Ảnh #${mp.seqNo}: client gửi orig=${c!.originalSize}/wm=${c!.watermarkedSize} nhưng server nhận orig=${oSize}/wm=${wSize} → mất bytes khi truyền.`
+          : `Thiếu/rỗng file ảnh cho seq ${mp.seqNo} (client cũng không có bytes).`,
+      });
       continue;
     }
     const type = w.type || o.type || "image/jpeg";
@@ -83,16 +102,16 @@ export async function POST(req: NextRequest) {
       preErrors.push({ seqNo: mp.seqNo, errorCode: "BAD_FILE", message: `Loại ảnh không hợp lệ (${type}).` });
       continue;
     }
-    ulog("server.file.received", { submissionId: meta.submissionId, seq: mp.seqNo, originalBytes: o.size, watermarkedBytes: w.size, type });
     photos.push({
       seqNo: mp.seqNo, capturedAt: mp.capturedAt ?? meta.submittedAt ?? new Date().toISOString(),
       latitude: mp.latitude ?? null, longitude: mp.longitude ?? null, address: mp.address ?? null,
       original: await o.arrayBuffer(), watermarked: await w.arrayBuffer(), contentType: type,
     });
   }
+  const diag = { clientParts: meta.clientParts ?? [], serverParts };
 
   if (photos.length === 0) {
-    return NextResponse.json({ ok: false, submissionId: meta.submissionId, uploadedPhotoCount: 0, failedPhotoCount: preErrors.length, photos: [], errors: preErrors, errorCode: "NO_PHOTOS", message: "Không có file ảnh hợp lệ." }, { status: 400 });
+    return NextResponse.json({ ok: false, submissionId: meta.submissionId, uploadedPhotoCount: 0, failedPhotoCount: preErrors.length, photos: [], errors: preErrors, diag, errorCode: preErrors[0]?.errorCode ?? "NO_PHOTOS", message: preErrors[0]?.message ?? "Không có file ảnh hợp lệ." }, { status: 400 });
   }
 
   // 5) Upload (per-photo, idempotent). Never throws for a photo-level failure.
@@ -114,7 +133,7 @@ export async function POST(req: NextRequest) {
     });
     // Merge any pre-upload BAD_FILE errors into the response.
     const errors = [...preErrors, ...result.errors];
-    const body = { ...result, failedPhotoCount: errors.length, errors };
+    const body = { ...result, failedPhotoCount: errors.length, errors, diag };
     ulog("server.done", { submissionId: meta.submissionId, ok: body.ok, uploaded: body.uploadedPhotoCount, failed: body.failedPhotoCount });
     // ≥1 photo stored → 200 ok. 0 stored → 200 ok:false (business result, NOT 502).
     return NextResponse.json(body, { status: 200 });
