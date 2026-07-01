@@ -8,7 +8,7 @@ import { NextResponse } from "next/server";
  * - Fine-grained role checks (employee vs environment/admin) are enforced in
  *   Phase 1B at the BFF layer; here we only gate authentication.
  */
-const PUBLIC_PATHS = ["/signin", "/offline"];
+const PUBLIC_PATHS = ["/signin", "/offline", "/api/debug/headers"];
 
 export default auth((req) => {
   const { pathname } = req.nextUrl;
@@ -28,8 +28,12 @@ export default auth((req) => {
 });
 
 export const config = {
-  // Run on everything except Next internals, PWA files, and static assets.
+  // Run on everything EXCEPT: the Auth.js routes (api/auth/*), Next internals,
+  // PWA files, and static assets. Excluding api/auth is REQUIRED — running the
+  // auth() middleware on the sign-in/callback endpoints can regenerate/overwrite
+  // the PKCE code_verifier cookie so it no longer matches the code_challenge sent
+  // to Entra, producing AADSTS501481 at the callback ("Configuration" error page).
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|icons|.*\\.(?:png|jpg|jpeg|svg|webp|ico)$).*)",
+    "/((?!api/auth|_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|icons|.*\\.(?:png|jpg|jpeg|svg|webp|ico)$).*)",
   ],
 };
