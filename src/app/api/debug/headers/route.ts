@@ -10,7 +10,22 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(req: NextRequest) {
   const h = req.headers;
+  // Cookie bloat diagnostic (names + sizes ONLY, never values) — for the HTTP 431
+  // before/after comparison.
+  const cookieHeader = h.get("cookie") ?? "";
+  const parts = cookieHeader ? cookieHeader.split(/;\s*/).filter(Boolean) : [];
+  const sizes = parts.map((p) => {
+    const eq = p.indexOf("=");
+    const name = eq >= 0 ? p.slice(0, eq) : p;
+    return { name, bytes: p.length };
+  }).sort((a, b) => b.bytes - a.bytes);
+  const cookies = {
+    count: parts.length,
+    headerBytes: cookieHeader.length,
+    largest: sizes.slice(0, 12),
+  };
   return NextResponse.json({
+    cookies,
     host: h.get("host"),
     "x-forwarded-host": h.get("x-forwarded-host"),
     "x-forwarded-proto": h.get("x-forwarded-proto"),

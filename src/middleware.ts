@@ -8,7 +8,7 @@ import { NextResponse } from "next/server";
  * - Fine-grained role checks (employee vs environment/admin) are enforced in
  *   Phase 1B at the BFF layer; here we only gate authentication.
  */
-const PUBLIC_PATHS = ["/signin", "/offline", "/api/debug/headers"];
+const PUBLIC_PATHS = ["/signin", "/offline", "/clear-auth", "/api/debug/headers"];
 
 export default auth((req) => {
   const { pathname } = req.nextUrl;

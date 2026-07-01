@@ -150,7 +150,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   // Homelab runs behind Cloudflare Tunnel (reverse proxy), so the host header
   // must be trusted. Required by Auth.js v5 outside Vercel.
   trustHost: true,
-  pages: { signIn: "/signin" },
+  // On any auth error, route to /clear-auth (expires stale/chunked auth cookies)
+  // then back to /signin — prevents failed logins from accumulating cookies into
+  // an HTTP 431 dead-end, instead of showing the terminal "Configuration" page.
+  pages: { signIn: "/signin", error: "/clear-auth" },
   session: { strategy: "jwt" },
   callbacks: {
     async jwt({ token, account, user, profile }) {
