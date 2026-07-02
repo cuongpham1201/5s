@@ -15,7 +15,7 @@ import { findListId, resolveSite } from "./site-context";
 import { ensureSubmissionFolder, uploadPhotoPair, downloadFromImgPath } from "./photo-upload-service";
 import { detectImageType, edgeHex, bytesRoundTripOk } from "./image-bytes";
 import { trace } from "@/lib/debug/trace";
-import { ulog } from "@/lib/debug/upload-log";
+import { ulog, ulogAlways } from "@/lib/debug/upload-log";
 import type { GraphCollection, GraphListItem } from "./sharepoint-types";
 import type { SubmissionStatus, SyncStatus } from "@/types/sharepoint";
 
@@ -229,6 +229,7 @@ export async function uploadSubmissionPhotos(input: UploadSubmissionInput): Prom
       continue;
     }
     let res: Awaited<ReturnType<typeof uploadPhotoPair>>;
+    const tPut = Date.now();
     try {
       ulog("server.graph.upload.start", { submissionId: input.submissionId, seq: p.seqNo, originalBytes: p.original.byteLength, watermarkedBytes: p.watermarked.byteLength });
       res = await uploadPhotoPair({
@@ -243,6 +244,7 @@ export async function uploadSubmissionPhotos(input: UploadSubmissionInput): Prom
       continue;
     }
     const photoId = `${input.submissionId}-P${String(p.seqNo).padStart(2, "0")}`;
+    const tRow = Date.now();
     try {
       await upsertPhotoRow(client, siteId, photoListId, {
         photoId, submissionId: input.submissionId, seqNo: p.seqNo,
@@ -255,6 +257,8 @@ export async function uploadSubmissionPhotos(input: UploadSubmissionInput): Prom
       ulog("server.failed", { submissionId: input.submissionId, seq: p.seqNo, step: "photoRow.upsert", message: (re as Error)?.message ?? "error" });
       continue;
     }
+    // Always-on per-photo timing: putMs = both Graph PUTs; rowMs = photo-row upsert.
+    ulogAlways("server.photo.timing", { submissionId: input.submissionId, seq: p.seqNo, putMs: tRow - tPut, rowMs: Date.now() - tRow, bytes: p.original.byteLength + p.watermarked.byteLength });
     photos.push({ seqNo: p.seqNo, originalPath: res.originalPath, watermarkedPath: res.watermarkedPath });
   }
 

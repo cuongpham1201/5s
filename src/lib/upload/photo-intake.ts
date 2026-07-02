@@ -49,6 +49,7 @@ export async function runPhotoUploadIntake(
   mode: "multipart" | "json",
 ): Promise<NextResponse> {
   const rid = meta?.requestId ?? "-";
+  const tEntry = Date.now();
 
   // 1) Auth + profile (server-trusted identity).
   const me = await resolveRequestUser(req);
@@ -65,6 +66,8 @@ export async function runPhotoUploadIntake(
   ulogAlways("server.entry", {
     rid, mode, submissionId: meta.submissionId, declared: meta.photos?.length ?? 0,
     email: me.email, dept: me.departmentCode, platform: meta.platform ?? "-",
+    attempt: (meta as { attemptCount?: number }).attemptCount ?? null,
+    contentLength: Number(req.headers.get("content-length") ?? 0) || null,
   });
 
   if (!meta.submissionId || !meta.areaCode) return errRes("NO_PHOTOS", "Thiếu submissionId/areaCode.", 400);
@@ -142,6 +145,7 @@ export async function runPhotoUploadIntake(
     ulogAlways(body.ok ? "server.done" : "server.failed", {
       rid, mode, submissionId: meta.submissionId, uploaded: body.uploadedPhotoCount,
       failed: body.failedPhotoCount, errors: errors.map((e) => `${e.seqNo}:${e.errorCode}`),
+      totalMs: Date.now() - tEntry, responseBytes: JSON.stringify(body).length,
     });
     // ≥1 photo stored → ok:true. 0 stored → ok:false (business result, NOT 502).
     return NextResponse.json(body, { status: 200 });

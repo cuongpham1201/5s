@@ -13,7 +13,7 @@ import { getQueue, updateStatus, findBySubmission, recoverStuckUploads, markUnre
 import { getCompletedSubmissionById, setSubmissionUploadStatus, setUploadResult } from "@/lib/submissions/local-submission-store";
 import { listPhotosBySubmission, deletePhotosBySubmission, deletePhoto } from "@/lib/storage/photo-store";
 import { trace } from "@/lib/debug/trace";
-import { ulog } from "@/lib/debug/upload-log";
+import { ulog, shipClientLogs } from "@/lib/debug/upload-log";
 import type { StoredPhoto } from "@/lib/storage/storage-types";
 import type { CompletedSubmission, SessionPhoto } from "@/types/submission";
 
@@ -25,7 +25,9 @@ const MAX_ATTEMPTS = 5;
 /** An "uploading" item older than this was crashed mid-upload → recover it. */
 const STUCK_UPLOADING_MS = 180_000; // > UPLOAD_TIMEOUT_MS (120s) + margin
 
-const qlog = (action: string, data: Record<string, unknown>) => trace("[5S_SYNC_TRACE]", action, data);
+// qlog: DEBUG-gated console + ALWAYS persisted to the client evidence ring —
+// a failing device carries its own timeline even when the POST never lands.
+const qlog = (action: string, data: Record<string, unknown>) => { trace("[5S_SYNC_TRACE]", action, data); ulog(action, data); };
 
 function isOffline(): boolean {
   return typeof navigator !== "undefined" && navigator.onLine === false;
@@ -301,6 +303,7 @@ export async function processQueue(opts: { manual?: boolean } = {}): Promise<num
           await deletePhotosBySubmission(item.submissionId); // photos now in SharePoint
           processed += 1;
           qlog("queue.item:uploaded", { submissionId: item.submissionId, attempt });
+          shipClientLogs("uploaded");
         } else {
           // PARTIAL success: drop ONLY the confirmed photos' blobs; keep failed
           // photos' blobs and leave the item retryable so the remaining photos
@@ -309,6 +312,7 @@ export async function processQueue(opts: { manual?: boolean } = {}): Promise<num
           updateStatus(item.queueId, "failed", false, `Còn ${outcome.failedCount} ảnh chưa gửi được — sẽ tự thử lại.`);
           setSubmissionUploadStatus(item.submissionId, "failed");
           qlog("queue.item:partial", { submissionId: item.submissionId, attempt, uploaded: outcome.uploadedPhotoIds.length, failed: outcome.failedCount });
+          shipClientLogs("partial");
         }
       } catch (e) {
         const msg = (e as Error)?.message ?? "unknown";
@@ -321,6 +325,7 @@ export async function processQueue(opts: { manual?: boolean } = {}): Promise<num
           updateStatus(item.queueId, "failed", false, msg);
           qlog("queue.item:failed", { submissionId: item.submissionId, attempt, exhausted: attempt + 1 >= MAX_ATTEMPTS, error: msg });
         }
+        shipClientLogs("failed");
       }
       pending = getQueue().filter(retryable);
       // Stop if the same item is still first (avoid tight loop within one pass).

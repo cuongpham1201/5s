@@ -80,25 +80,52 @@ export async function getAppOnlyToken(): Promise<string> {
   return cached.token;
 }
 
+/** Always-on Graph failure/slow-call telemetry: status, request-id, Retry-After, ms. */
+function glog(kind: string, method: string, path: string, res: Response | null, ms: number, extra?: string): void {
+  const data = {
+    method,
+    status: res?.status ?? 0,
+    ms,
+    requestId: res?.headers.get("request-id") ?? res?.headers.get("client-request-id") ?? null,
+    retryAfter: res?.headers.get("retry-after") ?? null,
+    path: path.replace(/^https?:\/\/[^/]+/, "").slice(0, 120),
+    ...(extra ? { detail: extra.slice(0, 160) } : {}),
+  };
+  console.log(`[5S_GRAPH] ${kind} ${JSON.stringify(data)}`);
+}
+
+const GRAPH_SLOW_MS = 5_000;
+
 async function request<T>(method: string, accessToken: string, path: string, body?: unknown): Promise<T> {
   const url = path.startsWith("http") ? path : `${GRAPH_BASE}${path}`;
-  const res = await fetch(url, {
-    method,
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      Accept: "application/json",
-      ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
-    },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-    cache: "no-store",
-  });
+  const t0 = Date.now();
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/json",
+        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+      },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      cache: "no-store",
+    });
+  } catch (e) {
+    // Transport failure server→Graph (DNS/connectivity) — previously invisible.
+    glog("transport-fail", method, path, null, Date.now() - t0, (e as Error)?.message);
+    throw new SharePointError(`Graph ${method} không kết nối được: ${(e as Error)?.message ?? "fetch failed"}`, 0);
+  }
+  const ms = Date.now() - t0;
   if (!res.ok) {
     const errJson = (await res.json().catch(() => ({}))) as { error?: { code?: string; message?: string } };
+    glog("fail", method, path, res, ms, errJson.error?.code);
     throw new SharePointError(
       `Graph ${method} ${path} thất bại: ${res.status} ${errJson.error?.code ?? ""} ${(errJson.error?.message ?? "").slice(0, 160)}`.trim(),
       res.status,
     );
   }
+  if (ms > GRAPH_SLOW_MS) glog("slow", method, path, res, ms);
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
@@ -111,19 +138,29 @@ async function rawUpload<T>(
 ): Promise<T> {
   const url = path.startsWith("http") ? path : `${GRAPH_BASE}${path}`;
   const body: BodyInit = data instanceof Uint8Array ? new Blob([data]) : new Blob([data]);
-  const res = await fetch(url, {
-    method: "PUT",
-    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": contentType },
-    body,
-    cache: "no-store",
-  });
+  const t0 = Date.now();
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": contentType },
+      body,
+      cache: "no-store",
+    });
+  } catch (e) {
+    glog("transport-fail", "PUT", path, null, Date.now() - t0, (e as Error)?.message);
+    throw new SharePointError(`Graph PUT không kết nối được: ${(e as Error)?.message ?? "fetch failed"}`, 0);
+  }
+  const ms = Date.now() - t0;
   if (!res.ok) {
     const errJson = (await res.json().catch(() => ({}))) as { error?: { code?: string; message?: string } };
+    glog("fail", "PUT", path, res, ms, errJson.error?.code);
     throw new SharePointError(
       `Graph PUT ${path} thất bại: ${res.status} ${errJson.error?.code ?? ""} ${(errJson.error?.message ?? "").slice(0, 160)}`.trim(),
       res.status,
     );
   }
+  if (ms > GRAPH_SLOW_MS) glog("slow", "PUT", path, res, ms);
   return (await res.json()) as T;
 }
 
