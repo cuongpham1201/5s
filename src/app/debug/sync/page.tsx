@@ -45,13 +45,17 @@ function DebugSyncInner() {
       const stored = await listPhotosBySubmission(id);
       const bytes = stored.map((p, i) => ({
         seq: i + 1,
-        original: p.originalBlob?.size ?? 0,
-        watermarked: p.watermarkedBlob?.size ?? 0,
-        thumb: p.thumbnailBlob?.size ?? 0,
-        oType: p.originalBlob?.type ?? "",
-        wType: p.watermarkedBlob?.type ?? "",
+        original: p.originalBuffer?.byteLength ?? p.originalBlob?.size ?? 0,
+        watermarked: p.watermarkedBuffer?.byteLength ?? p.watermarkedBlob?.size ?? 0,
+        thumb: p.thumbnailBuffer?.byteLength ?? p.thumbnailBlob?.size ?? 0,
+        oType: p.mimeType ?? p.originalBlob?.type ?? "",
+        wType: p.mimeType ?? p.watermarkedBlob?.type ?? "",
       }));
-      const canBuild = stored.some((p) => (p.originalBlob?.size ?? 0) > 0 && (p.watermarkedBlob?.size ?? 0) > 0);
+      const canBuild = stored.some(
+        (p) =>
+          ((p.originalBuffer?.byteLength ?? p.originalBlob?.size ?? 0) > 0) &&
+          ((p.watermarkedBuffer?.byteLength ?? p.watermarkedBlob?.size ?? 0) > 0),
+      );
       out.push({
         submissionId: id,
         status: q?.status ?? (c ? c.status : "—"),

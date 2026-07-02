@@ -27,6 +27,17 @@ export async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
   return new Blob([new TextEncoder().encode(decodeURIComponent(dataPart))], { type: mime });
 }
 
+/** Natural pixel dimensions of a data-URL image (for StoredPhoto metadata). */
+export function getDataUrlDims(dataUrl: string): Promise<{ width: number; height: number }> {
+  return new Promise((resolve) => {
+    if (typeof document === "undefined") { resolve({ width: 0, height: 0 }); return; }
+    const img = new Image();
+    img.onload = () => resolve({ width: img.naturalWidth || 0, height: img.naturalHeight || 0 });
+    img.onerror = () => resolve({ width: 0, height: 0 }); // dims are metadata, never fatal
+    img.src = dataUrl;
+  });
+}
+
 /** Build a small thumbnail data URL from a source data URL (for instant display). */
 export function makeThumbnailDataUrl(sourceDataUrl: string, maxEdge = 240): Promise<string> {
   return new Promise((resolve, reject) => {

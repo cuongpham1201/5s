@@ -11,7 +11,7 @@
  */
 import { getQueue, updateStatus, findBySubmission, recoverStuckUploads, markUnrecoverable, resetFailedForRetry } from "./offline-queue";
 import { getCompletedSubmissionById, setSubmissionUploadStatus, setUploadResult } from "@/lib/submissions/local-submission-store";
-import { listPhotosBySubmission, deletePhotosBySubmission, deletePhoto } from "@/lib/storage/photo-store";
+import { listPhotosBySubmission, deletePhotosBySubmission, deletePhoto, resolvePhotoBytes } from "@/lib/storage/photo-store";
 import { trace } from "@/lib/debug/trace";
 import { ulog, shipClientLogs } from "@/lib/debug/upload-log";
 import type { StoredPhoto } from "@/lib/storage/storage-types";
@@ -63,6 +63,7 @@ async function collectPayload(sub: CompletedSubmission, attemptCount: number, qu
   // (diag) so a truncated part is provable from the response alone (no DEBUG_LOG).
   const clientParts: Array<{ seqNo: number; originalSize: number; watermarkedSize: number }> = [];
   let totalBytes = 0;
+  let unreadable = 0;
   for (let idx = 0; idx < ordered.length; idx++) {
     const sp = ordered[idx];
     // STABLE seq: derived from the photo's position in the session order, NOT from
@@ -71,24 +72,25 @@ async function collectPayload(sub: CompletedSubmission, attemptCount: number, qu
     // must keep its ORIGINAL seq — a renumbered seq would overwrite the already-
     // uploaded photo's PhotoId/file (P0 data-corruption).
     const seq = idx + 1;
-    const blob = byId.get(sp.photoId);
-    if (!blob || (blob.originalBlob?.size ?? 0) === 0 || (blob.watermarkedBlob?.size ?? 0) === 0) continue;
-    // ROOT-CAUSE FIX (Safari): a Blob read back from IndexedDB is disk-backed and
-    // lazily resolved. WebKit's multipart encoder can stream such a Blob as 0
-    // bytes (most often the FIRST file part) even though .size is correct, which
-    // the server then rejects as BAD_FILE. Reading arrayBuffer() once and wrapping
-    // the bytes in a fresh in-memory Blob removes the disk-backed handle, so every
-    // part carries real bytes. Blink/Gecko (desktop) buffer eagerly → never hit this.
-    const [oBuf, wBuf] = await Promise.all([blob.originalBlob.arrayBuffer(), blob.watermarkedBlob.arrayBuffer()]);
-    const original = new Blob([oBuf], { type: blob.originalBlob.type || "image/jpeg" });
-    const watermarked = new Blob([wBuf], { type: blob.watermarkedBlob.type || "image/jpeg" });
-    qlog("buildForm:photo", { submissionId: sub.submissionId, seq, photoId: sp.photoId, originalBytes: original.size, originalType: original.type, watermarkedBytes: watermarked.size, watermarkedType: watermarked.type, materialized: true });
+    const rec = byId.get(sp.photoId);
+    if (!rec) continue;
+    // P0 WebKit fix: records hold RAW BYTES (ArrayBuffer). resolvePhotoBytes
+    // verifies SHA-256 (never upload corrupted bytes) and lazily migrates legacy
+    // Blob records in memory; detached legacy blobs resolve to null (unreadable).
+    const bytes = await resolvePhotoBytes(rec);
+    if (!bytes) { unreadable += 1; continue; }
+    const original = new Blob([bytes.original], { type: bytes.mimeType });
+    const watermarked = new Blob([bytes.watermarked], { type: bytes.mimeType });
+    qlog("buildForm:photo", { submissionId: sub.submissionId, seq, photoId: sp.photoId, originalBytes: original.size, watermarkedBytes: watermarked.size, type: bytes.mimeType, legacy: bytes.legacy });
     items.push({ seq, photoId: sp.photoId, original, watermarked, name: { o: `original-${String(seq).padStart(2, "0")}.jpg`, w: `watermarked-${String(seq).padStart(2, "0")}.jpg` } });
     totalBytes += original.size + watermarked.size;
-    metaPhotos.push({ seqNo: seq, capturedAt: sp.capturedAt ?? blob.createdAt, latitude: sp.latitude ?? null, longitude: sp.longitude ?? null, address: sp.address ?? null });
+    metaPhotos.push({ seqNo: seq, capturedAt: sp.capturedAt ?? rec.createdAt, latitude: sp.latitude ?? null, longitude: sp.longitude ?? null, address: sp.address ?? null });
     clientParts.push({ seqNo: seq, originalSize: original.size, watermarkedSize: watermarked.size });
   }
-  if (items.length === 0) { qlog("buildForm:no-matching-blobs", { submissionId: sub.submissionId, stored: stored.length }); return null; }
+  if (items.length === 0) {
+    qlog("buildForm:no-matching-blobs", { submissionId: sub.submissionId, stored: stored.length, unreadable });
+    return null;
+  }
 
   const first = ordered[0];
   const meta = {
@@ -204,7 +206,7 @@ async function uploadOne(submissionId: string, attemptCount: number, queueId: st
   const payload = await collectPayload(sub, attemptCount, queueId);
   // No usable local blob → cannot ever succeed by retrying; mark unrecoverable
   // (UI tells the user to re-capture) instead of looping retries.
-  if (!payload) throw new Error("UNRECOVERABLE_NO_BLOB: Ảnh cục bộ không còn (đã bị xoá hoặc hỏng). Vui lòng chụp lại.");
+  if (!payload) throw new Error("UNRECOVERABLE_NO_BYTES: Ảnh cục bộ không còn đọc được trên thiết bị (bộ nhớ trình duyệt đã giải phóng ảnh). Vui lòng chụp lại.");
   ulog("client.blobs.ready", { submissionId, photoCount: payload.items.length, totalBytes: payload.totalBytes });
 
   // Build the multipart body, then PROVE what the browser actually holds for each

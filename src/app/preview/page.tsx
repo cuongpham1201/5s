@@ -7,8 +7,9 @@ import { Card, InfoRow } from "@/components/ui/Card";
 import { useSessionCapture } from "@/features/capture/session-context";
 import { generateWatermarkedImage } from "@/lib/watermark/watermark-engine";
 import { buildWatermarkMetadata } from "@/lib/submissions/metadata";
-import { dataUrlToBlob, makeThumbnailDataUrl } from "@/lib/storage/image-utils";
-import { putPhoto, getPhoto, listPhotosBySubmission } from "@/lib/storage/photo-store";
+import { dataUrlToBlob, getDataUrlDims, makeThumbnailDataUrl } from "@/lib/storage/image-utils";
+import { putPhoto, getPhoto, listPhotosBySubmission, sha256Hex } from "@/lib/storage/photo-store";
+import { ulog } from "@/lib/debug/upload-log";
 import * as store from "@/lib/submissions/local-submission-store";
 import { clog as dbg, ctrace } from "@/lib/debug/capture-debug";
 import { CaptureDebugPanel } from "@/components/system/CaptureDebugPanel";
@@ -75,18 +76,34 @@ export default function PreviewPage() {
       const photoId = `p-${Date.now()}`;
       const submissionId = session.sessionId;
       const thumbnailDataUrl = await makeThumbnailDataUrl(watermarkedUrl);
-      // Heavy binaries → IndexedDB (NOT localStorage).
+      // Transient Blobs only (camera→canvas→blob→arrayBuffer). RAW BYTES go to
+      // IndexedDB — WebKit detaches persisted Blob references ("The object can
+      // not be found here."), so Blob objects must NEVER be persisted.
       const [originalBlob, watermarkedBlob, thumbnailBlob] = await Promise.all([
         dataUrlToBlob(originalUrl),
         dataUrlToBlob(watermarkedUrl),
         dataUrlToBlob(thumbnailDataUrl),
       ]);
-      ctrace("preview.blob", { photoId, originalBytes: originalBlob.size, originalType: originalBlob.type, watermarkedBytes: watermarkedBlob.size, watermarkedType: watermarkedBlob.type, thumbBytes: thumbnailBlob.size });
-      dbg("preview.putPhoto:before", { photoId, submissionId, originalBytes: originalBlob.size, watermarkedBytes: watermarkedBlob.size, thumbBytes: thumbnailBlob.size });
-      // Guard: a 0-byte blob means image decoding failed on this device — fail loud
+      const [originalBuffer, watermarkedBuffer, thumbnailBuffer] = await Promise.all([
+        originalBlob.arrayBuffer(),
+        watermarkedBlob.arrayBuffer(),
+        thumbnailBlob.arrayBuffer(),
+      ]);
+      const { width, height } = await getDataUrlDims(watermarkedUrl);
+      // Independent per-asset hashes — verified separately so a corrupted
+      // thumbnail can never invalidate the original image.
+      const [originalHash, watermarkedHash, thumbnailHash] = await Promise.all([
+        sha256Hex([originalBuffer]),
+        sha256Hex([watermarkedBuffer]),
+        sha256Hex([thumbnailBuffer]),
+      ]);
+      ctrace("preview.blob", { photoId, originalBytes: originalBuffer.byteLength, watermarkedBytes: watermarkedBuffer.byteLength, thumbBytes: thumbnailBuffer.byteLength, width, height });
+      ulog("photo.saved.bytes", { photoId, submissionId, originalBytes: originalBuffer.byteLength, watermarkedBytes: watermarkedBuffer.byteLength, thumbBytes: thumbnailBuffer.byteLength, width, height });
+      ulog("photo.saved.hash", { photoId, original: originalHash.slice(0, 12), watermarked: watermarkedHash.slice(0, 12), thumbnail: thumbnailHash.slice(0, 12) });
+      // Guard: 0 bytes means image decoding failed on this device — fail loud
       // instead of saving an empty photo that would later error at sync.
-      if (originalBlob.size === 0 || watermarkedBlob.size === 0) {
-        dbg("preview.blob:empty", { originalBytes: originalBlob.size, watermarkedBytes: watermarkedBlob.size });
+      if (originalBuffer.byteLength === 0 || watermarkedBuffer.byteLength === 0) {
+        dbg("preview.blob:empty", { originalBytes: originalBuffer.byteLength, watermarkedBytes: watermarkedBuffer.byteLength });
         setError("Không xử lý được ảnh trên thiết bị này. Vui lòng thử lại hoặc cập nhật trình duyệt.");
         setSaving(false);
         return;
@@ -94,9 +111,16 @@ export default function PreviewPage() {
       const saved = await putPhoto({
         photoId,
         submissionId,
-        originalBlob,
-        watermarkedBlob,
-        thumbnailBlob,
+        originalBuffer,
+        watermarkedBuffer,
+        thumbnailBuffer,
+        mimeType: watermarkedBlob.type || originalBlob.type || "image/jpeg",
+        size: originalBuffer.byteLength + watermarkedBuffer.byteLength,
+        originalHash,
+        watermarkedHash,
+        thumbnailHash,
+        width,
+        height,
         createdAt: new Date().toISOString(),
         status: "ready",
       });
@@ -107,12 +131,19 @@ export default function PreviewPage() {
         setSaving(false);
         return;
       }
-      // READBACK VERIFY (point 5): confirm the blob is actually persisted & non-empty
-      // on THIS device before adding it to the session. Catches iOS "write OK but
-      // read-back empty" so we never build a 0-photo submission.
+      // READBACK VERIFY: read the record back and verify BYTE LENGTHS + per-asset
+      // SHA-256 (original and watermarked INDEPENDENTLY) before adding it to the
+      // session — guarantees the bytes are readable on THIS device at save time.
       const rb = await getPhoto(photoId);
-      ctrace("preview.putPhoto:readback", { photoId, found: !!rb, originalBytes: rb?.originalBlob?.size ?? 0, watermarkedBytes: rb?.watermarkedBlob?.size ?? 0 });
-      if (!rb || (rb.originalBlob?.size ?? 0) === 0 || (rb.watermarkedBlob?.size ?? 0) === 0) {
+      const rbO = rb?.originalBuffer?.byteLength ?? 0;
+      const rbW = rb?.watermarkedBuffer?.byteLength ?? 0;
+      const rbOHash = rb?.originalBuffer ? await sha256Hex([rb.originalBuffer]) : "";
+      const rbWHash = rb?.watermarkedBuffer ? await sha256Hex([rb.watermarkedBuffer]) : "";
+      const hashOk = (!originalHash || rbOHash === originalHash) && (!watermarkedHash || rbWHash === watermarkedHash);
+      ulog("photo.read.bytes", { photoId, originalBytes: rbO, watermarkedBytes: rbW, phase: "save-verify" });
+      ulog(hashOk ? "photo.hash.ok" : "photo.hash.failed", { photoId, phase: "save-verify", originalOk: !originalHash || rbOHash === originalHash, watermarkedOk: !watermarkedHash || rbWHash === watermarkedHash });
+      ctrace("preview.putPhoto:readback", { photoId, found: !!rb, originalBytes: rbO, watermarkedBytes: rbW, hashOk });
+      if (!rb || rbO === 0 || rbW === 0 || !hashOk) {
         ctrace("preview.readback:empty", { photoId });
         setError("Thiết bị không lưu được ảnh (bộ nhớ trình duyệt). Vui lòng thử lại, đóng bớt tab hoặc dùng trình duyệt khác.");
         setSaving(false);

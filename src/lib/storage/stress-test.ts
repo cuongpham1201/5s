@@ -4,7 +4,7 @@
  * NOT used in production flows.
  */
 import { dataUrlToBlob, makeThumbnailDataUrl } from "./image-utils";
-import { putPhoto } from "./photo-store";
+import { putPhoto, sha256Hex } from "./photo-store";
 import { enqueueSubmission } from "@/lib/queue/offline-queue";
 
 function makeStressImage(seq: number): string {
@@ -48,12 +48,25 @@ export async function generateMockPhotos(n: number): Promise<StressResult> {
       dataUrlToBlob(dataUrl),
       dataUrlToBlob(thumbUrl),
     ]);
+    // Byte-based model (same as the real capture path — Blobs are transient only).
+    const [originalBuffer, watermarkedBuffer, thumbnailBuffer] = await Promise.all([
+      originalBlob.arrayBuffer(),
+      watermarkedBlob.arrayBuffer(),
+      thumbnailBlob.arrayBuffer(),
+    ]);
     await putPhoto({
       photoId: `${submissionId}-p${i}`,
       submissionId,
-      originalBlob,
-      watermarkedBlob,
-      thumbnailBlob,
+      originalBuffer,
+      watermarkedBuffer,
+      thumbnailBuffer,
+      mimeType: "image/jpeg",
+      size: originalBuffer.byteLength + watermarkedBuffer.byteLength,
+      originalHash: await sha256Hex([originalBuffer]),
+      watermarkedHash: await sha256Hex([watermarkedBuffer]),
+      thumbnailHash: await sha256Hex([thumbnailBuffer]),
+      width: 1280,
+      height: 960,
       createdAt: new Date().toISOString(),
       status: "ready",
     });

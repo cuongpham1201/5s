@@ -29,7 +29,7 @@ export function SyncErrorDetail({ submissionId }: { submissionId: string }) {
         updatedAt: q?.updatedAt ?? q?.lastAttemptAt,
         sessionPhotos: c?.photos.length ?? 0,
         idbPhotos: stored.length,
-        bytes: stored.map((p, i) => ({ seq: i + 1, original: p.originalBlob?.size ?? 0, watermarked: p.watermarkedBlob?.size ?? 0 })),
+        bytes: stored.map((p, i) => ({ seq: i + 1, original: p.originalBuffer?.byteLength ?? p.originalBlob?.size ?? 0, watermarked: p.watermarkedBuffer?.byteLength ?? p.watermarkedBlob?.size ?? 0 })),
       });
     })();
     return () => { active = false; };
