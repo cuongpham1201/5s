@@ -80,6 +80,10 @@ async function collectPayload(sub: CompletedSubmission, attemptCount: number, qu
     reporterName: sub.reporterName, reporterEmail: sub.reporterEmail, submittedAt: sub.submittedAt, queueId, attemptCount,
     latitude: first?.latitude ?? null, longitude: first?.longitude ?? null, address: first?.address ?? null, photos: metaPhotos,
     clientParts,
+    // Correlation for server-side structured logs (requestId ties client attempt ↔
+    // server entry; platform tells us iOS/PWA/Safari without needing device logs).
+    requestId: `r-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e9).toString(36)}`,
+    platform: envDetail(),
   };
   qlog("buildForm:ready", { submissionId: sub.submissionId, photos: items.length, totalBytes });
   return { meta, items, totalBytes };
@@ -98,6 +102,50 @@ function buildFormData(p: Payload): FormData {
     form.append(`watermarked_${it.seq}`, toFile(it.watermarked, it.name.w), it.name.w);
   }
   return form;
+}
+
+/** Bytes → base64 (chunked btoa; safe for large arrays without arg-limit overflow). */
+function bytesToBase64(bytes: Uint8Array): string {
+  let bin = "";
+  const CH = 0x8000;
+  for (let i = 0; i < bytes.length; i += CH) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + CH));
+  }
+  return btoa(bin);
+}
+
+/**
+ * Blob → base64, iPhone-safe 3-step chain (never logs base64 content):
+ *   1) blob.arrayBuffer()  2) new Response(blob).arrayBuffer()  3) FileReader.
+ * Used ONLY by the JSON fallback when the multipart fetch throws on iOS Safari.
+ */
+async function blobToBase64(blob: Blob): Promise<string> {
+  try {
+    return bytesToBase64(new Uint8Array(await blob.arrayBuffer()));
+  } catch (e1) {
+    qlog("base64.arrayBuffer:failed", { size: blob.size, message: (e1 as Error)?.message });
+  }
+  try {
+    return bytesToBase64(new Uint8Array(await new Response(blob).arrayBuffer()));
+  } catch (e2) {
+    qlog("base64.response:failed", { size: blob.size, message: (e2 as Error)?.message });
+  }
+  return await new Promise<string>((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => { const s = String(fr.result); resolve(s.slice(s.indexOf(",") + 1)); };
+    fr.onerror = () => reject(new Error(`BASE64_FAILED: FileReader failed (size=${blob.size})`));
+    fr.readAsDataURL(blob);
+  });
+}
+
+/** Build the JSON fallback body: same meta, files as base64 keyed by seq. */
+async function buildJsonBody(p: Payload): Promise<string> {
+  const files: Record<string, { filename: string; mime: string; base64: string }> = {};
+  for (const it of p.items) {
+    files[`original_${it.seq}`] = { filename: it.name.o, mime: it.original.type || "image/jpeg", base64: await blobToBase64(it.original) };
+    files[`watermarked_${it.seq}`] = { filename: it.name.w, mime: it.watermarked.type || "image/jpeg", base64: await blobToBase64(it.watermarked) };
+  }
+  return JSON.stringify({ meta: p.meta, files });
 }
 
 function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
@@ -152,29 +200,48 @@ async function uploadOne(submissionId: string, attemptCount: number, queueId: st
     }
   }
 
-  let res: Response;
+  // Shared verdict: success ONLY when the server confirms ≥1 stored photo row.
+  const settle = async (res: Response, mode: string): Promise<void> => {
+    const body = (await res.json().catch(() => ({}))) as UploadResponse;
+    const uploaded = body.uploadedPhotoCount ?? 0;
+    const failed = body.failedPhotoCount ?? (body.errors?.length ?? 0);
+    setUploadResult({ submissionId, ok: !!body.ok && uploaded >= 1, uploadedPhotoCount: uploaded, failedPhotoCount: failed, errors: body.errors ?? [], at: new Date().toISOString() });
+    ulog("client.upload.response", { submissionId, mode, status: res.status, ok: body.ok, uploaded, failed, durationMs: Date.now() - t0 });
+    if (res.ok && body.ok && uploaded >= 1) return;
+    const first = body.errors?.[0];
+    const code = body.errorCode ?? first?.errorCode ?? `HTTP_${res.status}`;
+    const msg = body.message ?? first?.message ?? `Tải lên thất bại (HTTP ${res.status}).`;
+    throw new Error(`${code}: ${msg}`);
+  };
+
   try {
     ulog("client.upload.request", { submissionId, url: "/api/upload/photos", photoCount: payload.items.length });
-    res = await fetchWithTimeout("/api/upload/photos", { method: "POST", body: form });
+    const res = await fetchWithTimeout("/api/upload/photos", { method: "POST", body: form });
+    return await settle(res, "multipart");
   } catch (e) {
     const err = e as Error;
-    ulog("client.upload.response", { submissionId, ok: false, transport: "throw", name: err?.name, message: err?.message, env: envDetail(), durationMs: Date.now() - t0 });
-    throw new Error(`NETWORK: ${err?.name ?? "Error"} ${err?.message ?? ""} | ${envDetail()}`.trim());
+    // Only a TRANSPORT throw (fetch rejected — request never completed) falls back.
+    // A structured server error from settle() is rethrown untouched (no retry here).
+    const isTransport = err?.name === "AbortError" || err?.name === "TypeError" || /load failed|network|fetch/i.test(err?.message ?? "");
+    if (!isTransport) throw err;
+    // iOS Safari: multipart fetch can throw "Load failed" even with in-memory
+    // blobs. Fall back to JSON/base64 on the SAME new endpoint family — this
+    // fallback existed pre-R1 and its removal broke iPhone uploads entirely.
+    ulog("client.upload.fallback", { submissionId, reason: `${err?.name}: ${err?.message}`, env: envDetail() });
+    let res2: Response;
+    try {
+      res2 = await fetchWithTimeout("/api/upload/photos-json", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: await buildJsonBody(payload),
+      });
+    } catch (e2) {
+      const err2 = e2 as Error;
+      ulog("client.upload.response", { submissionId, mode: "json", ok: false, transport: "throw", name: err2?.name, message: err2?.message, env: envDetail(), durationMs: Date.now() - t0 });
+      throw new Error(`NETWORK: ${err2?.name ?? "Error"} ${err2?.message ?? ""} | ${envDetail()}`.trim());
+    }
+    return await settle(res2, "json");
   }
-
-  const body = (await res.json().catch(() => ({}))) as UploadResponse;
-  const uploaded = body.uploadedPhotoCount ?? 0;
-  const failed = body.failedPhotoCount ?? (body.errors?.length ?? 0);
-  setUploadResult({ submissionId, ok: !!body.ok && uploaded >= 1, uploadedPhotoCount: uploaded, failedPhotoCount: failed, errors: body.errors ?? [], at: new Date().toISOString() });
-  ulog("client.upload.response", { submissionId, status: res.status, ok: body.ok, uploaded, failed, durationMs: Date.now() - t0 });
-
-  // Success requires the server to have actually stored at least one photo row.
-  if (res.ok && body.ok && uploaded >= 1) return;
-
-  const first = body.errors?.[0];
-  const code = body.errorCode ?? first?.errorCode ?? `HTTP_${res.status}`;
-  const msg = body.message ?? first?.message ?? `Tải lên thất bại (HTTP ${res.status}).`;
-  throw new Error(`${code}: ${msg}`);
 }
 
 /**

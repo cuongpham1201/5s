@@ -14,3 +14,16 @@ import { trace } from "./trace";
 export function ulog(step: string, data: Record<string, unknown> = {}): void {
   trace("[5S_UPLOAD]", step, data);
 }
+
+/**
+ * ALWAYS-ON structured upload log (server milestones only — entry/done/failed and
+ * per-photo failures). Uploads are low-volume, and gated tracing left production
+ * incidents completely invisible. Compact one-line JSON; NEVER tokens/base64/bytes.
+ */
+export function ulogAlways(step: string, data: Record<string, unknown> = {}): void {
+  try {
+    console.log(`[5S_UPLOAD] ${step} ${JSON.stringify(data)}`);
+  } catch {
+    console.log(`[5S_UPLOAD] ${step}`);
+  }
+}

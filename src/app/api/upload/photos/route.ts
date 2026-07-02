@@ -1,144 +1,39 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { resolveRequestUser } from "@/lib/auth/request-department";
-import { uploadSubmissionPhotos, type PhotoUploadResult } from "@/lib/sharepoint/submission-upload-service";
-import { vnDateKey } from "@/lib/sharepoint/report-service";
+import { runPhotoUploadIntake, type UploadMetaIn, type ResolvedPair } from "@/lib/upload/photo-intake";
 import { ulog } from "@/lib/debug/upload-log";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 /**
- * POST /api/upload/photos (Phase R1) — the ONE primary upload endpoint.
- * multipart/form-data:
- *   meta = JSON { submissionId, departmentCode, departmentName?, areaCode, areaName,
- *                 checkItemCode?, checkItemName?, submittedAt, reporterEmail?,
- *                 reporterName?, photos:[{seqNo}] }
- *   original_<seq>, watermarked_<seq> = image files
- *
- * Reporter identity + department come from the SERVER session/profile (client is
- * NOT trusted). Each photo uploads independently; ≥1 success = ok. Business errors
- * return structured JSON (never HTTP 502). No JSON-base64 / FileReader fallback.
+ * POST /api/upload/photos (Phase R1) — primary upload endpoint (multipart).
+ *   meta = JSON UploadMetaIn; original_<seq>, watermarked_<seq> = image files.
+ * Validation/orchestration shared with the JSON fallback via runPhotoUploadIntake.
+ * Reporter identity + department come from the SERVER session/profile.
  */
-const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
-const MAX_PHOTOS = 20;
-
-interface MetaIn {
-  submissionId?: string;
-  departmentCode?: string;
-  areaCode?: string;
-  areaName?: string;
-  checkItemCode?: string;
-  checkItemName?: string;
-  submittedAt?: string;
-  reporterName?: string;
-  photos?: Array<{ seqNo: number; capturedAt?: string; latitude?: number | null; longitude?: number | null; address?: string | null }>;
-  clientParts?: Array<{ seqNo: number; originalSize: number; watermarkedSize: number }>;
-}
-
-function err(errorCode: string, message: string, status: number) {
-  return NextResponse.json({ ok: false, submissionId: null, uploadedPhotoCount: 0, failedPhotoCount: 0, photos: [], errors: [{ seqNo: 0, errorCode, message }], errorCode, message }, { status });
-}
-
 export async function POST(req: NextRequest) {
-  // 1) Auth + profile (server-trusted identity).
-  const me = await resolveRequestUser(req);
-  if (!me?.email) return err("AUTH_REQUIRED", "Chưa đăng nhập.", 401);
-  if (!me.departmentResolved || !me.departmentCode) return err("PROFILE_UNRESOLVED", "Chưa xác định được phòng ban của tài khoản.", 403);
-
-  // 2) Parse multipart + meta.
   let form: FormData;
-  try { form = await req.formData(); } catch { return err("NO_PHOTOS", "multipart/form-data bắt buộc.", 400); }
-  // PROOF (server half of the client↔server file comparison): log every received
-  // file part as actually parsed — key, name, size, type. A part the client sent
-  // with size>0 but that lands here with size 0 is a transport truncation.
+  try { form = await req.formData(); } catch {
+    return NextResponse.json({ ok: false, errorCode: "NO_PHOTOS", message: "multipart/form-data bắt buộc." }, { status: 400 });
+  }
+  // Verbose per-part proof (DEBUG_LOG only) — key, name, size, type.
   for (const [key, v] of form.entries()) {
     if (typeof v !== "string") ulog("server.formdata.entry", { key, name: (v as File).name, size: (v as File).size, type: (v as File).type });
   }
-  let meta: MetaIn;
-  try { meta = JSON.parse(String(form.get("meta") ?? "")); } catch { return err("NO_PHOTOS", "meta JSON không hợp lệ.", 400); }
+  let meta: UploadMetaIn | null = null;
+  try { meta = JSON.parse(String(form.get("meta") ?? "")); } catch { meta = null; }
 
-  ulog("server.entry", { submissionId: meta.submissionId, declared: meta.photos?.length ?? 0, email: me.email });
-
-  if (!meta.submissionId || !meta.areaCode) return err("NO_PHOTOS", "Thiếu submissionId/areaCode.", 400);
-  if (!Array.isArray(meta.photos) || meta.photos.length === 0) return err("NO_PHOTOS", "Cần ít nhất 1 ảnh.", 400);
-  if (meta.photos.length > MAX_PHOTOS) return err("NO_PHOTOS", `Tối đa ${MAX_PHOTOS} ảnh mỗi lần gửi.`, 400);
-
-  // 3) Department comes from the SERVER profile (ignore any client-sent dept that differs).
-  if (meta.departmentCode && meta.departmentCode !== me.departmentCode) {
-    return err("PROFILE_UNRESOLVED", `Không thể gửi cho phòng ban khác (${meta.departmentCode} ≠ ${me.departmentCode}).`, 403);
-  }
-  const departmentCode = me.departmentCode;
-
-  // 4) Resolve declared photos to byte pairs; skip missing/empty files (BAD_FILE).
-  // Build a client↔server byte comparison (diag) so a truncated part is provable
-  // from the RESPONSE alone — no DEBUG_LOG needed.
-  const clientBySeq = new Map((meta.clientParts ?? []).map((c) => [c.seqNo, c]));
-  const serverParts: Array<{ seqNo: number; originalSize: number; watermarkedSize: number }> = [];
-  const photos: Array<{ seqNo: number; capturedAt: string; latitude: number | null; longitude: number | null; address: string | null; original: ArrayBuffer; watermarked: ArrayBuffer; contentType: string }> = [];
-  const preErrors: PhotoUploadResult["errors"] = [];
-  for (const mp of meta.photos) {
+  // Resolve declared pairs up-front (arrayBuffer per file).
+  const pairs = new Map<number, ResolvedPair>();
+  for (const mp of meta?.photos ?? []) {
     const o = form.get(`original_${mp.seqNo}`);
     const w = form.get(`watermarked_${mp.seqNo}`);
-    const oSize = o instanceof Blob ? o.size : 0;
-    const wSize = w instanceof Blob ? w.size : 0;
-    serverParts.push({ seqNo: mp.seqNo, originalSize: oSize, watermarkedSize: wSize });
-    ulog("server.file.received", { submissionId: meta.submissionId, seq: mp.seqNo, originalBytes: oSize, watermarkedBytes: wSize });
-    if (!(o instanceof Blob) || !(w instanceof Blob) || oSize === 0 || wSize === 0) {
-      const c = clientBySeq.get(mp.seqNo);
-      // If the client claimed bytes but the server received 0, this is transport
-      // truncation — name it explicitly so the cause is unambiguous.
-      const truncated = !!c && (c.originalSize > 0 || c.watermarkedSize > 0);
-      preErrors.push({
-        seqNo: mp.seqNo,
-        errorCode: truncated ? "TRANSPORT_TRUNCATED" : "BAD_FILE",
-        message: truncated
-          ? `Ảnh #${mp.seqNo}: client gửi orig=${c!.originalSize}/wm=${c!.watermarkedSize} nhưng server nhận orig=${oSize}/wm=${wSize} → mất bytes khi truyền.`
-          : `Thiếu/rỗng file ảnh cho seq ${mp.seqNo} (client cũng không có bytes).`,
-      });
-      continue;
-    }
-    const type = w.type || o.type || "image/jpeg";
-    if (type && !ALLOWED_MIME.has(type)) {
-      preErrors.push({ seqNo: mp.seqNo, errorCode: "BAD_FILE", message: `Loại ảnh không hợp lệ (${type}).` });
-      continue;
-    }
-    photos.push({
-      seqNo: mp.seqNo, capturedAt: mp.capturedAt ?? meta.submittedAt ?? new Date().toISOString(),
-      latitude: mp.latitude ?? null, longitude: mp.longitude ?? null, address: mp.address ?? null,
-      original: await o.arrayBuffer(), watermarked: await w.arrayBuffer(), contentType: type,
+    pairs.set(mp.seqNo, {
+      original: o instanceof Blob && o.size > 0 ? await o.arrayBuffer() : null,
+      watermarked: w instanceof Blob && w.size > 0 ? await w.arrayBuffer() : null,
+      type: (w instanceof Blob && w.type) || (o instanceof Blob && o.type) || "image/jpeg",
     });
   }
-  const diag = { clientParts: meta.clientParts ?? [], serverParts };
 
-  if (photos.length === 0) {
-    return NextResponse.json({ ok: false, submissionId: meta.submissionId, uploadedPhotoCount: 0, failedPhotoCount: preErrors.length, photos: [], errors: preErrors, diag, errorCode: preErrors[0]?.errorCode ?? "NO_PHOTOS", message: preErrors[0]?.message ?? "Không có file ảnh hợp lệ." }, { status: 400 });
-  }
-
-  // 5) Upload (per-photo, idempotent). Never throws for a photo-level failure.
-  try {
-    const submittedAt = meta.submittedAt || new Date().toISOString();
-    const result = await uploadSubmissionPhotos({
-      submissionId: meta.submissionId,
-      departmentCode,
-      areaCode: meta.areaCode,
-      areaName: meta.areaName ?? meta.areaCode,
-      reporterName: meta.reporterName ?? me.displayName ?? "",
-      reporterEmail: me.email,
-      submittedAt,
-      submissionDate: vnDateKey(new Date(submittedAt)),
-      latitude: photos[0]?.latitude ?? null,
-      longitude: photos[0]?.longitude ?? null,
-      address: photos[0]?.address ?? null,
-      photos,
-    });
-    // Merge any pre-upload BAD_FILE errors into the response.
-    const errors = [...preErrors, ...result.errors];
-    const body = { ...result, failedPhotoCount: errors.length, errors, diag };
-    ulog("server.done", { submissionId: meta.submissionId, ok: body.ok, uploaded: body.uploadedPhotoCount, failed: body.failedPhotoCount });
-    // ≥1 photo stored → 200 ok. 0 stored → 200 ok:false (business result, NOT 502).
-    return NextResponse.json(body, { status: 200 });
-  } catch (e) {
-    ulog("server.failed", { submissionId: meta.submissionId, step: "orchestrator", message: (e as Error)?.message ?? "error" });
-    return err("SERVER_ERROR", (e as Error)?.message ?? "Lỗi máy chủ.", 500);
-  }
+  return runPhotoUploadIntake(req, meta, (seq) => pairs.get(seq) ?? null, "multipart");
 }

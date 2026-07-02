@@ -19,6 +19,11 @@ export default auth((req) => {
     pathname.startsWith("/api/auth");
 
   if (!isLoggedIn && !isPublic) {
+    // API calls get an explicit JSON 401 — redirecting a fetch() to /signin makes
+    // the client parse an HTML page and report a misleading generic error.
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ ok: false, errorCode: "AUTH_REQUIRED", message: "Chưa đăng nhập." }, { status: 401 });
+    }
     const url = new URL("/signin", req.nextUrl.origin);
     url.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(url);
