@@ -163,3 +163,26 @@ export async function getAppOnlyClient(): Promise<SharePointGraphClient> {
   const token = await getAppOnlyToken();
   return createSharePointGraphClient(token);
 }
+
+/**
+ * Read a Graph collection COMPLETELY by following @odata.nextLink (P0 audit fix:
+ * every `$top=999` single-page read silently truncated at 999 items — which broke
+ * find-then-upsert idempotency (duplicate rows for items ≥ #1000) and reporting).
+ * `request()` accepts absolute URLs, so nextLink passes straight through.
+ * maxPages is a runaway guard (~20k items at $top=999), logged when hit.
+ */
+export async function getAllListItems<T>(
+  client: SharePointGraphClient,
+  firstPath: string,
+  maxPages = 20,
+): Promise<T[]> {
+  const out: T[] = [];
+  let path: string | undefined = firstPath;
+  for (let page = 0; page < maxPages && path; page++) {
+    const res: { value?: T[]; "@odata.nextLink"?: string } = await client.get(path);
+    out.push(...(res.value ?? []));
+    path = res["@odata.nextLink"];
+  }
+  if (path) console.warn(`[5S_GRAPH] getAllListItems: page cap ${maxPages} hit — results truncated (${firstPath.slice(0, 120)})`);
+  return out;
+}

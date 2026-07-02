@@ -10,7 +10,7 @@
  * the same SubmissionId never duplicate rows and overwrite the same files.
  */
 import { DATA_LISTS } from "./sharepoint-config";
-import { getAppOnlyClient, type SharePointGraphClient } from "./graph-client";
+import { getAppOnlyClient, getAllListItems, type SharePointGraphClient } from "./graph-client";
 import { findListId, resolveSite } from "./site-context";
 import { ensureSubmissionFolder, uploadPhotoPair, downloadFromImgPath } from "./photo-upload-service";
 import { detectImageType, edgeHex, bytesRoundTripOk } from "./image-bytes";
@@ -75,10 +75,13 @@ async function findItemIdByField(
   fieldKey: string,
   value: string,
 ): Promise<string | null> {
-  const res = await client.get<GraphCollection<GraphListItem>>(
+  // PAGINATED lookup (P0): a single $top=999 page missed items ≥ #1000, so the
+  // upsert POSTed a DUPLICATE row instead of PATCHing the existing one.
+  const items = await getAllListItems<GraphListItem>(
+    client,
     `/sites/${siteId}/lists/${listId}/items?expand=fields&$top=999`,
   );
-  const hit = res.value.find((it) => (it.fields as Record<string, unknown>)[fieldKey] === value);
+  const hit = items.find((it) => (it.fields as Record<string, unknown>)[fieldKey] === value);
   return hit?.id ?? null;
 }
 

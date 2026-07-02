@@ -7,7 +7,7 @@
  * stored profile instead of resolving live. Idempotent upsert by Email.
  */
 import { DATA_LISTS } from "./sharepoint-config";
-import { getAppOnlyClient, type SharePointGraphClient } from "./graph-client";
+import { getAppOnlyClient, type SharePointGraphClient , getAllListItems } from "./graph-client";
 import { findListId, resolveSite } from "./site-context";
 import { resolveDepartmentFromGraphValue } from "./department-service";
 import type { GraphCollection, GraphListItem, GraphListItemFields } from "./sharepoint-types";
@@ -84,10 +84,11 @@ async function findItem(
   listId: string,
   email: string,
 ): Promise<GraphListItem | undefined> {
-  const res = await client.get<GraphCollection<GraphListItem>>(
+  const items = await getAllListItems<GraphListItem>(
+    client,
     `/sites/${siteId}/lists/${listId}/items?expand=fields&$top=999`,
-  );
-  const matches = res.value.filter((it) => lc(rowToProfile(it).email) === lc(email));
+  ); // paginated — a 999 cap made profile lookup miss users ≥ #1000 (dup rows)
+  const matches = items.filter((it) => lc(rowToProfile(it).email) === lc(email));
   // If duplicate rows exist (concurrent first-login create), prefer a RESOLVED one
   // so the UI never picks an unresolved straggler.
   return matches.find((it) => !!rowToProfile(it).departmentCode) ?? matches[0];
@@ -105,10 +106,11 @@ export async function getProfile(email: string): Promise<UserProfile | null> {
 export async function listProfiles(): Promise<UserProfile[]> {
   const { client, siteId, listId } = await ctx();
   if (!listId) return [];
-  const res = await client.get<GraphCollection<GraphListItem>>(
+  const items = await getAllListItems<GraphListItem>(
+    client,
     `/sites/${siteId}/lists/${listId}/items?expand=fields&$top=999`,
-  );
-  return res.value
+  ); // paginated
+  return items
     .map(rowToProfile)
     .filter((p) => p.email)
     .sort((a, b) => (a.displayName ?? a.email).localeCompare(b.displayName ?? b.email));

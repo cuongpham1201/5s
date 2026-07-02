@@ -8,7 +8,7 @@
  * mapping only in dev. Read-only — never changes schema/data.
  */
 import { CONFIG_LISTS } from "./sharepoint-config";
-import { getAppOnlyClient } from "./graph-client";
+import { getAppOnlyClient , getAllListItems } from "./graph-client";
 import { findListId, resolveSite } from "./site-context";
 import { mapDepartment } from "./list-helpers";
 import { DEPARTMENT_MAP, mapEntraDepartment } from "@/lib/department-mapping";
@@ -42,10 +42,11 @@ export async function listActiveDepartments(): Promise<DeptOption[]> {
   const site = await resolveSite(client);
   const listId = await findListId(client, site.id, CONFIG_LISTS.departments);
   if (!listId) return [];
-  const res = await client.get<GraphCollection<GraphListItem>>(
+  const items = await getAllListItems<GraphListItem>(
+    client,
     `/sites/${site.id}/lists/${listId}/items?expand=fields&$top=999`,
-  );
-  return res.value
+  ); // paginated
+  return items
     .map((it) => mapDepartment(it.fields))
     .filter((d) => d.DepartmentCode && d.IsActive)
     .map((d) => ({ code: d.DepartmentCode, name: d.DepartmentName, sortOrder: d.SortOrder }));
@@ -70,10 +71,11 @@ export async function listAllDepartments(): Promise<DeptRow[]> {
   const site = await resolveSite(client);
   const listId = await findListId(client, site.id, CONFIG_LISTS.departments);
   if (!listId) return [];
-  const res = await client.get<GraphCollection<GraphListItem>>(
+  const items = await getAllListItems<GraphListItem>(
+    client,
     `/sites/${site.id}/lists/${listId}/items?expand=fields&$top=999`,
-  );
-  return res.value
+  ); // paginated
+  return items
     .map((it) => mapDepartment(it.fields))
     .filter((d) => d.DepartmentCode)
     .map((d) => ({ code: d.DepartmentCode, name: d.DepartmentName, isActive: d.IsActive, sortOrder: d.SortOrder }));

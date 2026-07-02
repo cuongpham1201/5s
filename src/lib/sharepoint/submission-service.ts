@@ -4,7 +4,7 @@
  * The Upload Engine (later) will call these after putting files in 5S/img.
  */
 import { DATA_LISTS } from "./sharepoint-config";
-import { getAppOnlyClient, type SharePointGraphClient } from "./graph-client";
+import { getAppOnlyClient, getAllListItems, type SharePointGraphClient } from "./graph-client";
 import { findListId, resolveSite } from "./site-context";
 import { mapSubmission, mapSubmissionPhoto } from "./list-helpers";
 import type { GraphCollection, GraphListItem } from "./sharepoint-types";
@@ -25,20 +25,24 @@ async function requireList(client: SharePointGraphClient, siteId: string, name: 
 export async function getSubmissions(top = 200): Promise<SubmissionRecord[]> {
   const { client, siteId } = await ctx();
   const listId = await requireList(client, siteId, DATA_LISTS.submissions);
-  const res = await client.get<GraphCollection<GraphListItem>>(
+  // Paginated (follows @odata.nextLink) — `top` is the PAGE size, not a cap.
+  const items = await getAllListItems<GraphListItem>(
+    client,
     `/sites/${siteId}/lists/${listId}/items?expand=fields&$top=${top}`,
   );
-  return res.value.map((it) => mapSubmission(it.fields));
+  return items.map((it) => mapSubmission(it.fields));
 }
 
 /** Read Data_SubmissionPhotos line items (Original/Watermarked paths included). */
 export async function getSubmissionPhotos(top = 999): Promise<SubmissionPhotoRecord[]> {
   const { client, siteId } = await ctx();
   const listId = await requireList(client, siteId, DATA_LISTS.submissionPhotos);
-  const res = await client.get<GraphCollection<GraphListItem>>(
+  // Paginated (follows @odata.nextLink) — `top` is the PAGE size, not a cap.
+  const items = await getAllListItems<GraphListItem>(
+    client,
     `/sites/${siteId}/lists/${listId}/items?expand=fields&$top=${top}`,
   );
-  return res.value.map((it) => mapSubmissionPhoto(it.fields));
+  return items.map((it) => mapSubmissionPhoto(it.fields));
 }
 
 /** Create a submission header item. (No photo upload.) */

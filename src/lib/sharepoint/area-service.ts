@@ -5,7 +5,7 @@
  * never hard-deletes a row.
  */
 import { CONFIG_LISTS } from "./sharepoint-config";
-import { getAppOnlyClient, type SharePointGraphClient } from "./graph-client";
+import { getAppOnlyClient, type SharePointGraphClient , getAllListItems } from "./graph-client";
 import { findListId, resolveSite } from "./site-context";
 import { mapArea } from "./list-helpers";
 import { listActiveDepartments } from "./department-service";
@@ -46,10 +46,10 @@ async function readAreaItems(
   siteId: string,
   listId: string,
 ): Promise<GraphListItem[]> {
-  const res = await client.get<GraphCollection<GraphListItem>>(
+  return getAllListItems<GraphListItem>(
+    client,
     `/sites/${siteId}/lists/${listId}/items?expand=fields&$top=999`,
-  );
-  return res.value;
+  ); // paginated
 }
 
 async function readAreas(): Promise<AreaRecord[]> {
