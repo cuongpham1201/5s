@@ -11,7 +11,7 @@
  */
 import { getQueue, updateStatus, findBySubmission, recoverStuckUploads, markUnrecoverable, resetFailedForRetry } from "./offline-queue";
 import { getCompletedSubmissionById, setSubmissionUploadStatus, setUploadResult } from "@/lib/submissions/local-submission-store";
-import { listPhotosBySubmission, deletePhotosBySubmission } from "@/lib/storage/photo-store";
+import { listPhotosBySubmission, deletePhotosBySubmission, deletePhoto } from "@/lib/storage/photo-store";
 import { trace } from "@/lib/debug/trace";
 import { ulog } from "@/lib/debug/upload-log";
 import type { StoredPhoto } from "@/lib/storage/storage-types";
@@ -33,8 +33,16 @@ function isOffline(): boolean {
 
 const UPLOAD_TIMEOUT_MS = 120_000;
 
-interface PayloadItem { seq: number; original: Blob; watermarked: Blob; name: { o: string; w: string } }
+interface PayloadItem { seq: number; photoId: string; original: Blob; watermarked: Blob; name: { o: string; w: string } }
 interface Payload { meta: Record<string, unknown>; items: PayloadItem[]; totalBytes: number }
+
+/** Result of one upload attempt (server-confirmed). */
+interface UploadOutcome {
+  /** photoIds whose photos the server confirmed stored (safe to drop locally). */
+  uploadedPhotoIds: string[];
+  /** Photos that failed server-side (blobs must be KEPT for retry). */
+  failedCount: number;
+}
 
 /** Collect the ordered photo pairs + meta for a submission. null if no usable blobs. */
 async function collectPayload(sub: CompletedSubmission, attemptCount: number, queueId: string): Promise<Payload | null> {
@@ -52,11 +60,17 @@ async function collectPayload(sub: CompletedSubmission, attemptCount: number, qu
   // Client's claim of the bytes it is sending per seq — echoed back by the server
   // (diag) so a truncated part is provable from the response alone (no DEBUG_LOG).
   const clientParts: Array<{ seqNo: number; originalSize: number; watermarkedSize: number }> = [];
-  let seq = 0; let totalBytes = 0;
-  for (const sp of ordered) {
+  let totalBytes = 0;
+  for (let idx = 0; idx < ordered.length; idx++) {
+    const sp = ordered[idx];
+    // STABLE seq: derived from the photo's position in the session order, NOT from
+    // a counter over usable blobs. After a PARTIAL upload (some photos stored, some
+    // failed) the uploaded blobs are dropped locally; on retry the remaining photo
+    // must keep its ORIGINAL seq — a renumbered seq would overwrite the already-
+    // uploaded photo's PhotoId/file (P0 data-corruption).
+    const seq = idx + 1;
     const blob = byId.get(sp.photoId);
     if (!blob || (blob.originalBlob?.size ?? 0) === 0 || (blob.watermarkedBlob?.size ?? 0) === 0) continue;
-    seq += 1;
     // ROOT-CAUSE FIX (Safari): a Blob read back from IndexedDB is disk-backed and
     // lazily resolved. WebKit's multipart encoder can stream such a Blob as 0
     // bytes (most often the FIRST file part) even though .size is correct, which
@@ -67,7 +81,7 @@ async function collectPayload(sub: CompletedSubmission, attemptCount: number, qu
     const original = new Blob([oBuf], { type: blob.originalBlob.type || "image/jpeg" });
     const watermarked = new Blob([wBuf], { type: blob.watermarkedBlob.type || "image/jpeg" });
     qlog("buildForm:photo", { submissionId: sub.submissionId, seq, photoId: sp.photoId, originalBytes: original.size, originalType: original.type, watermarkedBytes: watermarked.size, watermarkedType: watermarked.type, materialized: true });
-    items.push({ seq, original, watermarked, name: { o: `original-${String(seq).padStart(2, "0")}.jpg`, w: `watermarked-${String(seq).padStart(2, "0")}.jpg` } });
+    items.push({ seq, photoId: sp.photoId, original, watermarked, name: { o: `original-${String(seq).padStart(2, "0")}.jpg`, w: `watermarked-${String(seq).padStart(2, "0")}.jpg` } });
     totalBytes += original.size + watermarked.size;
     metaPhotos.push({ seqNo: seq, capturedAt: sp.capturedAt ?? blob.createdAt, latitude: sp.latitude ?? null, longitude: sp.longitude ?? null, address: sp.address ?? null });
     clientParts.push({ seqNo: seq, originalSize: original.size, watermarkedSize: watermarked.size });
@@ -168,6 +182,7 @@ interface UploadResponse {
   ok?: boolean;
   uploadedPhotoCount?: number;
   failedPhotoCount?: number;
+  photos?: Array<{ seqNo: number }>;
   errors?: Array<{ seqNo: number; errorCode: string; message: string }>;
   errorCode?: string;
   message?: string;
@@ -179,7 +194,7 @@ interface UploadResponse {
  * photo row (uploadedPhotoCount >= 1). The structured result is persisted for the
  * success page. A thrown fetch (offline / "Load failed") → retryable NETWORK error.
  */
-async function uploadOne(submissionId: string, attemptCount: number, queueId: string): Promise<void> {
+async function uploadOne(submissionId: string, attemptCount: number, queueId: string): Promise<UploadOutcome> {
   const t0 = Date.now();
   ulog("client.submit.start", { submissionId, attemptCount });
   const sub = getCompletedSubmissionById(submissionId);
@@ -201,13 +216,22 @@ async function uploadOne(submissionId: string, attemptCount: number, queueId: st
   }
 
   // Shared verdict: success ONLY when the server confirms ≥1 stored photo row.
-  const settle = async (res: Response, mode: string): Promise<void> => {
+  // Returns which photoIds were confirmed stored so the caller can drop ONLY
+  // those blobs and keep failed photos' blobs for retry.
+  const settle = async (res: Response, mode: string): Promise<UploadOutcome> => {
     const body = (await res.json().catch(() => ({}))) as UploadResponse;
     const uploaded = body.uploadedPhotoCount ?? 0;
     const failed = body.failedPhotoCount ?? (body.errors?.length ?? 0);
     setUploadResult({ submissionId, ok: !!body.ok && uploaded >= 1, uploadedPhotoCount: uploaded, failedPhotoCount: failed, errors: body.errors ?? [], at: new Date().toISOString() });
     ulog("client.upload.response", { submissionId, mode, status: res.status, ok: body.ok, uploaded, failed, durationMs: Date.now() - t0 });
-    if (res.ok && body.ok && uploaded >= 1) return;
+    if (res.ok && body.ok && uploaded >= 1) {
+      const okSeqs = new Set((body.photos ?? []).map((p) => p.seqNo));
+      // If the server didn't itemize photos (older shape), treat all sent as stored.
+      const uploadedPhotoIds = okSeqs.size > 0
+        ? payload.items.filter((it) => okSeqs.has(it.seq)).map((it) => it.photoId)
+        : payload.items.map((it) => it.photoId);
+      return { uploadedPhotoIds, failedCount: failed };
+    }
     const first = body.errors?.[0];
     const code = body.errorCode ?? first?.errorCode ?? `HTTP_${res.status}`;
     const msg = body.message ?? first?.message ?? `Tải lên thất bại (HTTP ${res.status}).`;
@@ -269,12 +293,23 @@ export async function processQueue(opts: { manual?: boolean } = {}): Promise<num
       updateStatus(item.queueId, "uploading", true);
       const attempt = (findBySubmission(item.submissionId)?.attemptCount ?? item.attemptCount);
       try {
-        await uploadOne(item.submissionId, attempt, item.queueId);
-        updateStatus(item.queueId, "uploaded");
-        setSubmissionUploadStatus(item.submissionId, "uploaded");
-        await deletePhotosBySubmission(item.submissionId); // photos now in SharePoint
-        processed += 1;
-        qlog("queue.item:uploaded", { submissionId: item.submissionId, attempt });
+        const outcome = await uploadOne(item.submissionId, attempt, item.queueId);
+        if (outcome.failedCount === 0) {
+          // Full success: every declared photo stored → drop all local blobs.
+          updateStatus(item.queueId, "uploaded");
+          setSubmissionUploadStatus(item.submissionId, "uploaded");
+          await deletePhotosBySubmission(item.submissionId); // photos now in SharePoint
+          processed += 1;
+          qlog("queue.item:uploaded", { submissionId: item.submissionId, attempt });
+        } else {
+          // PARTIAL success: drop ONLY the confirmed photos' blobs; keep failed
+          // photos' blobs and leave the item retryable so the remaining photos
+          // re-send with their ORIGINAL (stable) seq — no overwrite, no data loss.
+          for (const pid of outcome.uploadedPhotoIds) await deletePhoto(pid);
+          updateStatus(item.queueId, "failed", false, `Còn ${outcome.failedCount} ảnh chưa gửi được — sẽ tự thử lại.`);
+          setSubmissionUploadStatus(item.submissionId, "failed");
+          qlog("queue.item:partial", { submissionId: item.submissionId, attempt, uploaded: outcome.uploadedPhotoIds.length, failed: outcome.failedCount });
+        }
       } catch (e) {
         const msg = (e as Error)?.message ?? "unknown";
         setSubmissionUploadStatus(item.submissionId, "failed");
