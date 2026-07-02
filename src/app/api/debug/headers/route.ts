@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { denyIfNotAdmin } from "@/lib/sharepoint/admin-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +10,10 @@ export const dynamic = "force-dynamic";
  * callback is confirmed stable.
  */
 export async function GET(req: NextRequest) {
+  // Admin-only (audit P1): this was temporarily public for the Cloudflare
+  // host/proto diagnosis; env values + header echo must not be world-readable.
+  const denied = await denyIfNotAdmin();
+  if (denied) return denied;
   const h = req.headers;
   // Cookie bloat diagnostic (names + sizes ONLY, never values) — for the HTTP 431
   // before/after comparison.
