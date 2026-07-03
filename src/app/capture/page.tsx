@@ -230,15 +230,10 @@ export default function CapturePage() {
                     <div className="text-[13px] text-ink-muted mt-1 mb-3">
                       Chọn một hoặc nhiều hạng mục, hoặc để trống để chụp ảnh tổng quan.
                     </div>
+                    {/* Only REAL check items from Config_CheckItems are listed —
+                        no synthetic "Ảnh tổng quan" chip. Leaving every item
+                        unselected (items are toggles) = overview photo. */}
                     <div className="flex flex-wrap gap-2.5">
-                      <button
-                        onClick={() => setSelectedChecks(new Set())}
-                        className={`px-3.5 py-2.5 rounded-pill border-[1.5px] text-[14px] font-semibold ${
-                          selectedChecks.size === 0 ? "border-primary-600 bg-primary-100 text-primary-700" : "border-line bg-white"
-                        }`}
-                      >
-                        Ảnh tổng quan
-                      </button>
                       {checkItems.map((c) => {
                         const on = selectedChecks.has(c.code);
                         return (
