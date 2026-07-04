@@ -99,7 +99,7 @@ export default function GalleryPage() {
           </button>
           <button onClick={() => setTab("3s")}
             className={`px-4 py-2 text-[13.5px] font-semibold ${tab === "3s" ? "bg-primary-600 text-white" : "bg-white text-ink"}`}>
-            ✅ Thực hành 3S <span className={tab === "3s" ? "opacity-80" : "text-ink-muted"}>({threeSCount})</span>
+            ✅ Audit 5S <span className={tab === "3s" ? "opacity-80" : "text-ink-muted"}>({threeSCount})</span>
           </button>
         </div>
         {tab === "3s" && (
@@ -130,7 +130,7 @@ export default function GalleryPage() {
           </div>
         ) : shown.length === 0 ? (
           <div className="card-flat p-10 text-center text-ink-muted text-[13px]">
-            {tab === "3s" ? "Chưa có ảnh Thực hành 3S phù hợp bộ lọc." : "Không có ảnh phù hợp bộ lọc."}
+            {tab === "3s" ? "Chưa có ảnh Audit 5S phù hợp bộ lọc." : "Không có ảnh phù hợp bộ lọc."}
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2.5">

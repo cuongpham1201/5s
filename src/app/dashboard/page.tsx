@@ -20,7 +20,7 @@ function hhmm(iso?: string): string {
 }
 
 const QUICK: { href: string; icon: IconName; label: string }[] = [
-  { href: "/3s", icon: "check", label: "Thực hành 3S" },
+  { href: "/3s", icon: "check", label: "Audit 5S" },
   { href: "/gallery", icon: "image", label: "Thư viện" },
   { href: "/history", icon: "clock", label: "Lịch sử" },
   { href: "/overview", icon: "chart", label: "Toàn cảnh" },
@@ -104,7 +104,7 @@ export default function DashboardPage() {
           <div className="mt-2 h-2 rounded-pill bg-surface overflow-hidden"><i className="block h-full rounded-pill bg-success" style={{ width: `${pct}%` }} /></div>
           {(today?.threeS?.photosToday ?? 0) > 0 && (
             <div className="text-[12px] text-ink-muted mt-2">
-              Thực hành 3S hôm nay: <b className="text-ink">{today?.threeS?.photosToday}</b> ảnh
+              Audit 5S hôm nay: <b className="text-ink">{today?.threeS?.photosToday}</b> ảnh
               {(today?.threeS?.violationsToday ?? 0) > 0 && <> · <b className="text-danger">{today?.threeS?.violationsToday}</b> vi phạm</>}
             </div>
           )}
@@ -113,7 +113,7 @@ export default function DashboardPage() {
         {/* CTA */}
         <Link href="/capture" className="flex items-center gap-3 bg-white rounded-[16px] border border-line p-3 shadow-e2 active:bg-surface-2 lg:col-span-1">
           <span className="w-12 h-12 rounded-[14px] grid place-items-center bg-success-bg text-success flex-none"><Icon name="camera" size={22} /></span>
-          <span className="flex-1 min-w-0"><span className="block text-[15px] font-bold leading-tight">Chụp ảnh 5S</span><span className="block text-[12.5px] text-ink-muted">Phòng ban của bạn · &lt;30 giây</span></span>
+          <span className="flex-1 min-w-0"><span className="block text-[15px] font-bold leading-tight">Thực hành 5S</span><span className="block text-[12.5px] text-ink-muted">Phòng ban của bạn · &lt;30 giây</span></span>
           <Icon name="chevronRight" size={20} className="text-ink-disabled flex-none" />
         </Link>
 

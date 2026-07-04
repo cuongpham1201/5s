@@ -79,7 +79,7 @@ export default function PhotoStatsPage() {
           ))}
         </div>
         <div className="flex rounded-md border border-line overflow-hidden">
-          {([["all", "Tất cả"], ["daily", "Hàng ngày"], ["3s", "Thực hành 3S"]] as [SType, string][]).map(([k, lbl]) => (
+          {([["all", "Tất cả"], ["daily", "Hàng ngày"], ["3s", "Audit 5S"]] as [SType, string][]).map(([k, lbl]) => (
             <button key={k} onClick={() => pickType(k)}
               className={`px-3 py-2 text-[13px] font-semibold ${stype === k ? "bg-ink text-white" : "bg-white text-ink"}`}>
               {lbl}

@@ -68,7 +68,7 @@ export default function ThreeSPage() {
     <AppShell showNav={false}>
       <div className="flex items-center gap-3 px-5 pt-3 pb-3">
         <Link href="/dashboard" className="w-10 h-10 rounded-pill grid place-items-center text-xl bg-surface">←</Link>
-        <div className="text-[18px] font-semibold">Thực hành 3S</div>
+        <div className="text-[18px] font-semibold">Audit 5S</div>
         <Link href="/3s/log" className="ml-auto text-[13px] font-semibold text-primary-600">📒 Sổ 3S</Link>
       </div>
 
@@ -126,7 +126,7 @@ export default function ThreeSPage() {
           disabled={!selected || areas.length === 0}
           className={`btn btn-primary btn-lg btn-block ${!selected || areas.length === 0 ? "opacity-50 pointer-events-none" : ""}`}
         >
-          📷 Bắt đầu chụp 3S
+          📷 Bắt đầu Audit 5S
         </button>
       </div>
     </AppShell>

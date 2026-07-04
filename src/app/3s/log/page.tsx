@@ -74,7 +74,7 @@ export default function ThreeSLogPage() {
         <Link href="/3s" className="w-9 h-9 rounded-pill grid place-items-center text-lg bg-surface">←</Link>
         <div>
           <div className="text-[17px] font-bold leading-tight">Sổ theo dõi 3S</div>
-          <div className="text-[12px] text-ink-muted">BM-HD.01-05 · nguồn: ảnh Thực hành 3S đã đồng bộ</div>
+          <div className="text-[12px] text-ink-muted">BM-HD.01-05 · nguồn: ảnh Audit 5S đã đồng bộ</div>
         </div>
         <a href={exportUrl()} className="ml-auto btn btn-primary !min-h-9 text-[13px]">⬇ Xuất Excel</a>
       </div>
