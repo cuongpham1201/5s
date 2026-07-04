@@ -76,6 +76,33 @@ if (entraConfigured) {
   );
 }
 
+// Local (non-M365) accounts — for employees without a 365 license. Validated
+// against the Data_LocalUsers SharePoint list (PBKDF2 hashes). The service is
+// imported DYNAMICALLY inside authorize() so the middleware/edge bundle never
+// evaluates SharePoint code at module scope.
+providers.push(
+  Credentials({
+    id: "local",
+    name: "Tài khoản nội bộ",
+    credentials: {
+      username: { label: "Tên đăng nhập", type: "text" },
+      password: { label: "Mật khẩu", type: "password" },
+    },
+    authorize: async (creds) => {
+      const { verifyLocalLogin } = await import("@/lib/auth/local-users");
+      const user = await verifyLocalLogin(String(creds?.username ?? ""), String(creds?.password ?? ""));
+      if (!user) return null;
+      return {
+        id: user.email,
+        email: user.email,
+        name: user.displayName,
+        role: (user.role as AppRole) || "employee",
+        department: user.departmentCode, // resolved CODE — dept resolver matches code-exact first
+      };
+    },
+  }),
+);
+
 if (allowDevLogin || !entraConfigured) {
   providers.push(
     Credentials({

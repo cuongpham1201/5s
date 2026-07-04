@@ -16,6 +16,7 @@ import {
   type GraphProfileInput,
 } from "@/lib/sharepoint/user-profile-service";
 import { getDirectoryUser } from "@/lib/sharepoint/user-directory";
+import { isLocalEmail } from "@/lib/auth/local-users";
 import { trace } from "@/lib/debug/trace";
 import type { NextRequest } from "next/server";
 
@@ -64,7 +65,9 @@ async function buildGraphInput(req: NextRequest): Promise<{ input: GraphProfileI
     // No delegated token (the session JWT intentionally carries none since the
     // cookie-bloat fix) → resolve via the APP-ONLY directory instead. This is
     // what lets a brand-new user get a department (and dept changes propagate).
-    const dir = await getDirectoryUser(lc(session.user.email));
+    // Local (non-M365) pseudo emails are skipped — they don't exist in Entra;
+    // their department CODE comes straight from the session (Data_LocalUsers).
+    const dir = isLocalEmail(session.user.email) ? null : await getDirectoryUser(lc(session.user.email));
     if (dir) {
       input = {
         email: lc(dir.mail ?? session.user.email),

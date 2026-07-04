@@ -12,6 +12,29 @@ export default function SignInPage() {
   const [callbackUrl, setCallbackUrl] = useState("/dashboard");
   const [email, setEmail] = useState("nguyen.van.a@biahalong.com");
   const [role, setRole] = useState("employee");
+  // Local (non-M365) account form
+  const [showLocal, setShowLocal] = useState(false);
+  const [lUser, setLUser] = useState("");
+  const [lPass, setLPass] = useState("");
+  const [lBusy, setLBusy] = useState(false);
+  const [lError, setLError] = useState<string | null>(null);
+
+  const localSignIn = async () => {
+    setLBusy(true);
+    setLError(null);
+    try {
+      // redirect:false → inspect the result and show an inline error instead of
+      // bouncing through the generic auth error page.
+      const res = await signIn("local", { username: lUser, password: lPass, redirect: false });
+      if (res?.error) {
+        setLError("Sai tên đăng nhập hoặc mật khẩu (hoặc tài khoản đã bị khóa).");
+        return;
+      }
+      window.location.href = callbackUrl || "/dashboard";
+    } finally {
+      setLBusy(false);
+    }
+  };
 
   useEffect(() => {
     getProviders().then(setProviders);
@@ -22,6 +45,7 @@ export default function SignInPage() {
   }, []);
 
   const hasEntra = !!providers?.["microsoft-entra-id"];
+  const hasLocal = !!providers?.["local"];
   const showDev = !!providers?.["dev"] && DEV_ALLOWED;
 
   return (
@@ -73,6 +97,51 @@ export default function SignInPage() {
                 </button>
               )}
 
+              {hasLocal && (
+                <div className="mt-1">
+                  {!showLocal ? (
+                    <button className="btn btn-ghost btn-block text-[13.5px]" onClick={() => setShowLocal(true)}>
+                      🔑 Đăng nhập bằng tài khoản nội bộ (không có Microsoft 365)
+                    </button>
+                  ) : (
+                    <div className="rounded-xl border border-line p-4 text-left">
+                      <div className="flex items-center justify-between mb-2.5">
+                        <span className="text-[13px] font-semibold text-ink-muted">Tài khoản nội bộ</span>
+                        <button className="text-[12px] text-ink-muted underline" onClick={() => setShowLocal(false)}>Ẩn</button>
+                      </div>
+                      <label className="text-[13px] font-semibold">Tên đăng nhập</label>
+                      <input
+                        className="w-full mt-1 mb-3 rounded-md border border-line-strong px-3 py-2.5 text-[15px]"
+                        value={lUser}
+                        onChange={(e) => setLUser(e.target.value)}
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        placeholder="vd: nguyenvana"
+                      />
+                      <label className="text-[13px] font-semibold">Mật khẩu</label>
+                      <input
+                        className="w-full mt-1 mb-3 rounded-md border border-line-strong px-3 py-2.5 text-[15px]"
+                        type="password"
+                        value={lPass}
+                        onChange={(e) => setLPass(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter" && lUser && lPass && !lBusy) void localSignIn(); }}
+                      />
+                      {lError && <div className="mb-3 rounded-md bg-danger-bg text-danger px-3 py-2 text-[13px]">{lError}</div>}
+                      <button
+                        className="btn btn-secondary btn-block"
+                        onClick={() => void localSignIn()}
+                        disabled={lBusy || !lUser || !lPass}
+                      >
+                        {lBusy ? "Đang đăng nhập…" : "Đăng nhập"}
+                      </button>
+                      <p className="text-[12px] text-ink-disabled mt-2.5">
+                        Tài khoản do quản trị viên cấp cho nhân viên chưa có Microsoft 365. Quên mật khẩu: liên hệ Ban SHE.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {showDev && (
                 <div className="mt-1 rounded-xl border border-line p-4 text-left">
                   <div className="flex items-center justify-between mb-2.5">
@@ -92,7 +161,7 @@ export default function SignInPage() {
               )}
 
               {!providers && <div className="text-ink-muted text-sm text-center py-2">Đang tải…</div>}
-              {providers && !hasEntra && !showDev && (
+              {providers && !hasEntra && !hasLocal && !showDev && (
                 <div className="text-ink-muted text-sm text-center py-2">Chưa cấu hình đăng nhập. Liên hệ quản trị viên.</div>
               )}
             </div>
