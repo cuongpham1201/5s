@@ -20,7 +20,8 @@ export default function CapturePage() {
   const [areasLoading, setAreasLoading] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
 
-  // add-area form
+  // add-area form (ADMIN ONLY — regular users must ask an admin)
+  const [isAdmin, setIsAdmin] = useState(false);
   const [adding, setAdding] = useState(false);
   const [newArea, setNewArea] = useState("");
   const [savingArea, setSavingArea] = useState(false);
@@ -33,6 +34,7 @@ export default function CapturePage() {
   useEffect(() => {
     let active = true;
     fetchMe().then((d) => { if (active) { setMe(d); setLoading(false); } });
+    fetch("/api/admin/whoami").then((r) => (r.ok ? r.json() : null)).then((w) => active && setIsAdmin(!!w?.isAdmin)).catch(() => {});
     return () => { active = false; };
   }, []);
 
@@ -156,7 +158,7 @@ export default function CapturePage() {
               <label className="text-[13px] font-semibold text-ink-muted">
                 Khu vực <span className="text-danger">*</span>
               </label>
-              {!adding && (
+              {isAdmin && !adding && (
                 <button onClick={() => { setAdding(true); setAreaError(null); }} className="text-[13px] font-semibold text-primary-600">
                   + Thêm khu vực
                 </button>
@@ -164,7 +166,7 @@ export default function CapturePage() {
             </div>
             <div className="text-[13px] text-ink-muted mb-3">Khu vực là nhãn cho watermark &amp; báo cáo</div>
 
-            {adding && (
+            {isAdmin && adding && (
               <div className="mb-3 rounded-md border border-line bg-white p-3">
                 <div className="flex gap-2.5">
                   <input
@@ -189,8 +191,14 @@ export default function CapturePage() {
             ) : areas.length === 0 ? (
               !adding && (
                 <div className="rounded-md bg-info-bg text-info p-3.5">
-                  <div className="text-[13px] font-medium">Phòng ban chưa có khu vực. Bạn có thể thêm khu vực đầu tiên.</div>
-                  <button onClick={() => setAdding(true)} className="btn btn-primary !min-h-9 mt-2.5">+ Thêm khu vực đầu tiên</button>
+                  <div className="text-[13px] font-medium">
+                    {isAdmin
+                      ? "Phòng ban chưa có khu vực. Bạn có thể thêm khu vực đầu tiên."
+                      : "Phòng ban chưa có khu vực. Vui lòng liên hệ quản trị viên để thêm khu vực."}
+                  </div>
+                  {isAdmin && (
+                    <button onClick={() => setAdding(true)} className="btn btn-primary !min-h-9 mt-2.5">+ Thêm khu vực đầu tiên</button>
+                  )}
                 </div>
               )
             ) : (
