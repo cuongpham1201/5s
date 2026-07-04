@@ -23,14 +23,14 @@ export async function GET(req: NextRequest) {
       .map((p) => {
         const s = byId.get(p.SubmissionId);
         const path = p.WatermarkedPhotoUrl || p.OriginalPhotoUrl;
-        // Department from the path (Img/<Dept>/...), header only as fallback —
-        // keeps gallery/department in sync with Overview counts.
+        // HEADER FIRST: path segments are sanitized ("CĐ" → "C_"), so the header's
+        // server-trusted DepartmentCode wins; path only for headerless rows.
         const fromPath = path.split("/")[0] === "Img" ? path.split("/")[1] : "";
         return {
           submissionId: p.SubmissionId,
           seqNo: p.SeqNo,
           watermarkedPath: path,
-          departmentCode: fromPath || s?.DepartmentCode || "",
+          departmentCode: s?.DepartmentCode || fromPath || "",
           areaName: s?.AreaName ?? "",
           submittedAt: s?.SubmittedAt ?? p.CaptureTime ?? "",
         };

@@ -113,7 +113,11 @@ async function buildPhotoFacts(subs: SubmissionRecord[]): Promise<{ thumbs: Map<
     if (!facts.has(p.SubmissionId)) {
       const parsed = parsePhotoPath(path);
       const header = headerById.get(p.SubmissionId);
-      const departmentCode = parsed?.dept || header?.DepartmentCode || "";
+      // HEADER FIRST: the header's DepartmentCode is server-trusted (from the
+      // uploader's profile, written in the same upload). The PATH segment is
+      // SANITIZED ([^\w-] → "_"), so unicode codes like "CĐ" become "C_" on disk
+      // and would never match an active department (bug: CĐ uploads not counted).
+      const departmentCode = header?.DepartmentCode || parsed?.dept || "";
       const dateKey = parsed?.dateKey || (p.CaptureTime ? vnDateKey(new Date(p.CaptureTime)) : header ? dateKeyOf(header) : "");
       facts.set(p.SubmissionId, { submissionId: p.SubmissionId, departmentCode, dateKey, firstPath: path });
     }
@@ -172,13 +176,16 @@ export async function getTodaySubmissionSummary(): Promise<TodaySummary> {
     listActiveDepartments().catch(() => []),
     safeSubmissions(),
   ]);
-  // SOURCE OF TRUTH = Data_SubmissionPhotos. A department is "đã chụp" today iff
-  // it has ≥1 non-deleted photo fact whose path-derived date is today. The
-  // Data_Submissions header is NOT consulted for this decision.
+  // SOURCE OF TRUTH = Data_SubmissionPhotos (≥1 non-deleted photo fact today).
   const { thumbs, facts } = await buildPhotoFacts(subs);
+  // Resolve fact dept codes against ACTIVE codes: path segments are sanitized
+  // ("CĐ" → "C_"), so headerless legacy facts need a normalized match.
+  const norm = (s: string) => s.replace(/[^\w-]/g, "_");
+  const byNorm = new Map(active.map((d) => [norm(d.code), d.code]));
   const submittedToday = new Set<string>();
   for (const f of facts.values()) {
-    if (f.dateKey === today && f.departmentCode) submittedToday.add(f.departmentCode);
+    if (f.dateKey !== today || !f.departmentCode) continue;
+    submittedToday.add(byNorm.get(norm(f.departmentCode)) ?? f.departmentCode);
   }
   const submittedActive = active.filter((d) => submittedToday.has(d.code));
   const missing = active.filter((d) => !submittedToday.has(d.code)).map((d) => ({ code: d.code, name: d.name }));
@@ -232,12 +239,16 @@ export async function getDepartmentDailyStatus(month: string): Promise<DailyStat
     listActiveDepartments().catch(() => []),
     safeSubmissions(),
   ]);
-  // Same source of truth: build the dept×date matrix from photo facts, not headers.
+  // Same source of truth: build the dept×date matrix from photo facts.
   const { facts } = await buildPhotoFacts(subs);
+  // Same normalized-code resolution as the today summary (sanitized path segments).
+  const norm = (s: string) => s.replace(/[^\w-]/g, "_");
+  const byNorm = new Map(active.map((d) => [norm(d.code), d.code]));
   const byDeptDate = new Set<string>();
   for (const f of facts.values()) {
     if (!f.departmentCode || !f.dateKey) continue;
-    if (f.dateKey.startsWith(month)) byDeptDate.add(`${f.departmentCode}|${f.dateKey}`);
+    const code = byNorm.get(norm(f.departmentCode)) ?? f.departmentCode;
+    if (f.dateKey.startsWith(month)) byDeptDate.add(`${code}|${f.dateKey}`);
   }
   return active.map((d) => {
     const days: Record<string, boolean> = {};
