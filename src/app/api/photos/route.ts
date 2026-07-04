@@ -13,7 +13,9 @@ export async function GET(req: NextRequest) {
   if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const sp = req.nextUrl.searchParams;
   const departmentCode = sp.get("departmentCode");
-  const limit = Math.min(Number(sp.get("limit") ?? 60) || 60, 200);
+  // Tách 2 nghiệp vụ: "daily" (báo cáo hàng ngày) vs "3s" (Thực hành 3S).
+  const type = sp.get("type"); // "daily" | "3s" | null = tất cả
+  const limit = Math.min(Number(sp.get("limit") ?? 60) || 60, 300);
   try {
     const [subs, photos] = await Promise.all([getSubmissions(999), getSubmissionPhotos(999)]);
     const byId = new Map(subs.map((s) => [s.SubmissionId, s]));
@@ -33,9 +35,15 @@ export async function GET(req: NextRequest) {
           departmentCode: s?.DepartmentCode || fromPath || "",
           areaName: s?.AreaName ?? "",
           submittedAt: s?.SubmittedAt ?? p.CaptureTime ?? "",
+          reporterName: s?.ReporterName ?? "",
+          type: s?.SubmissionType === "3s" ? "3s" : "daily",
+          sTag: p.STag,
+          photoKind: p.PhotoKind,
+          violationNote: p.ViolationNote,
         };
       })
       .filter((x) => !departmentCode || x.departmentCode === departmentCode)
+      .filter((x) => !type || x.type === type)
       .sort((a, b) => (b.submittedAt || "").localeCompare(a.submittedAt || "") || a.seqNo - b.seqNo)
       .slice(0, limit);
     return NextResponse.json({ count: items.length, photos: items });

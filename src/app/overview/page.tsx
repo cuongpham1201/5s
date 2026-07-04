@@ -31,7 +31,7 @@ export default function OverviewPage() {
     Promise.all([
       fetch("/api/config/departments").then((r) => (r.ok ? r.json() : null)),
       fetch("/api/reports/today").then((r) => (r.ok ? r.json() : null)),
-      fetch("/api/photos?limit=200").then((r) => (r.ok ? r.json() : null)),
+      fetch("/api/photos?limit=200&type=daily").then((r) => (r.ok ? r.json() : null)),
     ]).then(([d, t, p]) => {
       if (!active) return;
       setDepts(d?.departments ?? []);

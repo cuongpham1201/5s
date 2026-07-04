@@ -36,7 +36,7 @@ export default function DepartmentPage() {
       fetch("/api/config/departments").then((r) => (r.ok ? r.json() : null)),
       fetch(`/api/config/areas?departmentCode=${encodeURIComponent(code)}`).then((r) => (r.ok ? r.json() : null)),
       fetch("/api/reports/today").then((r) => (r.ok ? r.json() : null)),
-      fetch(`/api/photos?limit=200&departmentCode=${encodeURIComponent(code)}`).then((r) => (r.ok ? r.json() : null)),
+      fetch(`/api/photos?limit=200&type=daily&departmentCode=${encodeURIComponent(code)}`).then((r) => (r.ok ? r.json() : null)),
     ]).then(([d, a, t, p]) => {
       if (!active) return;
       setName((d?.departments ?? []).find((x: Dept) => x.code === code)?.name ?? "");
