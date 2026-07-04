@@ -4,6 +4,7 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import { AdminShell } from "@/components/layout/AdminShell";
 
 type Group = "day" | "week" | "month";
+type SType = "all" | "daily" | "3s";
 interface AreaStat { area: string; total: number; byBucket: Record<string, number> }
 interface DeptStat { code: string; name: string; total: number; byBucket: Record<string, number>; areas: AreaStat[] }
 interface Stats { group: Group; from: string; to: string; buckets: string[]; byBucketTotal: Record<string, number>; grandTotal: number; rows: DeptStat[] }
@@ -23,33 +24,35 @@ function shortBucket(b: string, g: Group): string {
 
 export default function PhotoStatsPage() {
   const [group, setGroup] = useState<Group>("day");
+  const [stype, setStype] = useState<SType>("all");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState<Set<string>>(new Set());
 
-  const qs = useCallback((g: Group, f: string, t: string) => {
-    const p = new URLSearchParams({ group: g });
+  const qs = useCallback((g: Group, f: string, t: string, ty: SType) => {
+    const p = new URLSearchParams({ group: g, type: ty });
     if (f) p.set("from", f);
     if (t) p.set("to", t);
     return p.toString();
   }, []);
 
-  const load = useCallback(async (g: Group, f: string, t: string) => {
+  const load = useCallback(async (g: Group, f: string, t: string, ty: SType) => {
     setLoading(true);
     try {
-      const r = await fetch(`/api/admin/photo-stats?${qs(g, f, t)}`);
+      const r = await fetch(`/api/admin/photo-stats?${qs(g, f, t, ty)}`);
       const j = r.ok ? ((await r.json()) as Stats) : null;
       setStats(j);
       if (j) { setFrom(j.from); setTo(j.to); }
     } finally { setLoading(false); }
   }, [qs]);
 
-  useEffect(() => { void load("day", "", ""); }, [load]);
+  useEffect(() => { void load("day", "", "", "all"); }, [load]);
 
-  const pick = (g: Group) => { setGroup(g); void load(g, "", ""); };
-  const apply = () => void load(group, from, to);
+  const pick = (g: Group) => { setGroup(g); void load(g, "", "", stype); };
+  const pickType = (ty: SType) => { setStype(ty); void load(group, from, to, ty); };
+  const apply = () => void load(group, from, to, stype);
   const toggle = (code: string) => setOpen((s) => { const n = new Set(s); if (n.has(code)) n.delete(code); else n.add(code); return n; });
 
   const maxBucket = stats ? Math.max(1, ...stats.buckets.map((b) => stats.byBucketTotal[b] ?? 0)) : 1;
@@ -60,7 +63,7 @@ export default function PhotoStatsPage() {
       title="Thống kê ảnh 5S"
       subtitle="Số ảnh thực tế (Data_SubmissionPhotos) theo phòng ban / khu vực"
       actions={
-        <a href={`/api/admin/photo-stats/export?${qs(group, from, to)}`} className="btn btn-primary !min-h-9">
+        <a href={`/api/admin/photo-stats/export?${qs(group, from, to, stype)}`} className="btn btn-primary !min-h-9">
           ⬇ Xuất Excel
         </a>
       }
@@ -72,6 +75,14 @@ export default function PhotoStatsPage() {
             <button key={g.key} onClick={() => pick(g.key)}
               className={`px-3.5 py-2 text-[13px] font-semibold ${group === g.key ? "bg-primary-600 text-white" : "bg-white text-ink"}`}>
               {g.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex rounded-md border border-line overflow-hidden">
+          {([["all", "Tất cả"], ["daily", "Hàng ngày"], ["3s", "Thực hành 3S"]] as [SType, string][]).map(([k, lbl]) => (
+            <button key={k} onClick={() => pickType(k)}
+              className={`px-3 py-2 text-[13px] font-semibold ${stype === k ? "bg-ink text-white" : "bg-white text-ink"}`}>
+              {lbl}
             </button>
           ))}
         </div>

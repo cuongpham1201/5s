@@ -1,0 +1,134 @@
+"use client";
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import { AppShell } from "@/components/layout/AppShell";
+import { useSessionCapture } from "@/features/capture/session-context";
+import { fetchMe } from "@/lib/client/me-cache";
+import type { MeResponse } from "@/lib/graph/graph-types";
+
+interface AreaOption { code: string; name: string }
+
+/**
+ * Thực hành 3S (M1 · HD-01) — LỐI VÀO RIÊNG, tách khỏi luồng "chụp ảnh hàng
+ * ngày" (/capture giữ nguyên). Chọn khu vực → chụp; thẻ S1/S2/S3 + loại ảnh
+ * (tốt / vi phạm / trước–sau) chọn cho TỪNG ẢNH ở bước xem lại. Toàn bộ hạ tầng
+ * (camera, watermark, queue, upload) dùng chung.
+ */
+export default function ThreeSPage() {
+  const router = useRouter();
+  const { startSession } = useSessionCapture();
+  const [me, setMe] = useState<MeResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [areas, setAreas] = useState<AreaOption[]>([]);
+  const [areasLoading, setAreasLoading] = useState(false);
+  const [selected, setSelected] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetchMe().then((d) => { if (active) { setMe(d); setLoading(false); } });
+    return () => { active = false; };
+  }, []);
+
+  const department = me?.departmentResolved ? me.departmentCode ?? null : null;
+
+  const loadAreas = useCallback(async (dept: string) => {
+    setAreasLoading(true);
+    try {
+      const r = await fetch(`/api/config/areas?departmentCode=${encodeURIComponent(dept)}`, { cache: "no-store" });
+      const d = r.ok ? await r.json() : null;
+      const list: AreaOption[] = d?.areas ?? [];
+      setAreas(list);
+      setSelected(list[0]?.code ?? null);
+    } finally { setAreasLoading(false); }
+  }, []);
+
+  useEffect(() => {
+    if (department) void loadAreas(department);
+    else setAreas([]);
+  }, [department, loadAreas]);
+
+  const begin = () => {
+    const area = areas.find((a) => a.code === selected);
+    if (!area || !department) return;
+    startSession({
+      departmentCode: department,
+      departmentName: me?.departmentName ?? "",
+      areaCode: area.code,
+      areaName: area.name,
+      reporterName: me?.displayName ?? "",
+      reporterEmail: me?.email ?? "",
+      submissionType: "3s",
+    });
+    router.push("/camera");
+  };
+
+  return (
+    <AppShell showNav={false}>
+      <div className="flex items-center gap-3 px-5 pt-3 pb-3">
+        <Link href="/dashboard" className="w-10 h-10 rounded-pill grid place-items-center text-xl bg-surface">←</Link>
+        <div className="text-[18px] font-semibold">Thực hành 3S</div>
+        <Link href="/3s/log" className="ml-auto text-[13px] font-semibold text-primary-600">📒 Sổ 3S</Link>
+      </div>
+
+      <div className="flex-1 px-5 overflow-y-auto">
+        <div className="rounded-md bg-info-bg text-info p-3.5 mb-4">
+          <div className="text-[13px] font-medium leading-relaxed">
+            Ghi nhận thực hành <b>S1 Sàng lọc · S2 Sắp xếp · S3 Sạch sẽ</b> theo HD-01:
+            mỗi ảnh gắn thẻ S + loại (hiện trạng tốt / vi phạm / trước–sau).
+            Ảnh 3S <b>không</b> tính vào báo cáo &quot;chụp ảnh hàng ngày&quot;.
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="text-[13px] text-ink-muted">Đang tải…</div>
+        ) : !department ? (
+          <div className="rounded-md bg-warning-bg text-warning p-3.5 text-[13px] font-medium">
+            Chưa xác định được phòng ban của tài khoản. Vui lòng liên hệ quản trị.
+          </div>
+        ) : (
+          <>
+            <label className="block text-[13px] font-semibold text-ink-muted mb-1">
+              Khu vực <span className="text-danger">*</span>
+            </label>
+            {areasLoading ? (
+              <div className="text-[13px] text-ink-muted">Đang tải khu vực…</div>
+            ) : areas.length === 0 ? (
+              <div className="rounded-md bg-info-bg text-info p-3.5 text-[13px] font-medium">
+                Phòng ban chưa có khu vực. Vui lòng liên hệ quản trị viên.
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {areas.map((a) => {
+                  const isSel = selected === a.code;
+                  return (
+                    <button
+                      key={a.code}
+                      onClick={() => setSelected(a.code)}
+                      className={`flex items-center gap-2.5 p-4 rounded-md border-[1.5px] text-[16px] font-semibold min-h-[60px] text-left transition-colors ${
+                        isSel ? "border-primary-600 bg-primary-100 text-primary-700 shadow-e2" : "border-line bg-white"
+                      }`}
+                    >
+                      <span className="text-[22px]">📍</span> {a.name}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      <div className="px-5 py-4 pb-[calc(16px+env(safe-area-inset-bottom))] border-t border-line">
+        <button
+          onClick={begin}
+          disabled={!selected || areas.length === 0}
+          className={`btn btn-primary btn-lg btn-block ${!selected || areas.length === 0 ? "opacity-50 pointer-events-none" : ""}`}
+        >
+          📷 Bắt đầu chụp 3S
+        </button>
+      </div>
+    </AppShell>
+  );
+}

@@ -20,6 +20,7 @@ function hhmm(iso?: string): string {
 }
 
 const QUICK: { href: string; icon: IconName; label: string }[] = [
+  { href: "/3s", icon: "check", label: "Thực hành 3S" },
   { href: "/gallery", icon: "image", label: "Thư viện" },
   { href: "/history", icon: "clock", label: "Lịch sử" },
   { href: "/overview", icon: "chart", label: "Toàn cảnh" },
@@ -101,6 +102,12 @@ export default function DashboardPage() {
           </div>
           <div className="text-[12px] text-ink-muted mt-1">phòng ban đã chụp</div>
           <div className="mt-2 h-2 rounded-pill bg-surface overflow-hidden"><i className="block h-full rounded-pill bg-success" style={{ width: `${pct}%` }} /></div>
+          {(today?.threeS?.photosToday ?? 0) > 0 && (
+            <div className="text-[12px] text-ink-muted mt-2">
+              Thực hành 3S hôm nay: <b className="text-ink">{today?.threeS?.photosToday}</b> ảnh
+              {(today?.threeS?.violationsToday ?? 0) > 0 && <> · <b className="text-danger">{today?.threeS?.violationsToday}</b> vi phạm</>}
+            </div>
+          )}
         </div>
 
         {/* CTA */}

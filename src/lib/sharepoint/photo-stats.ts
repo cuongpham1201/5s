@@ -10,6 +10,7 @@ import { listActiveDepartments } from "./department-service";
 import { vnDateKey } from "./report-service";
 
 export type StatGroup = "day" | "week" | "month";
+export type StatType = "all" | "daily" | "3s";
 
 export interface AreaStat {
   area: string;
@@ -66,7 +67,7 @@ function bucketRange(from: string, to: string, group: StatGroup): string[] {
 }
 
 /** Dept + date parsed from a stored photo path (new + old layouts). */
-function parsePath(path: string): { dept: string; dateKey: string } | null {
+export function parsePhotoPath(path: string): { dept: string; dateKey: string } | null {
   const parts = path.split("/");
   if (parts[0] !== "Img" || parts.length < 4) return null;
   const dept = parts[1];
@@ -78,7 +79,8 @@ function parsePath(path: string): { dept: string; dateKey: string } | null {
 }
 
 /** Parse+default from/to/group query params (shared by JSON + export routes). */
-export function parseStatParams(sp: URLSearchParams): { from: string; to: string; group: StatGroup } {
+export function parseStatParams(sp: URLSearchParams): { from: string; to: string; group: StatGroup; type: StatType } {
+  const type = (["all", "daily", "3s"].includes(sp.get("type") ?? "") ? sp.get("type") : "all") as StatType;
   const group = (["day", "week", "month"].includes(sp.get("group") ?? "") ? sp.get("group") : "day") as StatGroup;
   const today = vnDateKey();
   const defDays = group === "day" ? 13 : group === "week" ? 55 : 179; // ~2 tuần / ~8 tuần / ~6 tháng
@@ -87,10 +89,10 @@ export function parseStatParams(sp: URLSearchParams): { from: string; to: string
   const isDate = (s: string | null) => !!s && /^\d{4}-\d{2}-\d{2}$/.test(s);
   const from = isDate(sp.get("from")) ? (sp.get("from") as string) : d.toISOString().slice(0, 10);
   const to = isDate(sp.get("to")) ? (sp.get("to") as string) : today;
-  return { from: from <= to ? from : to, to, group };
+  return { from: from <= to ? from : to, to, group, type };
 }
 
-export async function aggregatePhotoStats(from: string, to: string, group: StatGroup): Promise<PhotoStats> {
+export async function aggregatePhotoStats(from: string, to: string, group: StatGroup, type: StatType = "all"): Promise<PhotoStats> {
   const [subs, photos, active] = await Promise.all([
     getSubmissions(999).catch(() => []),
     getSubmissionPhotos().catch(() => []),
@@ -112,7 +114,11 @@ export async function aggregatePhotoStats(from: string, to: string, group: StatG
     const path = p.WatermarkedPhotoUrl || p.OriginalPhotoUrl;
     if (!path) continue;
     const header = headerById.get(p.SubmissionId);
-    const parsed = parsePath(path);
+    // Lọc theo loại bản ghi: daily (mặc định của record cũ) vs Thực hành 3S.
+    const is3s = header?.SubmissionType === "3s";
+    if (type === "daily" && is3s) continue;
+    if (type === "3s" && !is3s) continue;
+    const parsed = parsePhotoPath(path);
     const dateKey = parsed?.dateKey || (p.CaptureTime ? vnDateKey(new Date(p.CaptureTime)) : "");
     if (!dateKey || dateKey < from || dateKey > to) continue;
     const bucket = bucketOf(dateKey, group);

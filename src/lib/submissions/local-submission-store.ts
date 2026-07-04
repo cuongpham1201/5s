@@ -149,6 +149,7 @@ export function completeCurrentSession(): CompletedSubmission | null {
     checkItemName: session.checkItemName,
     reporterName: session.reporterName,
     reporterEmail: session.reporterEmail,
+    submissionType: session.submissionType,
     startedAt: session.startedAt,
     submittedAt: now,
     photoCount: session.photos.length, // photos are tiny metadata now → reliable count

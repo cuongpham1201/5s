@@ -37,6 +37,8 @@ interface StartArgs {
   checkItemName?: string;
   reporterName: string;
   reporterEmail: string;
+  /** "3s" cho phiên Thực hành 3S (mặc định daily). */
+  submissionType?: "daily" | "3s";
 }
 
 interface SessionCaptureValue {

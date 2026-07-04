@@ -13,8 +13,8 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const denied = await denyIfNotAdmin();
   if (denied) return denied;
-  const { from, to, group } = parseStatParams(req.nextUrl.searchParams);
-  const stats = await aggregatePhotoStats(from, to, group);
+  const { from, to, group, type } = parseStatParams(req.nextUrl.searchParams);
+  const stats = await aggregatePhotoStats(from, to, group, type);
 
   const groupLabel = group === "day" ? "Ngày" : group === "week" ? "Tuần" : "Tháng";
   const wb = XLSX.utils.book_new();

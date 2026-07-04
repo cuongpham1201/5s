@@ -87,6 +87,8 @@ export interface SubmissionRecord {
   Address: string | null;
   Status: SubmissionStatus;
   SyncStatus: SyncStatus;
+  /** "3s" = Thực hành 3S; ""/"daily" = báo cáo hàng ngày. */
+  SubmissionType?: string;
 }
 
 export interface SubmissionPhotoRecord {
@@ -103,6 +105,11 @@ export interface SubmissionPhotoRecord {
   DeletedAt: string | null;
   DeletedBy: string | null;
   DeleteReason: string | null;
+  // --- Thực hành 3S ---
+  STag: string | null;
+  PhotoKind: string | null;
+  ViolationNote: string | null;
+  LinkedPhotoId: string | null;
 }
 
 export interface SyncLogRecord {

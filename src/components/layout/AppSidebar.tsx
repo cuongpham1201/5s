@@ -12,6 +12,7 @@ import type { MeResponse } from "@/lib/graph/graph-types";
 const NAV: { href: string; label: string; icon: IconName }[] = [
   { href: "/dashboard", label: "Trang chủ", icon: "home" },
   { href: "/capture", label: "Chụp ảnh", icon: "camera" },
+  { href: "/3s", label: "Thực hành 3S", icon: "check" },
   { href: "/overview", label: "Toàn cảnh", icon: "chart" },
   { href: "/gallery", label: "Thư viện", icon: "image" },
   { href: "/history", label: "Lịch sử", icon: "clock" },

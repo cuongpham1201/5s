@@ -98,18 +98,27 @@ export interface PhotoFact {
  * photo PATH (header is only a fallback for legacy rows / unparseable paths).
  * Returns the per-submission first-photo path map (thumbnails) alongside.
  */
-async function buildPhotoFacts(subs: SubmissionRecord[]): Promise<{ thumbs: Map<string, string>; facts: Map<string, PhotoFact> }> {
+async function buildPhotoFacts(subs: SubmissionRecord[]): Promise<{ thumbs: Map<string, string>; facts: Map<string, PhotoFact>; threeSPhotos: Array<{ dateKey: string; kind: string | null }> }> {
   let photos: SubmissionPhotoRecord[] = [];
   try { photos = await getSubmissionPhotos(); } catch { photos = []; }
   const headerById = new Map(subs.map((s) => [s.SubmissionId, s]));
   const firstBySub = new Map<string, { seq: number; path: string }>();
   const facts = new Map<string, PhotoFact>();
+  const threeSPhotos: Array<{ dateKey: string; kind: string | null }> = [];
   for (const p of photos) {
     if (p.IsDeleted) continue;
     const path = p.WatermarkedPhotoUrl || p.OriginalPhotoUrl;
     if (!path) continue;
     const cur = firstBySub.get(p.SubmissionId);
     if (!cur || p.SeqNo < cur.seq) firstBySub.set(p.SubmissionId, { seq: p.SeqNo, path });
+    // Thực hành 3S: KHÔNG tính vào "đã chụp hàng ngày" — đếm riêng theo ảnh.
+    const hdr = headerById.get(p.SubmissionId);
+    if (hdr?.SubmissionType === "3s") {
+      const parsed3 = parsePhotoPath(path);
+      const dk3 = parsed3?.dateKey || (p.CaptureTime ? vnDateKey(new Date(p.CaptureTime)) : dateKeyOf(hdr));
+      threeSPhotos.push({ dateKey: dk3, kind: p.PhotoKind ?? null });
+      continue;
+    }
     if (!facts.has(p.SubmissionId)) {
       const parsed = parsePhotoPath(path);
       const header = headerById.get(p.SubmissionId);
@@ -123,7 +132,7 @@ async function buildPhotoFacts(subs: SubmissionRecord[]): Promise<{ thumbs: Map<
     }
   }
   const thumbs = new Map([...firstBySub].map(([k, v]) => [k, v.path]));
-  return { thumbs, facts };
+  return { thumbs, facts, threeSPhotos };
 }
 
 export interface TodaySummary {
@@ -135,6 +144,8 @@ export interface TodaySummary {
   completionRate: number; // 0..1
   latestSubmissions: LatestSubmission[];
   hasData: boolean;
+  /** Thực hành 3S hôm nay (đếm THEO ẢNH, tách khỏi báo cáo hàng ngày). */
+  threeS?: { photosToday: number; violationsToday: number };
 }
 
 const STUCK_MINUTES = 15;
@@ -177,7 +188,7 @@ export async function getTodaySubmissionSummary(): Promise<TodaySummary> {
     safeSubmissions(),
   ]);
   // SOURCE OF TRUTH = Data_SubmissionPhotos (≥1 non-deleted photo fact today).
-  const { thumbs, facts } = await buildPhotoFacts(subs);
+  const { thumbs, facts, threeSPhotos } = await buildPhotoFacts(subs);
   // Resolve fact dept codes against ACTIVE codes: path segments are sanitized
   // ("CĐ" → "C_"), so headerless legacy facts need a normalized match.
   const norm = (s: string) => s.replace(/[^\w-]/g, "_");
@@ -203,6 +214,10 @@ export async function getTodaySubmissionSummary(): Promise<TodaySummary> {
     completionRate: active.length ? submittedActive.length / active.length : 0,
     latestSubmissions: latest,
     hasData: facts.size > 0 || subs.length > 0,
+    threeS: {
+      photosToday: threeSPhotos.filter((t) => t.dateKey === today).length,
+      violationsToday: threeSPhotos.filter((t) => t.dateKey === today && t.kind === "violation").length,
+    },
   };
 }
 

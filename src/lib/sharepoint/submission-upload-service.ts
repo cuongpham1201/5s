@@ -30,6 +30,12 @@ export interface UploadPhotoInput {
   original: ArrayBuffer;
   watermarked: ArrayBuffer;
   contentType?: string;
+  // Thực hành 3S (optional; daily photos leave these undefined)
+  sTag?: string;
+  photoKind?: string;
+  violationNote?: string;
+  /** seqNo của ảnh "trước" trong CÙNG lần gửi (server dịch sang PhotoId). */
+  linkedSeqNo?: number;
 }
 
 export interface UploadSubmissionInput {
@@ -45,6 +51,8 @@ export interface UploadSubmissionInput {
   longitude: number | null;
   address: string | null;
   status?: SubmissionStatus;
+  /** "3s" = Thực hành 3S; mặc định "daily". */
+  submissionType?: string;
   photos: UploadPhotoInput[];
   queueId?: string;
   attemptCount?: number;
@@ -92,7 +100,7 @@ export async function upsertSubmissionHeader(
     UploadSubmissionInput,
     | "submissionId" | "departmentCode" | "areaCode" | "areaName" | "reporterName"
     | "reporterEmail" | "submittedAt" | "submissionDate" | "latitude" | "longitude" | "address"
-  > & { photoCount: number; status: SubmissionStatus; syncStatus: SyncStatus },
+  > & { photoCount: number; status: SubmissionStatus; syncStatus: SyncStatus; submissionType?: string },
 ): Promise<void> {
   const { client, siteId } = await ctx();
   const listId = await requireList(client, siteId, DATA_LISTS.submissions);
@@ -112,6 +120,8 @@ export async function upsertSubmissionHeader(
     Address: input.address,
     Status: input.status,
     SyncStatus: input.syncStatus,
+    // Chỉ ghi khi là 3S — record daily/cũ giữ nguyên (cột có thể chưa tồn tại ở env cũ).
+    ...(input.submissionType === "3s" ? { SubmissionType: "3s" } : {}),
   };
   const existingId = await findItemIdByField(client, siteId, listId, "SubmissionId", input.submissionId);
   if (existingId) {
@@ -138,9 +148,10 @@ async function upsertPhotoRow(
     photoId: string; submissionId: string; seqNo: number;
     originalPath: string; watermarkedPath: string;
     captureTime: string; latitude: number | null; longitude: number | null; address: string | null;
+    sTag?: string; photoKind?: string; violationNote?: string; linkedPhotoId?: string;
   },
 ): Promise<void> {
-  const fields = {
+  const fields: Record<string, unknown> = {
     Title: rec.photoId,
     PhotoId: rec.photoId,
     SubmissionId: rec.submissionId,
@@ -152,6 +163,11 @@ async function upsertPhotoRow(
     Longitude: rec.longitude,
     Address: rec.address,
   };
+  // Thực hành 3S — chỉ ghi khi có giá trị (ảnh daily không đụng cột mới).
+  if (rec.sTag) fields.STag = rec.sTag;
+  if (rec.photoKind) fields.PhotoKind = rec.photoKind;
+  if (rec.violationNote) fields.ViolationNote = rec.violationNote;
+  if (rec.linkedPhotoId) fields.LinkedPhotoId = rec.linkedPhotoId;
   const existingId = await findItemIdByField(client, siteId, listId, "PhotoId", rec.photoId);
   if (existingId) {
     await client.patch(`/sites/${siteId}/lists/${listId}/items/${existingId}/fields`, fields);
@@ -250,6 +266,8 @@ export async function uploadSubmissionPhotos(input: UploadSubmissionInput): Prom
         photoId, submissionId: input.submissionId, seqNo: p.seqNo,
         originalPath: res.originalPath, watermarkedPath: res.watermarkedPath,
         captureTime: p.capturedAt, latitude: p.latitude, longitude: p.longitude, address: p.address,
+        sTag: p.sTag, photoKind: p.photoKind, violationNote: p.violationNote,
+        linkedPhotoId: p.linkedSeqNo ? `${input.submissionId}-P${String(p.linkedSeqNo).padStart(2, "0")}` : undefined,
       });
       ulog("server.photoRow.upsert.done", { submissionId: input.submissionId, seq: p.seqNo });
     } catch (re) {
@@ -272,6 +290,7 @@ export async function uploadSubmissionPhotos(input: UploadSubmissionInput): Prom
       submittedAt: input.submittedAt, submissionDate: input.submissionDate,
       latitude: input.latitude, longitude: input.longitude, address: input.address,
       photoCount: photos.length, status: input.status ?? "complete", syncStatus: ok ? "uploaded" : "failed",
+      submissionType: input.submissionType,
     });
   } catch (he) {
     ulog("server.header:warn", { submissionId: input.submissionId, message: (he as Error)?.message ?? "header optional" });

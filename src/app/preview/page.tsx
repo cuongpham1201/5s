@@ -13,7 +13,14 @@ import { ulog } from "@/lib/debug/upload-log";
 import * as store from "@/lib/submissions/local-submission-store";
 import { clog as dbg, ctrace } from "@/lib/debug/capture-debug";
 import { CaptureDebugPanel } from "@/components/system/CaptureDebugPanel";
-import type { SessionPhoto, WatermarkMetadata } from "@/types/submission";
+import type { PhotoKind, STag, SessionPhoto, WatermarkMetadata } from "@/types/submission";
+
+const KIND_LABEL: Record<PhotoKind, string> = {
+  good: "Hiện trạng tốt",
+  violation: "Vi phạm",
+  before: "Trước",
+  after: "Sau",
+};
 
 export default function PreviewPage() {
   const router = useRouter();
@@ -25,6 +32,11 @@ export default function PreviewPage() {
   const [busy, setBusy] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Thực hành 3S — thẻ chọn cho TỪNG ảnh (chỉ hiện khi phiên là 3S)
+  const is3S = session?.submissionType === "3s";
+  const [sTag, setSTag] = useState<STag>("S1");
+  const [kind, setKind] = useState<PhotoKind>("good");
+  const [note, setNote] = useState("");
 
   // Guard: missing session/pending → restart appropriately. Wait for hydration
   // so we don't bounce away during the pre-hydration null window.
@@ -75,13 +87,21 @@ export default function PreviewPage() {
     try {
       const photoId = `p-${Date.now()}`;
       const submissionId = session.sessionId;
-      const thumbnailDataUrl = await makeThumbnailDataUrl(watermarkedUrl);
+      // Thực hành 3S: đóng LẠI watermark kèm dòng thẻ (S + loại ảnh) trước khi lưu
+      // — một lượt canvas thêm (~0.3s), luồng daily không bị ảnh hưởng.
+      let wmUrl = watermarkedUrl;
+      if (is3S && pendingCapture) {
+        const tagLine = `3S: ${sTag} · ${KIND_LABEL[kind]}${kind === "violation" && note.trim() ? " — " + note.trim() : ""}`;
+        const res3 = await generateWatermarkedImage({ source: pendingCapture.originalDataUrl, metadata: { ...meta, checkItem: tagLine } });
+        wmUrl = res3.watermarkedDataUrl;
+      }
+      const thumbnailDataUrl = await makeThumbnailDataUrl(wmUrl);
       // Transient Blobs only (camera→canvas→blob→arrayBuffer). RAW BYTES go to
       // IndexedDB — WebKit detaches persisted Blob references ("The object can
       // not be found here."), so Blob objects must NEVER be persisted.
       const [originalBlob, watermarkedBlob, thumbnailBlob] = await Promise.all([
         dataUrlToBlob(originalUrl),
-        dataUrlToBlob(watermarkedUrl),
+        dataUrlToBlob(wmUrl),
         dataUrlToBlob(thumbnailDataUrl),
       ]);
       const [originalBuffer, watermarkedBuffer, thumbnailBuffer] = await Promise.all([
@@ -150,6 +170,10 @@ export default function PreviewPage() {
         return;
       }
       // Light metadata ONLY (no image payload) → session in localStorage.
+      // Ảnh "sau" tự ghép cặp với ảnh "trước" gần nhất trong phiên.
+      const linkedPhotoId = is3S && kind === "after"
+        ? [...session.photos].reverse().find((ph) => ph.photoKind === "before")?.photoId
+        : undefined;
       const photo: SessionPhoto = {
         photoId,
         submissionId,
@@ -159,6 +183,7 @@ export default function PreviewPage() {
         longitude: pendingCapture.geo.longitude,
         address: pendingCapture.geo.address,
         status: "ready",
+        ...(is3S ? { sTag, photoKind: kind, violationNote: kind === "violation" ? note.trim() || undefined : undefined, linkedPhotoId } : {}),
       };
       ctrace("preview.addPhoto:before", { sessionId: submissionId, currentPhotos: session.photos.length, newPhotoId: photoId });
       addPhoto(photo);
@@ -216,6 +241,40 @@ export default function PreviewPage() {
           <InfoRow label="🛰 GPS" value={gpsLabel} />
           <InfoRow label="🕒 Thời gian" value={meta ? `${meta.time} · ${meta.date}` : "—"} />
         </Card>
+
+        {is3S && (
+          <div className="mt-4 rounded-md border border-line bg-white p-3.5">
+            <div className="text-[13px] font-semibold text-ink-muted mb-2">Thẻ S <span className="text-danger">*</span></div>
+            <div className="flex gap-2 mb-3">
+              {(["S1", "S2", "S3"] as STag[]).map((t) => (
+                <button key={t} onClick={() => setSTag(t)}
+                  className={`px-3.5 py-2 rounded-pill border-[1.5px] text-[14px] font-bold ${sTag === t ? "border-primary-600 bg-primary-100 text-primary-700" : "border-line bg-white"}`}>
+                  {t === "S1" ? "S1 Sàng lọc" : t === "S2" ? "S2 Sắp xếp" : "S3 Sạch sẽ"}
+                </button>
+              ))}
+            </div>
+            <div className="text-[13px] font-semibold text-ink-muted mb-2">Loại ảnh</div>
+            <div className="flex flex-wrap gap-2">
+              {(Object.keys(KIND_LABEL) as PhotoKind[]).map((k) => (
+                <button key={k} onClick={() => setKind(k)}
+                  className={`px-3.5 py-2 rounded-pill border-[1.5px] text-[13.5px] font-semibold ${kind === k ? (k === "violation" ? "border-danger bg-danger-bg text-danger" : "border-primary-600 bg-primary-100 text-primary-700") : "border-line bg-white"}`}>
+                  {KIND_LABEL[k]}
+                </button>
+              ))}
+            </div>
+            {kind === "violation" && (
+              <input
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="Họ tên – S vi phạm (vd: Nguyễn Văn A – S2)"
+                className="w-full mt-3 rounded-md border border-line-strong px-3 py-2.5 text-[14px]"
+              />
+            )}
+            {kind === "after" && (
+              <p className="text-[12px] text-ink-muted mt-2.5">Ảnh &quot;Sau&quot; sẽ tự ghép cặp với ảnh &quot;Trước&quot; gần nhất trong phiên này.</p>
+            )}
+          </div>
+        )}
         <p className="text-[12px] text-ink-disabled mt-3 text-center">
           Watermark được ghép thật bằng Canvas. Giữ ảnh để thêm vào lô gửi. (Chưa upload — Phase 2C)
         </p>

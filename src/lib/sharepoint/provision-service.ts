@@ -108,6 +108,8 @@ const LIST_SPECS: ListSpec[] = [
       { name: "Address", type: "text" },
       { name: "Status", type: "choice", choices: SUB_STATUS },
       { name: "SyncStatus", type: "choice", choices: SYNC_STATUS, indexed: true },
+      // Thực hành 3S (additive): "3s" | ""/"daily" (row cũ = daily).
+      { name: "SubmissionType", type: "text", indexed: true },
     ],
   },
   {
@@ -127,6 +129,10 @@ const LIST_SPECS: ListSpec[] = [
       { name: "DeletedAt", type: "dateTime" },
       { name: "DeletedBy", type: "text" },
       { name: "DeleteReason", type: "text" },
+      { name: "STag", type: "text" },
+      { name: "PhotoKind", type: "text" },
+      { name: "ViolationNote", type: "text" },
+      { name: "LinkedPhotoId", type: "text" },
     ],
   },
   {

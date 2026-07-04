@@ -19,6 +19,13 @@ export type PhotoStatus = "draft" | "ready";
 
 export type GeoStatus = "pending" | "ok" | "denied" | "unavailable" | "timeout";
 
+/** Loại bản ghi: báo cáo hàng ngày (mặc định) hoặc Thực hành 3S (M1/HD-01). */
+export type SubmissionType = "daily" | "3s";
+/** Thẻ S theo HD-01 (chỉ dùng cho Thực hành 3S). */
+export type STag = "S1" | "S2" | "S3";
+/** Loại ảnh 3S: hiện trạng tốt / vi phạm / cặp trước–sau. */
+export type PhotoKind = "good" | "violation" | "before" | "after";
+
 /** A point-in-time GPS reading captured at shutter time. Never blocks submit. */
 export interface GeoLocationSnapshot {
   latitude: number | null;
@@ -54,6 +61,12 @@ export interface SessionPhoto {
   longitude: number | null;
   address: string;
   status: PhotoStatus;
+  // --- Thực hành 3S (per-photo tags; undefined cho ảnh daily) ---
+  sTag?: STag;
+  photoKind?: PhotoKind;
+  violationNote?: string;
+  /** Local photoId của ảnh "trước" khi ảnh này là "sau" (ghép cặp). */
+  linkedPhotoId?: string;
   // NOTE (Phase 2B.1): NO image payload here. All binaries (original /
   // watermarked / thumbnail) live in IndexedDB (photo-store) keyed by photoId.
   // localStorage holds metadata only.
@@ -71,6 +84,8 @@ export interface SubmissionSession {
   checkItemName?: string;
   reporterName: string;
   reporterEmail: string;
+  /** "3s" cho phiên Thực hành 3S; undefined/"daily" cho báo cáo hàng ngày. */
+  submissionType?: SubmissionType;
   startedAt: string; // ISO
   photos: SessionPhoto[];
 }
@@ -86,6 +101,7 @@ export interface CompletedSubmission {
   checkItemName?: string;
   reporterName: string;
   reporterEmail: string;
+  submissionType?: SubmissionType;
   startedAt: string; // ISO
   submittedAt: string; // ISO
   photoCount: number;

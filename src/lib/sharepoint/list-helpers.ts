@@ -138,6 +138,7 @@ export function mapSubmission(f: GraphListItemFields): SubmissionRecord {
     Address: strOrNull(f, "Address"),
     Status: oneOf(f, "Status", SUB_STATUS, "complete"),
     SyncStatus: oneOf(f, "SyncStatus", SYNC_STATUS, "queued"),
+    SubmissionType: str(f, "SubmissionType") || undefined,
   };
 }
 
@@ -156,6 +157,10 @@ export function mapSubmissionPhoto(f: GraphListItemFields): SubmissionPhotoRecor
     DeletedAt: strOrNull(f, "DeletedAt"),
     DeletedBy: strOrNull(f, "DeletedBy"),
     DeleteReason: strOrNull(f, "DeleteReason"),
+    STag: strOrNull(f, "STag"),
+    PhotoKind: strOrNull(f, "PhotoKind"),
+    ViolationNote: strOrNull(f, "ViolationNote"),
+    LinkedPhotoId: strOrNull(f, "LinkedPhotoId"),
   };
 }
 
