@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
+import { PhotoViewerModal, type ViewerPhoto } from "@/components/media/PhotoViewerModal";
 
 interface Row {
   dateKey: string; time: string; submissionId: string; seqNo: number; photoId: string;
@@ -27,6 +28,7 @@ export default function ThreeSLogPage() {
   const [depts, setDepts] = useState<Dept[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
+  const [viewer, setViewer] = useState<number | null>(null);
 
   const load = useCallback(async (m: string, d: string) => {
     setLoading(true);
@@ -55,6 +57,16 @@ export default function ThreeSLogPage() {
   };
 
   const violations = rows.filter((r) => r.photoKind === "violation").length;
+
+  // Bấm vào dòng/ảnh → mở xem ảnh full ngay tại sổ (không phải mò qua Gallery).
+  const viewerPhotos: ViewerPhoto[] = rows.map((r) => ({
+    watermarkedPath: r.photoPath,
+    departmentCode: r.departmentCode,
+    areaName: `${r.areaName}${r.sTag ? ` · ${r.sTag}` : ""}${r.violationNote ? ` · ⚠ ${r.violationNote}` : ""}`,
+    reporterName: r.reporterName,
+    submittedAt: `${r.dateKey}T${r.time || "00:00"}:00`,
+    submissionId: r.submissionId,
+  }));
 
   return (
     <AppShell>
@@ -91,10 +103,10 @@ export default function ThreeSLogPage() {
           <div className="card-flat p-8 text-center text-ink-muted text-[13px]">Chưa có bản ghi 3S trong tháng này.</div>
         ) : (
           <div className="flex flex-col gap-2">
-            {rows.map((r) => {
+            {rows.map((r, i) => {
               const kind = KIND_VI[r.photoKind ?? ""] ?? { label: r.photoKind ?? "—", cls: "bg-surface text-ink-muted" };
               return (
-                <div key={`${r.photoId}`} className="card-flat p-2.5 flex items-center gap-3">
+                <button key={`${r.photoId}`} onClick={() => setViewer(i)} className="card-flat p-2.5 flex items-center gap-3 text-left w-full active:bg-surface-2">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={`/api/photo?path=${encodeURIComponent(r.photoPath)}`} alt="" loading="lazy"
                     className="w-[64px] h-[64px] rounded-md object-cover bg-surface flex-none" />
@@ -108,12 +120,14 @@ export default function ThreeSLogPage() {
                     <div className="text-ink-muted truncate">{r.reporterName}</div>
                     {r.violationNote && <div className="text-danger truncate mt-0.5">⚠ {r.violationNote}</div>}
                   </div>
-                </div>
+                  <span className="text-ink-disabled text-lg flex-none">›</span>
+                </button>
               );
             })}
           </div>
         )}
       </div>
+      {viewer != null && <PhotoViewerModal photos={viewerPhotos} index={viewer} onClose={() => setViewer(null)} onIndexChange={setViewer} />}
     </AppShell>
   );
 }
