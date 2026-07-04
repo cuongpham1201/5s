@@ -19,6 +19,7 @@ const NAV = [
   { href: "/admin/pending", label: "Chưa gửi", icon: "⚠️" },
   { href: "/admin/calendar", label: "Lịch tổng hợp", icon: "🗓️" },
   { section: "Phân tích" },
+  { href: "/admin/photo-stats", label: "Thống kê ảnh", icon: "📈" },
   { href: "/admin/ranking", label: "Xếp hạng", icon: "🏆" },
   { href: "/admin/gallery", label: "Thư viện ảnh", icon: "🖼️" },
   { section: "Cấu hình" },
