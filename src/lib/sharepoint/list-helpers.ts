@@ -88,6 +88,7 @@ export function mapArea(f: GraphListItemFields): AreaRecord {
     AreaCode: str(f, "AreaCode") || str(f, "Title"),
     AreaName: str(f, "AreaName"),
     DepartmentCode: str(f, "DepartmentCode"),
+    Departments: strOrNull(f, "Departments"),
     IsActive: bool(f, "IsActive"),
     SortOrder: num(f, "SortOrder"),
   };

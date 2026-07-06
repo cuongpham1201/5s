@@ -13,14 +13,14 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const denied = await denyIfNotAdmin();
   if (denied) return denied;
-  const { from, to, group, type } = parseStatParams(req.nextUrl.searchParams);
-  const stats = await aggregatePhotoStats(from, to, group, type);
+  const { from, to, group, type, dim } = parseStatParams(req.nextUrl.searchParams);
+  const stats = await aggregatePhotoStats(from, to, group, type, dim);
 
   const groupLabel = group === "day" ? "Ngày" : group === "week" ? "Tuần" : "Tháng";
   const wb = XLSX.utils.book_new();
 
   // Sheet 1 — department × period
-  const head1 = ["Mã PB", "Phòng ban", ...stats.buckets, "Tổng"];
+  const head1 = dim === "area" ? ["Khu vực", "Tên", ...stats.buckets, "Tổng"] : ["Mã PB", "Phòng ban", ...stats.buckets, "Tổng"];
   const rows1 = stats.rows.map((r) => [r.code, r.name, ...stats.buckets.map((b) => r.byBucket[b] ?? 0), r.total]);
   const total1 = ["", "TỔNG CỘNG", ...stats.buckets.map((b) => stats.byBucketTotal[b] ?? 0), stats.grandTotal];
   const ws1 = XLSX.utils.aoa_to_sheet([
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
   XLSX.utils.book_append_sheet(wb, ws1, "Tong hop");
 
   // Sheet 2 — department + area × period
-  const head2 = ["Mã PB", "Phòng ban", "Khu vực", ...stats.buckets, "Tổng"];
+  const head2 = dim === "area" ? ["Khu vực", "Tên", "Phòng ban", ...stats.buckets, "Tổng"] : ["Mã PB", "Phòng ban", "Khu vực", ...stats.buckets, "Tổng"];
   const rows2 = stats.rows.flatMap((r) =>
     r.areas.map((a) => [r.code, r.name, a.area, ...stats.buckets.map((b) => a.byBucket[b] ?? 0), a.total]),
   );

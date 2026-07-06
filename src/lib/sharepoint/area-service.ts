@@ -16,8 +16,18 @@ import type { AreaRecord } from "@/types/sharepoint";
 export interface AreaOption {
   code: string;
   name: string;
+  /** Legacy owner (mô hình cũ). */
   departmentCode: string;
+  /** Mô hình mới: TẤT CẢ phòng ban được gán khu vực này. */
+  departments: string[];
   sortOrder: number;
+}
+
+/** Phòng ban hiệu lực của một khu vực: CSV Departments; trống → [DepartmentCode]. */
+function effectiveDepts(rec: AreaRecord): string[] {
+  const csv = (rec.Departments ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+  if (csv.length > 0) return [...new Set(csv)];
+  return rec.DepartmentCode ? [rec.DepartmentCode] : [];
 }
 
 /** Admin view row (includes id + IsActive). */
@@ -30,6 +40,8 @@ export interface AreaInput {
   code: string;
   name: string;
   departmentCode: string;
+  /** Danh sách mã phòng ban được gán (ghi vào cột Departments dạng CSV). */
+  departments?: string[];
   sortOrder?: number;
   isActive?: boolean;
 }
@@ -65,7 +77,7 @@ export async function listActiveAreas(): Promise<AreaOption[]> {
   const areas = await readAreas();
   return areas
     .filter((a) => a.AreaCode && a.IsActive)
-    .map((a) => ({ code: a.AreaCode, name: a.AreaName, departmentCode: a.DepartmentCode, sortOrder: a.SortOrder }))
+    .map((a) => ({ code: a.AreaCode, name: a.AreaName, departmentCode: a.DepartmentCode, departments: effectiveDepts(a), sortOrder: a.SortOrder }))
     .sort((x, y) => x.sortOrder - y.sortOrder);
 }
 
@@ -73,14 +85,15 @@ export async function listAreasByDepartmentCode(
   departmentCode: string,
   includeInactive = false,
 ): Promise<AreaOption[]> {
+  // Khu vực áp dụng cho phòng X = Departments chứa X (fallback legacy DepartmentCode).
   if (!includeInactive) {
     const all = await listActiveAreas();
-    return all.filter((a) => a.departmentCode === departmentCode).sort((x, y) => x.sortOrder - y.sortOrder);
+    return all.filter((a) => a.departments.includes(departmentCode)).sort((x, y) => x.sortOrder - y.sortOrder);
   }
   const areas = await readAreas();
   return areas
-    .filter((a) => a.AreaCode && a.DepartmentCode === departmentCode)
-    .map((a) => ({ code: a.AreaCode, name: a.AreaName, departmentCode: a.DepartmentCode, sortOrder: a.SortOrder }))
+    .filter((a) => a.AreaCode && effectiveDepts(a).includes(departmentCode))
+    .map((a) => ({ code: a.AreaCode, name: a.AreaName, departmentCode: a.DepartmentCode, departments: effectiveDepts(a), sortOrder: a.SortOrder }))
     .sort((x, y) => x.sortOrder - y.sortOrder);
 }
 
@@ -89,9 +102,8 @@ export async function countAreasByDepartment(): Promise<Record<string, number>> 
   const areas = await readAreas();
   const counts: Record<string, number> = {};
   for (const a of areas) {
-    if (a.AreaCode && a.IsActive && a.DepartmentCode) {
-      counts[a.DepartmentCode] = (counts[a.DepartmentCode] ?? 0) + 1;
-    }
+    if (!a.AreaCode || !a.IsActive) continue;
+    for (const d of effectiveDepts(a)) counts[d] = (counts[d] ?? 0) + 1;
   }
   return counts;
 }
@@ -129,13 +141,39 @@ export async function createAreaForDepartment(
     code,
     name: areaName.trim(),
     departmentCode,
+    departments: [departmentCode],
     sortOrder: sortOrder ?? 0,
     isActive: true,
   });
   return {
     action: res.action,
-    area: { code, name: areaName.trim(), departmentCode, sortOrder: sortOrder ?? 0 },
+    area: { code, name: areaName.trim(), departmentCode, departments: [departmentCode], sortOrder: sortOrder ?? 0 },
   };
+}
+
+/** Mã khu vực GỐC (không gắn phòng ban): KV_<slug tên>. */
+export function generateMasterAreaCode(areaName: string): string {
+  const slug = normalizeText(areaName)
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return `KV_${slug || "KHU_VUC"}`;
+}
+
+/** Tạo khu vực GỐC gán N phòng ban (idempotent theo mã; khôi phục nếu bị ẩn). */
+export async function createMasterArea(
+  areaName: string,
+  departments: string[],
+): Promise<{ action: "created" | "updated" | "restored"; code: string }> {
+  const code = generateMasterAreaCode(areaName);
+  return upsertAreaByCode({
+    code,
+    name: areaName.trim(),
+    departmentCode: departments[0] ?? "",
+    departments,
+    sortOrder: 0,
+    isActive: true,
+  });
 }
 
 // ---- ADMIN (read all + write) ----
@@ -153,10 +191,11 @@ export async function listAllAreasAdmin(): Promise<AreaAdminRow[]> {
       code: rec.AreaCode,
       name: rec.AreaName,
       departmentCode: rec.DepartmentCode,
+      departments: effectiveDepts(rec),
       sortOrder: rec.SortOrder,
       isActive: rec.IsActive,
     }))
-    .sort((a, b) => (a.departmentCode || "").localeCompare(b.departmentCode || "") || a.sortOrder - b.sortOrder);
+    .sort((a, b) => a.name.localeCompare(b.name, "vi") || a.sortOrder - b.sortOrder);
 }
 
 export async function createArea(input: AreaInput): Promise<AreaAdminRow> {
@@ -168,6 +207,7 @@ export async function createArea(input: AreaInput): Promise<AreaAdminRow> {
       AreaCode: input.code,
       AreaName: input.name,
       DepartmentCode: input.departmentCode,
+      Departments: (input.departments ?? (input.departmentCode ? [input.departmentCode] : [])).join(","),
       IsActive: input.isActive ?? true,
       SortOrder: input.sortOrder ?? 0,
     },
@@ -177,6 +217,7 @@ export async function createArea(input: AreaInput): Promise<AreaAdminRow> {
     code: input.code,
     name: input.name,
     departmentCode: input.departmentCode,
+    departments: input.departments ?? (input.departmentCode ? [input.departmentCode] : []),
     sortOrder: input.sortOrder ?? 0,
     isActive: input.isActive ?? true,
   };
@@ -188,6 +229,7 @@ export async function updateArea(id: string, input: Partial<AreaInput>): Promise
   const fields: Record<string, unknown> = {};
   if (input.name !== undefined) fields.AreaName = input.name;
   if (input.departmentCode !== undefined) fields.DepartmentCode = input.departmentCode;
+  if (input.departments !== undefined) fields.Departments = [...new Set(input.departments.map((x) => x.trim()).filter(Boolean))].join(",");
   if (input.sortOrder !== undefined) fields.SortOrder = input.sortOrder;
   if (input.isActive !== undefined) fields.IsActive = input.isActive;
   if (Object.keys(fields).length === 0) return;
@@ -201,7 +243,7 @@ export async function listAreasByDepartmentAdmin(
 ): Promise<AreaAdminRow[]> {
   const all = await listAllAreasAdmin();
   return all
-    .filter((a) => a.departmentCode === departmentCode)
+    .filter((a) => a.departments.includes(departmentCode))
     .filter((a) => (includeInactive ? true : a.isActive))
     .sort((x, y) => Number(y.isActive) - Number(x.isActive) || x.sortOrder - y.sortOrder);
 }

@@ -8,9 +8,9 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const denied = await denyIfNotAdmin();
   if (denied) return denied;
-  const { from, to, group, type } = parseStatParams(req.nextUrl.searchParams);
+  const { from, to, group, type, dim } = parseStatParams(req.nextUrl.searchParams);
   try {
-    return NextResponse.json(await aggregatePhotoStats(from, to, group, type));
+    return NextResponse.json(await aggregatePhotoStats(from, to, group, type, dim));
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }

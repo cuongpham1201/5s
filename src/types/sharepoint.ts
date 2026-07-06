@@ -30,7 +30,11 @@ export interface DepartmentRecord {
 export interface AreaRecord {
   AreaCode: string; // Title
   AreaName: string;
+  /** Legacy: phòng ban "sở hữu" ban đầu (mô hình cũ 1 khu vực – 1 phòng). */
   DepartmentCode: string;
+  /** Mô hình mới: khu vực là DỮ LIỆU GỐC, gán N phòng ban (CSV mã, vd "TCKS,KT").
+   *  Trống → fallback [DepartmentCode] để dữ liệu cũ chạy nguyên. */
+  Departments: string | null;
   IsActive: boolean;
   SortOrder: number;
 }

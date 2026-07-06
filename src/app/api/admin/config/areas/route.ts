@@ -5,6 +5,7 @@ import {
   listAreasByDepartmentAdmin,
   countAreasByDepartment,
   createArea,
+  createMasterArea,
   type AreaInput,
 } from "@/lib/sharepoint/area-service";
 
@@ -42,6 +43,17 @@ export async function POST(req: NextRequest) {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "invalid body" }, { status: 400 });
+  }
+  // Mô hình mới: tạo KHU VỰC GỐC — chỉ cần name + departments[] (mã sinh tự động).
+  if (!body.code && body.name?.trim() && Array.isArray(body.departments)) {
+    const departments = (body.departments as string[]).map((x) => String(x).trim()).filter(Boolean);
+    if (departments.length === 0) return NextResponse.json({ error: "Chọn ít nhất 1 phòng ban." }, { status: 400 });
+    try {
+      const r = await createMasterArea(body.name.trim(), departments);
+      return NextResponse.json({ ok: true, ...r });
+    } catch (e) {
+      return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+    }
   }
   if (!body.code?.trim() || !body.name?.trim() || !body.departmentCode?.trim()) {
     return NextResponse.json({ error: "code, name, departmentCode là bắt buộc" }, { status: 400 });

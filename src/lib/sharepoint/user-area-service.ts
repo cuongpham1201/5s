@@ -111,7 +111,7 @@ export async function listUserAllowedAreas(email: string): Promise<AreaOption[]>
   for (const r of rows) {
     const a = byCode.get(r.areaCode);
     if (a) out.push(a);
-    else out.push({ code: r.areaCode, name: r.areaCode, departmentCode: r.departmentCode ?? "", sortOrder: 0 });
+    else out.push({ code: r.areaCode, name: r.areaCode, departmentCode: r.departmentCode ?? "", departments: r.departmentCode ? [r.departmentCode] : [], sortOrder: 0 });
   }
   return out.sort((x, y) => x.sortOrder - y.sortOrder || x.name.localeCompare(y.name));
 }

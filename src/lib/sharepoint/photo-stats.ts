@@ -11,6 +11,8 @@ import { vnDateKey } from "./report-service";
 
 export type StatGroup = "day" | "week" | "month";
 export type StatType = "all" | "daily" | "3s";
+/** Chiều tổng hợp: theo phòng ban (mặc định) hoặc theo KHU VỰC (gộp nhiều PB). */
+export type StatDim = "dept" | "area";
 
 export interface AreaStat {
   area: string;
@@ -79,8 +81,9 @@ export function parsePhotoPath(path: string): { dept: string; dateKey: string } 
 }
 
 /** Parse+default from/to/group query params (shared by JSON + export routes). */
-export function parseStatParams(sp: URLSearchParams): { from: string; to: string; group: StatGroup; type: StatType } {
+export function parseStatParams(sp: URLSearchParams): { from: string; to: string; group: StatGroup; type: StatType; dim: StatDim } {
   const type = (["all", "daily", "3s"].includes(sp.get("type") ?? "") ? sp.get("type") : "all") as StatType;
+  const dim = (sp.get("dim") === "area" ? "area" : "dept") as StatDim;
   const group = (["day", "week", "month"].includes(sp.get("group") ?? "") ? sp.get("group") : "day") as StatGroup;
   const today = vnDateKey();
   const defDays = group === "day" ? 13 : group === "week" ? 55 : 179; // ~2 tuần / ~8 tuần / ~6 tháng
@@ -89,10 +92,10 @@ export function parseStatParams(sp: URLSearchParams): { from: string; to: string
   const isDate = (s: string | null) => !!s && /^\d{4}-\d{2}-\d{2}$/.test(s);
   const from = isDate(sp.get("from")) ? (sp.get("from") as string) : d.toISOString().slice(0, 10);
   const to = isDate(sp.get("to")) ? (sp.get("to") as string) : today;
-  return { from: from <= to ? from : to, to, group, type };
+  return { from: from <= to ? from : to, to, group, type, dim };
 }
 
-export async function aggregatePhotoStats(from: string, to: string, group: StatGroup, type: StatType = "all"): Promise<PhotoStats> {
+export async function aggregatePhotoStats(from: string, to: string, group: StatGroup, type: StatType = "all", dim: StatDim = "dept"): Promise<PhotoStats> {
   const [subs, photos, active] = await Promise.all([
     getSubmissions(999).catch(() => []),
     getSubmissionPhotos().catch(() => []),
@@ -125,12 +128,18 @@ export async function aggregatePhotoStats(from: string, to: string, group: StatG
     if (!bucketSet.has(bucket)) continue;
     // Department: header first, then norm-matched path segment.
     const rawDept = header?.DepartmentCode || parsed?.dept || "?";
-    const code = byNorm.get(norm(rawDept)) ?? rawDept;
-    const area = header?.AreaName || "—";
+    const deptCode = byNorm.get(norm(rawDept)) ?? rawDept;
+    const areaName = header?.AreaName || "—";
+    // dim=dept: dòng = phòng ban, chi tiết = khu vực.
+    // dim=area: dòng = KHU VỰC (gộp mọi phòng ban dùng chung), chi tiết = phòng ban.
+    const rowKey = dim === "area" ? areaName : deptCode;
+    const rowName = dim === "area" ? areaName : (nameByCode.get(deptCode) ?? deptCode);
+    const area = dim === "area" ? `${deptCode} · ${nameByCode.get(deptCode) ?? deptCode}` : areaName;
+    const code = rowKey;
 
     let row = rowsMap.get(code);
     if (!row) {
-      row = { code, name: nameByCode.get(code) ?? code, total: 0, byBucket: {}, areas: [], areaMap: new Map() };
+      row = { code, name: rowName, total: 0, byBucket: {}, areas: [], areaMap: new Map() };
       rowsMap.set(code, row);
     }
     row.total += 1;

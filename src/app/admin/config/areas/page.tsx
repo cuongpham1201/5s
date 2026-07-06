@@ -3,272 +3,201 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AdminShell } from "@/components/layout/AdminShell";
 
+interface Area {
+  id: string; code: string; name: string;
+  departmentCode: string; departments: string[];
+  sortOrder: number; isActive: boolean;
+}
 interface Dept { code: string; name: string }
-interface AreaRow { id: string; code: string; name: string; departmentCode: string; sortOrder: number; isActive: boolean }
 
-export default function ConfigAreasPage() {
+/**
+ * Quản lý KHU VỰC (mô hình mới): khu vực là DỮ LIỆU GỐC, mỗi khu vực gán NHIỀU
+ * phòng ban (vd "Văn phòng tầng 2" gồm TCKS + KT + HCNS) → tổng hợp ảnh theo
+ * khu vực xuyên phòng ban. Khu vực cũ (1 khu – 1 phòng) vẫn hoạt động nguyên.
+ */
+export default function AdminAreasPage() {
+  const [areas, setAreas] = useState<Area[]>([]);
   const [depts, setDepts] = useState<Dept[]>([]);
-  const [counts, setCounts] = useState<Record<string, number>>({});
-  const [selected, setSelected] = useState<string | null>(null);
-  const [areas, setAreas] = useState<AreaRow[]>([]);
-  const [loadingDepts, setLoadingDepts] = useState(true);
-  const [loadingAreas, setLoadingAreas] = useState(false);
-  const [search, setSearch] = useState("");
-  const [includeInactive, setIncludeInactive] = useState(false);
-  const [busy, setBusy] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-
-  // add form
-  const [newCode, setNewCode] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [showInactive, setShowInactive] = useState(false);
+  // edit panel state
+  const [editName, setEditName] = useState("");
+  const [editDepts, setEditDepts] = useState<Set<string>>(new Set());
+  // create form
+  const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
-  const [newSort, setNewSort] = useState(0);
+  const [newDepts, setNewDepts] = useState<Set<string>>(new Set());
 
-  const flash = (m: string) => { setMsg(m); setTimeout(() => setMsg(null), 3000); };
-
-  const loadDepts = useCallback(async () => {
-    setLoadingDepts(true);
+  const load = useCallback(async () => {
+    setLoading(true);
     try {
-      const [dr, ar] = await Promise.all([
-        fetch("/api/config/departments").then((r) => (r.ok ? r.json() : null)),
+      const [a, d] = await Promise.all([
         fetch("/api/admin/config/areas").then((r) => (r.ok ? r.json() : null)),
+        fetch("/api/config/departments").then((r) => (r.ok ? r.json() : null)),
       ]);
-      setDepts(dr?.departments ?? []);
-      setCounts(ar?.counts ?? {});
-    } finally {
-      setLoadingDepts(false);
-    }
+      setAreas(a?.areas ?? []);
+      setDepts(d?.departments ?? []);
+    } finally { setLoading(false); }
   }, []);
+  useEffect(() => { void load(); }, [load]);
 
-  const loadAreas = useCallback(async (dept: string) => {
-    setLoadingAreas(true);
-    try {
-      const r = await fetch(`/api/admin/config/areas?departmentCode=${encodeURIComponent(dept)}&includeInactive=true`);
-      const d = r.ok ? await r.json() : null;
-      setAreas(d?.areas ?? []);
-    } finally {
-      setLoadingAreas(false);
-    }
-  }, []);
+  const flash = (ok: string | null, e: string | null) => { setMsg(ok); setErr(e); setTimeout(() => { setMsg(null); setErr(null); }, 4000); };
 
-  useEffect(() => { void loadDepts(); }, [loadDepts]);
-  useEffect(() => { if (selected) void loadAreas(selected); }, [selected, loadAreas]);
+  const selected = useMemo(() => areas.find((a) => a.id === selectedId) ?? null, [areas, selectedId]);
+  useEffect(() => {
+    if (selected) { setEditName(selected.name); setEditDepts(new Set(selected.departments)); }
+  }, [selected]);
 
-  const refresh = async () => {
-    await loadDepts();
-    if (selected) await loadAreas(selected);
+  const shown = useMemo(() => {
+    const t = search.trim().toLowerCase();
+    return areas
+      .filter((a) => showInactive || a.isActive)
+      .filter((a) => !t || a.name.toLowerCase().includes(t) || a.code.toLowerCase().includes(t) || a.departments.some((d) => d.toLowerCase().includes(t)));
+  }, [areas, search, showInactive]);
+
+  const toggleDept = (set: Set<string>, setter: (s: Set<string>) => void, code: string) => {
+    const n = new Set(set);
+    if (n.has(code)) n.delete(code); else n.add(code);
+    setter(n);
   };
 
-  const filteredDepts = useMemo(() => {
-    const t = search.trim().toLowerCase();
-    return depts
-      .filter((d) => !t || d.code.toLowerCase().includes(t) || d.name.toLowerCase().includes(t))
-      .sort((a, b) => a.code.localeCompare(b.code));
-  }, [depts, search]);
-
-  const shownAreas = useMemo(
-    () => (includeInactive ? areas : areas.filter((a) => a.isActive)),
-    [areas, includeInactive],
-  );
-
-  const selectedDept = depts.find((d) => d.code === selected) ?? null;
-  const patch = (id: string, p: Partial<AreaRow>) => setAreas((prev) => prev.map((a) => (a.id === id ? { ...a, ...p } : a)));
-
-  const add = async () => {
+  const saveSelected = async () => {
     if (!selected) return;
-    if (!newCode.trim() || !newName.trim()) return flash("Nhập mã và tên khu vực.");
-    setBusy("add");
+    if (editDepts.size === 0) { flash(null, "Khu vực phải gán ít nhất 1 phòng ban."); return; }
+    setBusy(true);
+    try {
+      const r = await fetch(`/api/admin/config/areas/${selected.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: editName.trim(), departments: [...editDepts] }),
+      });
+      const j = await r.json();
+      if (!r.ok || j.error) { flash(null, j.error ?? "Lỗi"); return; }
+      flash(`Đã lưu "${editName.trim()}" (${editDepts.size} phòng ban).`, null);
+      await load();
+    } finally { setBusy(false); }
+  };
+
+  const toggleActive = async (a: Area) => {
+    setBusy(true);
+    try {
+      const r = a.isActive
+        ? await fetch(`/api/admin/config/areas/${a.id}`, { method: "DELETE" })
+        : await fetch(`/api/admin/config/areas/${a.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ isActive: true }) });
+      const j = await r.json();
+      if (!r.ok || j.error) { flash(null, j.error ?? "Lỗi"); return; }
+      flash(a.isActive ? `Đã ẩn "${a.name}".` : `Đã khôi phục "${a.name}".`, null);
+      await load();
+    } finally { setBusy(false); }
+  };
+
+  const createArea = async () => {
+    if (!newName.trim() || newDepts.size === 0) return;
+    setBusy(true);
     try {
       const r = await fetch("/api/admin/config/areas", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: newCode.trim(), name: newName.trim(), departmentCode: selected, sortOrder: newSort }),
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newName.trim(), departments: [...newDepts] }),
       });
-      const d = await r.json();
-      if (!r.ok) flash(d.error ?? "Lỗi tạo khu vực");
-      else { setNewCode(""); setNewName(""); setNewSort(0); flash("Đã thêm khu vực."); await refresh(); }
-    } finally { setBusy(null); }
+      const j = await r.json();
+      if (!r.ok || j.error) { flash(null, j.error ?? "Tạo thất bại."); return; }
+      flash(`Đã ${j.action === "created" ? "tạo" : "cập nhật"} khu vực "${newName.trim()}" (${newDepts.size} phòng ban).`, null);
+      setCreating(false); setNewName(""); setNewDepts(new Set());
+      await load();
+    } finally { setBusy(false); }
   };
 
-  const save = async (a: AreaRow) => {
-    setBusy(a.id);
-    try {
-      const r = await fetch(`/api/admin/config/areas/${a.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: a.name, sortOrder: a.sortOrder, isActive: a.isActive }),
-      });
-      flash(r.ok ? "Đã lưu." : "Lỗi lưu.");
-      await refresh();
-    } finally { setBusy(null); }
-  };
-
-  const setActive = async (a: AreaRow, isActive: boolean) => {
-    setBusy(a.id);
-    try {
-      const r = isActive
-        ? await fetch(`/api/admin/config/areas/${a.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ isActive: true }) })
-        : await fetch(`/api/admin/config/areas/${a.id}`, { method: "DELETE" });
-      if (r.ok) { flash(isActive ? "Đã khôi phục." : "Đã ẩn (soft delete)."); await refresh(); } else flash("Lỗi cập nhật.");
-    } finally { setBusy(null); }
-  };
-
-  const runSeed = async (path: string, body: object | null, label: string) => {
-    setBusy(label);
-    try {
-      const r = await fetch(path, {
-        method: "POST",
-        headers: body ? { "Content-Type": "application/json" } : undefined,
-        body: body ? JSON.stringify(body) : undefined,
-      });
-      const d = await r.json();
-      if (!r.ok) flash(d.error ?? "Lỗi");
-      else flash(`Tạo: ${d.created?.length ?? 0} · Khôi phục: ${d.restored?.length ?? 0} · Cập nhật: ${d.updated?.length ?? 0}`);
-      await refresh();
-    } finally { setBusy(null); }
-  };
+  const DeptChecks = ({ set, setter }: { set: Set<string>; setter: (s: Set<string>) => void }) => (
+    <div className="grid grid-cols-2 md:grid-cols-3 gap-x-3 gap-y-1.5 max-h-[260px] overflow-y-auto pr-1">
+      {depts.map((d) => (
+        <label key={d.code} className="flex items-center gap-2 text-[12.5px] cursor-pointer">
+          <input type="checkbox" checked={set.has(d.code)} onChange={() => toggleDept(set, setter, d.code)} />
+          <span className="truncate"><b>{d.code}</b> · {d.name}</span>
+        </label>
+      ))}
+    </div>
+  );
 
   return (
     <AdminShell
-      title="Khu vực 5S theo phòng ban"
-      subtitle="Khu vực là nhãn cho watermark/báo cáo — không phải phân quyền (Config_Areas)"
-      actions={
-        <button onClick={() => runSeed("/api/admin/config/areas/seed-office-missing", null, "bulk")} disabled={!!busy} className="btn btn-secondary !min-h-10">
-          {busy === "bulk" ? "Đang tạo…" : "Tạo Văn phòng cho phòng ban chưa có"}
-        </button>
-      }
+      title="Khu vực 5S"
+      subtitle="Khu vực là dữ liệu gốc — một khu vực dùng chung cho nhiều phòng ban (Config_Areas)"
+      actions={<button onClick={() => setCreating((v) => !v)} className="btn btn-primary !min-h-9">{creating ? "Đóng" : "+ Khu vực mới"}</button>}
     >
-      {msg && <div className="mb-4 text-[13px] bg-info-bg text-info px-3.5 py-2.5 rounded-md">{msg}</div>}
+      {msg && <div className="mb-3 rounded-md bg-success-bg text-success px-3.5 py-2.5 text-[13px] font-medium">{msg}</div>}
+      {err && <div className="mb-3 rounded-md bg-danger-bg text-danger px-3.5 py-2.5 text-[13px] font-medium">{err}</div>}
 
-      <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-5">
-        {/* Department selector */}
-        <div className="bg-white rounded-lg border border-line shadow-e2 self-start">
+      {creating && (
+        <div className="bg-white rounded-lg border border-line shadow-e2 p-4 mb-4">
+          <div className="text-[15px] font-semibold mb-2.5">Tạo khu vực mới</div>
+          <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Tên khu vực (vd: Văn phòng tầng 2, Nhà ăn ca...)"
+            className="w-full rounded-md border border-line px-3 py-2 text-[13.5px] mb-3" />
+          <div className="text-[12.5px] font-semibold text-ink-muted mb-1.5">Gán phòng ban sử dụng khu vực này:</div>
+          <DeptChecks set={newDepts} setter={setNewDepts} />
+          <button onClick={createArea} disabled={busy || !newName.trim() || newDepts.size === 0} className="btn btn-primary !min-h-9 mt-3">
+            {busy ? "Đang tạo…" : `Tạo khu vực (${newDepts.size} phòng ban)`}
+          </button>
+        </div>
+      )}
+
+      <div className="grid md:grid-cols-[340px_1fr] gap-4 items-start">
+        {/* Danh sách khu vực gốc */}
+        <div className="bg-white rounded-lg border border-line shadow-e2 overflow-hidden">
           <div className="p-3 border-b border-line">
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tìm phòng ban…" className="w-full rounded-md border border-line px-3 py-2 text-[14px]" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tìm khu vực / phòng ban…"
+              className="w-full rounded-md border border-line px-3 py-2 text-[13px]" />
+            <label className="flex items-center gap-1.5 text-[12px] text-ink-muted mt-2 cursor-pointer">
+              <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} /> Hiện khu vực đã ẩn
+            </label>
           </div>
-          <div className="max-h-[60vh] overflow-y-auto">
-            {loadingDepts ? (
-              <div className="p-5 text-center text-ink-muted text-[13px]">Đang tải…</div>
-            ) : filteredDepts.length === 0 ? (
-              <div className="p-5 text-center text-ink-muted text-[13px]">Không có phòng ban.</div>
-            ) : (
-              filteredDepts.map((d) => {
-                const n = counts[d.code] ?? 0;
-                const on = selected === d.code;
-                return (
-                  <button
-                    key={d.code}
-                    onClick={() => setSelected(d.code)}
-                    className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-left border-b border-line last:border-0 ${on ? "bg-primary-100" : "hover:bg-surface-2"}`}
-                  >
-                    <span className="flex-1 min-w-0">
-                      <span className={`block text-[14px] font-bold leading-tight ${on ? "text-primary-700" : ""}`}>{d.code}</span>
-                      <span className="block text-[12px] text-ink-muted truncate">{d.name}</span>
-                    </span>
-                    <span className={`text-[11px] font-bold px-2 h-6 rounded-pill grid place-items-center flex-none ${n > 0 ? "bg-success-bg text-success" : "bg-danger-bg text-danger"}`}>
-                      {n} khu vực
-                    </span>
-                  </button>
-                );
-              })
-            )}
+          <div className="max-h-[560px] overflow-y-auto">
+            {loading ? (
+              <div className="p-4 text-[13px] text-ink-muted">Đang tải…</div>
+            ) : shown.length === 0 ? (
+              <div className="p-4 text-[13px] text-ink-muted">Không có khu vực.</div>
+            ) : shown.map((a) => (
+              <button key={a.id} onClick={() => setSelectedId(a.id)}
+                className={`w-full text-left px-4 py-2.5 border-b border-line last:border-0 ${selectedId === a.id ? "bg-primary-100" : "hover:bg-surface"} ${a.isActive ? "" : "opacity-50"}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[13.5px] font-semibold truncate">📍 {a.name}</span>
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-pill bg-success-bg text-success flex-none">{a.departments.length} PB</span>
+                </div>
+                <div className="text-[11.5px] text-ink-muted truncate mt-0.5">{a.departments.join(", ") || "(chưa gán)"} {!a.isActive && "· ĐÃ ẨN"}</div>
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* Area management panel */}
-        <div>
+        {/* Panel gán phòng ban */}
+        <div className="bg-white rounded-lg border border-line shadow-e2 p-4 min-h-[200px]">
           {!selected ? (
-            <div className="bg-white rounded-lg border border-line shadow-e2 p-10 text-center text-ink-muted text-[14px]">
-              Chọn một phòng ban ở bên trái để quản lý khu vực.
-            </div>
+            <div className="grid place-items-center h-[160px] text-[13px] text-ink-muted">Chọn một khu vực bên trái để gán phòng ban.</div>
           ) : (
             <>
-              <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-                <div>
-                  <div className="text-[18px] font-bold">{selectedDept?.code}</div>
-                  <div className="text-[13px] text-ink-muted">{selectedDept?.name}</div>
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <div className="min-w-0 flex-1">
+                  <input value={editName} onChange={(e) => setEditName(e.target.value)} className="text-[16px] font-semibold rounded-md border border-line px-2.5 py-1.5 w-full" />
+                  <div className="text-[11.5px] text-ink-muted font-mono mt-1">{selected.code}</div>
                 </div>
-                <div className="flex flex-wrap gap-2.5">
-                  <button onClick={() => runSeed("/api/admin/config/areas/seed-office", { departmentCode: selected }, "office")} disabled={!!busy} className="btn btn-secondary !min-h-9">
-                    {busy === "office" ? "…" : "Tạo khu vực Văn phòng"}
-                  </button>
-                  <button onClick={() => runSeed("/api/admin/config/areas/seed-defaults", { departmentCode: selected }, "defaults")} disabled={!!busy} className="btn btn-secondary !min-h-9">
-                    {busy === "defaults" ? "…" : "Tạo bộ khu vực mẫu"}
-                  </button>
-                </div>
+                <button onClick={() => void toggleActive(selected)} disabled={busy}
+                  className={`btn !min-h-9 flex-none ${selected.isActive ? "btn-danger" : "btn-primary"}`}>
+                  {selected.isActive ? "Ẩn khu vực" : "Khôi phục"}
+                </button>
               </div>
-
-              {/* Add form */}
-              <div className="bg-white rounded-lg border border-line shadow-e2 p-4 mb-4">
-                <div className="text-[14px] font-semibold mb-2">Thêm khu vực cho {selected}</div>
-                <div className="flex flex-wrap gap-2.5">
-                  <input value={newCode} onChange={(e) => setNewCode(e.target.value)} placeholder={`Mã (vd ${selected}_LINE1)`} className="rounded-md border border-line-strong px-3 py-2 text-[14px] flex-1 min-w-[150px]" />
-                  <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Tên khu vực" className="rounded-md border border-line-strong px-3 py-2 text-[14px] flex-1 min-w-[150px]" />
-                  <input type="number" value={newSort} onChange={(e) => setNewSort(Number(e.target.value))} className="rounded-md border border-line-strong px-3 py-2 text-[14px] w-20" />
-                  <button onClick={add} disabled={busy === "add"} className="btn btn-primary !min-h-10">{busy === "add" ? "…" : "Thêm"}</button>
-                </div>
+              <div className="text-[12.5px] font-semibold text-ink-muted mb-1.5">
+                Phòng ban sử dụng khu vực này ({editDepts.size}):
               </div>
-
-              {/* Areas list */}
-              <div className="bg-white rounded-lg border border-line shadow-e2 overflow-x-auto">
-                <div className="flex items-center justify-between px-5 py-4 border-b border-line">
-                  <span className="text-[16px] font-semibold">Khu vực ({shownAreas.length})</span>
-                  <label className="flex items-center gap-2 text-[13px] text-ink-muted cursor-pointer">
-                    <input type="checkbox" checked={includeInactive} onChange={(e) => setIncludeInactive(e.target.checked)} />
-                    Hiện cả khu vực đã ẩn
-                  </label>
-                </div>
-                {loadingAreas ? (
-                  <div className="p-6 text-center text-ink-muted text-[14px]">Đang tải…</div>
-                ) : shownAreas.length === 0 ? (
-                  <div className="p-8 text-center">
-                    <div className="text-[15px] font-semibold text-ink">Phòng ban này chưa có khu vực chụp.</div>
-                    <div className="text-[13px] text-ink-muted mt-1 mb-4">Tạo nhanh khu vực Văn phòng để mở khoá chức năng chụp.</div>
-                    <button onClick={() => runSeed("/api/admin/config/areas/seed-office", { departmentCode: selected }, "office")} disabled={!!busy} className="btn btn-primary !min-h-10">
-                      {busy === "office" ? "Đang tạo…" : "Tạo khu vực Văn phòng"}
-                    </button>
-                  </div>
-                ) : (
-                  <table className="w-full border-collapse text-[14px]">
-                    <thead>
-                      <tr className="text-left text-[12px] uppercase tracking-wide text-ink-muted">
-                        <th className="px-4 py-3 border-b border-line">Mã</th>
-                        <th className="px-4 py-3 border-b border-line">Tên</th>
-                        <th className="px-4 py-3 border-b border-line w-20">Thứ tự</th>
-                        <th className="px-4 py-3 border-b border-line w-24">Trạng thái</th>
-                        <th className="px-4 py-3 border-b border-line w-44">Thao tác</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {shownAreas.map((a) => (
-                        <tr key={a.id} className={a.isActive ? "" : "opacity-60"}>
-                          <td className="px-4 py-2.5 border-b border-line font-mono text-[12px]">{a.code}</td>
-                          <td className="px-4 py-2.5 border-b border-line">
-                            <input value={a.name} onChange={(e) => patch(a.id, { name: e.target.value })} className="rounded-md border border-line px-2 py-1.5 w-full" />
-                          </td>
-                          <td className="px-4 py-2.5 border-b border-line">
-                            <input type="number" value={a.sortOrder} onChange={(e) => patch(a.id, { sortOrder: Number(e.target.value) })} className="rounded-md border border-line px-2 py-1.5 w-16" />
-                          </td>
-                          <td className="px-4 py-2.5 border-b border-line">
-                            <span className={`text-[11px] font-bold px-2 h-6 rounded-pill grid place-items-center w-fit ${a.isActive ? "bg-success-bg text-success" : "bg-ink-muted/15 text-ink-muted"}`}>
-                              {a.isActive ? "Hoạt động" : "Đã ẩn"}
-                            </span>
-                          </td>
-                          <td className="px-4 py-2.5 border-b border-line">
-                            <div className="flex gap-2">
-                              <button onClick={() => save(a)} disabled={busy === a.id} className="btn btn-secondary !min-h-8 !px-3 text-[13px]">Lưu</button>
-                              {a.isActive ? (
-                                <button onClick={() => setActive(a, false)} disabled={busy === a.id} className="btn btn-ghost !min-h-8 !px-3 text-[13px] text-danger">Ẩn</button>
-                              ) : (
-                                <button onClick={() => setActive(a, true)} disabled={busy === a.id} className="btn btn-ghost !min-h-8 !px-3 text-[13px] text-success">Khôi phục</button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
+              <DeptChecks set={editDepts} setter={setEditDepts} />
+              <button onClick={saveSelected} disabled={busy || !editName.trim() || editDepts.size === 0} className="btn btn-primary !min-h-9 mt-3">
+                {busy ? "Đang lưu…" : "Lưu thay đổi"}
+              </button>
+              <p className="text-[11.5px] text-ink-muted mt-2.5">
+                Nhân viên các phòng ban được gán sẽ thấy khu vực này khi chuẩn bị chụp. Ảnh cũ không bị ảnh hưởng.
+              </p>
             </>
           )}
         </div>
