@@ -248,6 +248,30 @@ export async function listAreasByDepartmentAdmin(
     .sort((x, y) => Number(y.isActive) - Number(x.isActive) || x.sortOrder - y.sortOrder);
 }
 
+/**
+ * Số lần khu vực đã được dùng (Data_Submissions.AreaCode) — chốt an toàn cho
+ * xóa vĩnh viễn: khu vực ĐÃ CÓ ẢNH thì chỉ được Ẩn, không được xóa.
+ */
+export async function countAreaUsage(areaCode: string): Promise<number> {
+  const { getSubmissions } = await import("./submission-service");
+  const subs = await getSubmissions(999).catch(() => []);
+  return subs.filter((x) => x.AreaCode === areaCode).length;
+}
+
+/**
+ * HARD delete — chỉ cho khu vực CHƯA từng có lần gửi nào (usage = 0).
+ * Khu vực đã dùng: ném lỗi hướng dẫn dùng "Ẩn" (soft delete) thay thế.
+ */
+export async function hardDeleteArea(id: string, areaCode: string): Promise<void> {
+  const used = await countAreaUsage(areaCode);
+  if (used > 0) {
+    throw new Error(`Khu vực đã có ${used} lần gửi ảnh — không thể xóa vĩnh viễn. Hãy dùng "Ẩn khu vực" (dữ liệu cũ được giữ nguyên).`);
+  }
+  const { client, siteId, listId } = await ctx();
+  if (!listId) throw new Error("Chưa có list Config_Areas.");
+  await client.del(`/sites/${siteId}/lists/${listId}/items/${id}`);
+}
+
 /** Soft delete — sets IsActive=false (never removes the row). */
 export async function deactivateArea(id: string): Promise<void> {
   const { client, siteId, listId } = await ctx();

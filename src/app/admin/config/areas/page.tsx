@@ -82,6 +82,19 @@ export default function AdminAreasPage() {
     } finally { setBusy(false); }
   };
 
+  const hardDelete = async (a: Area) => {
+    if (!window.confirm(`Xóa VĨNH VIỄN khu vực "${a.name}"?\nChỉ xóa được khi khu vực chưa có lần gửi ảnh nào.`)) return;
+    setBusy(true);
+    try {
+      const r = await fetch(`/api/admin/config/areas/${a.id}?hard=true&code=${encodeURIComponent(a.code)}`, { method: "DELETE" });
+      const j = await r.json();
+      if (!r.ok || j.error) { flash(null, j.error ?? "Không xóa được."); return; }
+      flash(`Đã xóa vĩnh viễn "${a.name}".`, null);
+      setSelectedId(null);
+      await load();
+    } finally { setBusy(false); }
+  };
+
   const toggleActive = async (a: Area) => {
     setBusy(true);
     try {
@@ -178,15 +191,21 @@ export default function AdminAreasPage() {
             <div className="grid place-items-center h-[160px] text-[13px] text-ink-muted">Chọn một khu vực bên trái để gán phòng ban.</div>
           ) : (
             <>
-              <div className="flex items-center justify-between gap-2 mb-3">
+              <div className="flex items-start justify-between gap-2 mb-3">
                 <div className="min-w-0 flex-1">
-                  <input value={editName} onChange={(e) => setEditName(e.target.value)} className="text-[16px] font-semibold rounded-md border border-line px-2.5 py-1.5 w-full" />
+                  <label className="text-[12px] font-semibold text-ink-muted">Tên khu vực (sửa rồi bấm Lưu)</label>
+                  <input value={editName} onChange={(e) => setEditName(e.target.value)} className="text-[16px] font-semibold rounded-md border border-line px-2.5 py-1.5 w-full mt-1" />
                   <div className="text-[11.5px] text-ink-muted font-mono mt-1">{selected.code}</div>
                 </div>
-                <button onClick={() => void toggleActive(selected)} disabled={busy}
-                  className={`btn !min-h-9 flex-none ${selected.isActive ? "btn-danger" : "btn-primary"}`}>
-                  {selected.isActive ? "Ẩn khu vực" : "Khôi phục"}
-                </button>
+                <div className="flex flex-col gap-1.5 flex-none">
+                  <button onClick={() => void toggleActive(selected)} disabled={busy}
+                    className={`btn !min-h-9 ${selected.isActive ? "btn-secondary" : "btn-primary"}`}>
+                    {selected.isActive ? "Ẩn khu vực" : "Khôi phục"}
+                  </button>
+                  <button onClick={() => void hardDelete(selected)} disabled={busy} className="btn btn-danger !min-h-9">
+                    🗑 Xóa vĩnh viễn
+                  </button>
+                </div>
               </div>
               <div className="text-[12.5px] font-semibold text-ink-muted mb-1.5">
                 Phòng ban sử dụng khu vực này ({editDepts.size}):
