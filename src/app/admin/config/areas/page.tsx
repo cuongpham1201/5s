@@ -10,6 +10,19 @@ interface Area {
 }
 interface Dept { code: string; name: string }
 
+function DeptChecks({ depts, set, onToggle }: { depts: Dept[]; set: Set<string>; onToggle: (code: string) => void }) {
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-3 gap-x-3 gap-y-1.5 max-h-[260px] overflow-y-auto pr-1">
+      {depts.map((d) => (
+        <label key={d.code} className="flex items-center gap-2 text-[12.5px] cursor-pointer">
+          <input type="checkbox" checked={set.has(d.code)} onChange={() => onToggle(d.code)} />
+          <span className="truncate"><b>{d.code}</b> · {d.name}</span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
 /**
  * Quản lý KHU VỰC (mô hình mới): khu vực là DỮ LIỆU GỐC, mỗi khu vực gán NHIỀU
  * phòng ban (vd "Văn phòng tầng 2" gồm TCKS + KT + HCNS) → tổng hợp ảnh theo
@@ -82,6 +95,22 @@ export default function AdminAreasPage() {
     } finally { setBusy(false); }
   };
 
+  const quickRename = async (a: Area) => {
+    const name = window.prompt(`Đổi tên khu vực "${a.name}" thành:`, a.name);
+    if (name === null || !name.trim() || name.trim() === a.name) return;
+    setBusy(true);
+    try {
+      const r = await fetch(`/api/admin/config/areas/${a.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim() }),
+      });
+      const j = await r.json();
+      if (!r.ok || j.error) { flash(null, j.error ?? "Đổi tên thất bại."); return; }
+      flash(`Đã đổi tên "${a.name}" → "${name.trim()}".`, null);
+      await load();
+    } finally { setBusy(false); }
+  };
+
   const hardDelete = async (a: Area) => {
     if (!window.confirm(`Xóa VĨNH VIỄN khu vực "${a.name}"?\nChỉ xóa được khi khu vực chưa có lần gửi ảnh nào.`)) return;
     setBusy(true);
@@ -124,17 +153,6 @@ export default function AdminAreasPage() {
     } finally { setBusy(false); }
   };
 
-  const DeptChecks = ({ set, setter }: { set: Set<string>; setter: (s: Set<string>) => void }) => (
-    <div className="grid grid-cols-2 md:grid-cols-3 gap-x-3 gap-y-1.5 max-h-[260px] overflow-y-auto pr-1">
-      {depts.map((d) => (
-        <label key={d.code} className="flex items-center gap-2 text-[12.5px] cursor-pointer">
-          <input type="checkbox" checked={set.has(d.code)} onChange={() => toggleDept(set, setter, d.code)} />
-          <span className="truncate"><b>{d.code}</b> · {d.name}</span>
-        </label>
-      ))}
-    </div>
-  );
-
   return (
     <AdminShell
       title="Khu vực 5S"
@@ -150,7 +168,7 @@ export default function AdminAreasPage() {
           <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Tên khu vực (vd: Văn phòng tầng 2, Nhà ăn ca...)"
             className="w-full rounded-md border border-line px-3 py-2 text-[13.5px] mb-3" />
           <div className="text-[12.5px] font-semibold text-ink-muted mb-1.5">Gán phòng ban sử dụng khu vực này:</div>
-          <DeptChecks set={newDepts} setter={setNewDepts} />
+          <DeptChecks depts={depts} set={newDepts} onToggle={(c) => toggleDept(newDepts, setNewDepts, c)} />
           <button onClick={createArea} disabled={busy || !newName.trim() || newDepts.size === 0} className="btn btn-primary !min-h-9 mt-3">
             {busy ? "Đang tạo…" : `Tạo khu vực (${newDepts.size} phòng ban)`}
           </button>
@@ -173,14 +191,21 @@ export default function AdminAreasPage() {
             ) : shown.length === 0 ? (
               <div className="p-4 text-[13px] text-ink-muted">Không có khu vực.</div>
             ) : shown.map((a) => (
-              <button key={a.id} onClick={() => setSelectedId(a.id)}
-                className={`w-full text-left px-4 py-2.5 border-b border-line last:border-0 ${selectedId === a.id ? "bg-primary-100" : "hover:bg-surface"} ${a.isActive ? "" : "opacity-50"}`}>
+              <div key={a.id} onClick={() => setSelectedId(a.id)}
+                className={`w-full text-left px-4 py-2.5 border-b border-line last:border-0 cursor-pointer ${selectedId === a.id ? "bg-primary-100" : "hover:bg-surface"} ${a.isActive ? "" : "opacity-50"}`}>
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[13.5px] font-semibold truncate">📍 {a.name}</span>
-                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-pill bg-success-bg text-success flex-none">{a.departments.length} PB</span>
+                  <span className="flex items-center gap-1.5 flex-none">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); void quickRename(a); }}
+                      title="Đổi tên khu vực"
+                      className="w-6 h-6 grid place-items-center rounded hover:bg-line text-[13px]"
+                    >✏️</button>
+                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-pill bg-success-bg text-success">{a.departments.length} PB</span>
+                  </span>
                 </div>
                 <div className="text-[11.5px] text-ink-muted truncate mt-0.5">{a.departments.join(", ") || "(chưa gán)"} {!a.isActive && "· ĐÃ ẨN"}</div>
-              </button>
+              </div>
             ))}
           </div>
         </div>
@@ -210,7 +235,7 @@ export default function AdminAreasPage() {
               <div className="text-[12.5px] font-semibold text-ink-muted mb-1.5">
                 Phòng ban sử dụng khu vực này ({editDepts.size}):
               </div>
-              <DeptChecks set={editDepts} setter={setEditDepts} />
+              <DeptChecks depts={depts} set={editDepts} onToggle={(c) => toggleDept(editDepts, setEditDepts, c)} />
               <button onClick={saveSelected} disabled={busy || !editName.trim() || editDepts.size === 0} className="btn btn-primary !min-h-9 mt-3">
                 {busy ? "Đang lưu…" : "Lưu thay đổi"}
               </button>
