@@ -137,6 +137,18 @@ export default function AdminAreasPage() {
     } finally { setBusy(false); }
   };
 
+  const normalize = async () => {
+    if (!window.confirm("Gộp tất cả khu vực TRÙNG TÊN thành một khu vực chung?\n- Khu vực gốc mới sẽ gán đủ các phòng ban liên quan\n- Các bản trùng bị ẨN (không xóa, ảnh cũ giữ nguyên)")) return;
+    setBusy(true);
+    try {
+      const r = await fetch("/api/admin/config/areas/normalize", { method: "POST" });
+      const j = await r.json();
+      if (!r.ok || j.error) { flash(null, j.error ?? "Gộp thất bại."); return; }
+      flash(j.merged === 0 ? "Không có khu vực trùng tên để gộp." : `Đã gộp ${j.merged} nhóm: ${j.groups.map((g: { name: string; departments: string[] }) => `"${g.name}" (${g.departments.length} PB)`).join(", ")}.`, null);
+      await load();
+    } finally { setBusy(false); }
+  };
+
   const createArea = async () => {
     if (!newName.trim() || newDepts.size === 0) return;
     setBusy(true);
@@ -157,7 +169,12 @@ export default function AdminAreasPage() {
     <AdminShell
       title="Khu vực 5S"
       subtitle="Khu vực là dữ liệu gốc — một khu vực dùng chung cho nhiều phòng ban (Config_Areas)"
-      actions={<button onClick={() => setCreating((v) => !v)} className="btn btn-primary !min-h-9">{creating ? "Đóng" : "+ Khu vực mới"}</button>}
+      actions={
+        <span className="flex gap-2">
+          <button onClick={() => void normalize()} disabled={busy} className="btn btn-secondary !min-h-9">🔀 Gộp khu vực trùng tên</button>
+          <button onClick={() => setCreating((v) => !v)} className="btn btn-primary !min-h-9">{creating ? "Đóng" : "+ Khu vực mới"}</button>
+        </span>
+      }
     >
       {msg && <div className="mb-3 rounded-md bg-success-bg text-success px-3.5 py-2.5 text-[13px] font-medium">{msg}</div>}
       {err && <div className="mb-3 rounded-md bg-danger-bg text-danger px-3.5 py-2.5 text-[13px] font-medium">{err}</div>}

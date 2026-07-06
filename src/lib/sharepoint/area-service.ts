@@ -176,6 +176,64 @@ export async function createMasterArea(
   });
 }
 
+/** Chuẩn hóa tên để gộp: bỏ dấu, thường hóa, gọn khoảng trắng. */
+function normName(s: string): string {
+  return normalizeText(s).toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+export interface NormalizeResult {
+  groups: Array<{ name: string; master: string; departments: string[]; hidden: string[] }>;
+}
+
+/**
+ * GỘP các khu vực ACTIVE trùng tên (chuẩn hóa):
+ *  - mỗi nhóm ≥2 khu vực cùng tên → upsert 1 khu vực GỐC KV_<slug> với
+ *    Departments = HỢP các phòng ban của cả nhóm
+ *  - ẨN (IsActive=false) các bản trùng còn lại — KHÔNG xóa, ảnh cũ giữ nguyên
+ *    (báo cáo theo khu vực gộp theo TÊN nên lịch sử tự về chung một dòng).
+ * Idempotent: chạy lại không đổi gì thêm.
+ */
+export async function normalizeDuplicateAreas(): Promise<NormalizeResult> {
+  const { client, siteId, listId } = await ctx();
+  if (!listId) throw new Error("Chưa có list Config_Areas.");
+  const items = await readAreaItems(client, siteId, listId);
+  const rows = items
+    .map((it) => ({ id: it.id, rec: mapArea(it.fields) }))
+    .filter((x) => x.rec.AreaCode && x.rec.IsActive);
+  const groups = new Map<string, typeof rows>();
+  for (const r of rows) {
+    const k = normName(r.rec.AreaName);
+    if (!k) continue;
+    const g = groups.get(k) ?? [];
+    g.push(r);
+    groups.set(k, g);
+  }
+  const out: NormalizeResult["groups"] = [];
+  for (const members of groups.values()) {
+    if (members.length < 2) continue;
+    const displayName = members[0].rec.AreaName.trim();
+    const masterCode = generateMasterAreaCode(displayName);
+    const deptUnion = new Set<string>();
+    for (const m of members) for (const d of effectiveDepts(m.rec)) deptUnion.add(d);
+    await upsertAreaByCode({
+      code: masterCode,
+      name: displayName,
+      departmentCode: [...deptUnion][0] ?? "",
+      departments: [...deptUnion],
+      sortOrder: 0,
+      isActive: true,
+    });
+    const hidden: string[] = [];
+    for (const m of members) {
+      if (m.rec.AreaCode === masterCode) continue;
+      await client.patch(`/sites/${siteId}/lists/${listId}/items/${m.id}/fields`, { IsActive: false });
+      hidden.push(m.rec.AreaCode);
+    }
+    out.push({ name: displayName, master: masterCode, departments: [...deptUnion], hidden });
+  }
+  return { groups: out };
+}
+
 // ---- ADMIN (read all + write) ----
 
 /** All areas incl. inactive, with item id — for admin management. */
