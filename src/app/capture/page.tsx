@@ -19,6 +19,7 @@ export default function CapturePage() {
   const [loading, setLoading] = useState(true);
   const [areasLoading, setAreasLoading] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
+  const [selectedChild, setSelectedChild] = useState<string | null>(null);
 
   // add-area form (ADMIN ONLY — regular users must ask an admin)
   const [isAdmin, setIsAdmin] = useState(false);
@@ -60,6 +61,9 @@ export default function CapturePage() {
     else setAreas([]);
   }, [department, loadAreas]);
 
+  const groups = useMemo(() => areas.filter((a) => !a.parentCode), [areas]);
+  const childrenOfSelected = useMemo(() => areas.filter((a) => a.parentCode === selected), [areas, selected]);
+  useEffect(() => { setSelectedChild(childrenOfSelected[0]?.code ?? null); }, [selected, childrenOfSelected]);
   const selectedArea = useMemo(() => areas.find((a) => a.code === selected) ?? null, [areas, selected]);
 
   // Load applicable checklist whenever the selected area changes.
@@ -109,7 +113,12 @@ export default function CapturePage() {
   );
 
   const begin = () => {
-    const area = areas.find((a) => a.code === selected);
+    const group = areas.find((a) => a.code === selected);
+    const child = selectedChild ? areas.find((a) => a.code === selectedChild) : null;
+    // Nhóm có khu con → chụp ở KHU CON (tên đầy đủ "Nhóm - Con" cho watermark/báo cáo).
+    const area = child
+      ? { ...child, name: `${group?.name ?? ""} - ${child.name}`.replace(/^ - /, "") }
+      : group;
     if (!area || !department) return;
     const checkItemCode = selectedCheckList.map((c) => c.code).join(",") || undefined;
     const checkItemName = selectedCheckList.map((c) => c.name).join(", ") || undefined;
@@ -203,7 +212,7 @@ export default function CapturePage() {
               )
             ) : (
               <div className="grid grid-cols-2 gap-3">
-                {areas.map((a) => {
+                {groups.map((a) => {
                   const isSel = selected === a.code;
                   return (
                     <button
@@ -218,6 +227,23 @@ export default function CapturePage() {
                   );
                 })}
               </div>
+            )}
+
+            {/* Vị trí cụ thể trong nhóm (khu vực con) */}
+            {childrenOfSelected.length > 0 && (
+              <>
+                <label className="block mt-4 text-[13px] font-semibold text-ink-muted">
+                  Vị trí cụ thể trong {selectedArea?.name ?? "khu vực"} <span className="text-danger">*</span>
+                </label>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {childrenOfSelected.map((c) => (
+                    <button key={c.code} onClick={() => setSelectedChild(c.code)}
+                      className={`px-3.5 py-2.5 rounded-pill border-[1.5px] text-[14px] font-semibold ${selectedChild === c.code ? "border-primary-600 bg-primary-100 text-primary-700" : "border-line bg-white"}`}>
+                      📍 {c.name}
+                    </button>
+                  ))}
+                </div>
+              </>
             )}
 
             {/* Check item (hạng mục 5S) selection */}

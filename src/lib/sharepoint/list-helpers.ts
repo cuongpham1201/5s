@@ -89,6 +89,7 @@ export function mapArea(f: GraphListItemFields): AreaRecord {
     AreaName: str(f, "AreaName"),
     DepartmentCode: str(f, "DepartmentCode"),
     Departments: strOrNull(f, "Departments"),
+    ParentCode: strOrNull(f, "ParentCode"),
     IsActive: bool(f, "IsActive"),
     SortOrder: num(f, "SortOrder"),
   };

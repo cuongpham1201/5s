@@ -20,6 +20,10 @@ export interface AreaOption {
   departmentCode: string;
   /** Mô hình mới: TẤT CẢ phòng ban được gán khu vực này. */
   departments: string[];
+  /** Khu vực CON: mã nhóm cha; null = nhóm/độc lập. */
+  parentCode: string | null;
+  /** Con có Departments RIÊNG (không kế thừa nhóm). */
+  hasOwnDepartments?: boolean;
   sortOrder: number;
 }
 
@@ -42,6 +46,8 @@ export interface AreaInput {
   departmentCode: string;
   /** Danh sách mã phòng ban được gán (ghi vào cột Departments dạng CSV). */
   departments?: string[];
+  /** Mã nhóm cha (khu vực con). */
+  parentCode?: string | null;
   sortOrder?: number;
   isActive?: boolean;
 }
@@ -75,26 +81,32 @@ async function readAreas(): Promise<AreaRecord[]> {
 
 export async function listActiveAreas(): Promise<AreaOption[]> {
   const areas = await readAreas();
+  const byCode = new Map(areas.map((a) => [a.AreaCode, a]));
   return areas
     .filter((a) => a.AreaCode && a.IsActive)
-    .map((a) => ({ code: a.AreaCode, name: a.AreaName, departmentCode: a.DepartmentCode, departments: effectiveDepts(a), sortOrder: a.SortOrder }))
-    .sort((x, y) => x.sortOrder - y.sortOrder);
+    .map((a) => {
+      const own = (a.Departments ?? "").trim().length > 0;
+      // Khu vực CON không gán riêng → KẾ THỪA phòng ban của nhóm cha.
+      const parent = a.ParentCode ? byCode.get(a.ParentCode) : undefined;
+      const departments = own || !parent ? effectiveDepts(a) : effectiveDepts(parent);
+      return {
+        code: a.AreaCode, name: a.AreaName, departmentCode: a.DepartmentCode,
+        departments, parentCode: a.ParentCode ?? null, hasOwnDepartments: own,
+        sortOrder: a.SortOrder,
+      };
+    })
+    .sort((x, y) => x.sortOrder - y.sortOrder || x.name.localeCompare(y.name, "vi"));
 }
 
 export async function listAreasByDepartmentCode(
   departmentCode: string,
   includeInactive = false,
 ): Promise<AreaOption[]> {
-  // Khu vực áp dụng cho phòng X = Departments chứa X (fallback legacy DepartmentCode).
-  if (!includeInactive) {
-    const all = await listActiveAreas();
-    return all.filter((a) => a.departments.includes(departmentCode)).sort((x, y) => x.sortOrder - y.sortOrder);
-  }
-  const areas = await readAreas();
-  return areas
-    .filter((a) => a.AreaCode && effectiveDepts(a).includes(departmentCode))
-    .map((a) => ({ code: a.AreaCode, name: a.AreaName, departmentCode: a.DepartmentCode, departments: effectiveDepts(a), sortOrder: a.SortOrder }))
-    .sort((x, y) => x.sortOrder - y.sortOrder);
+  // Khu vực áp dụng cho phòng X = Departments (kế thừa nhóm với khu con) chứa X.
+  const all = await listActiveAreas();
+  const mine = all.filter((a) => a.departments.includes(departmentCode));
+  if (!includeInactive) return mine.sort((x, y) => x.sortOrder - y.sortOrder);
+  return mine; // admin path dùng listAllAreasAdmin cho inactive
 }
 
 /** Map of DepartmentCode -> count of ACTIVE areas (for the admin selector). */
@@ -147,7 +159,7 @@ export async function createAreaForDepartment(
   });
   return {
     action: res.action,
-    area: { code, name: areaName.trim(), departmentCode, departments: [departmentCode], sortOrder: sortOrder ?? 0 },
+    area: { code, name: areaName.trim(), departmentCode, departments: [departmentCode], parentCode: null, sortOrder: sortOrder ?? 0 },
   };
 }
 
@@ -234,6 +246,38 @@ export async function normalizeDuplicateAreas(): Promise<NormalizeResult> {
   return { groups: out };
 }
 
+/** Tạo khu vực CON trong một nhóm (mã <parent>_<slug>, idempotent). */
+export async function createChildArea(
+  parentCode: string,
+  childName: string,
+): Promise<{ action: "created" | "updated" | "restored"; code: string }> {
+  const slug = normalizeText(childName).toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  const code = `${parentCode}_${slug || "KHU_CON"}`;
+  return upsertAreaByCode({
+    code,
+    name: childName.trim(),
+    departmentCode: "",
+    departments: [], // trống = KẾ THỪA phòng ban của nhóm
+    parentCode,
+    sortOrder: 0,
+    isActive: true,
+  });
+}
+
+/** Map mã khu vực → TÊN NHÓM (con → tên cha; nhóm/độc lập → tên chính nó).
+ *  Gồm cả khu vực đã ẩn để ảnh lịch sử vẫn quy đúng nhóm. */
+export async function areaGroupNameMap(): Promise<Map<string, string>> {
+  const areas = await readAreas();
+  const byCode = new Map(areas.map((a) => [a.AreaCode, a]));
+  const out = new Map<string, string>();
+  for (const a of areas) {
+    if (!a.AreaCode) continue;
+    const parent = a.ParentCode ? byCode.get(a.ParentCode) : undefined;
+    out.set(a.AreaCode, (parent?.AreaName ?? a.AreaName).trim());
+  }
+  return out;
+}
+
 // ---- ADMIN (read all + write) ----
 
 /** All areas incl. inactive, with item id — for admin management. */
@@ -250,6 +294,8 @@ export async function listAllAreasAdmin(): Promise<AreaAdminRow[]> {
       name: rec.AreaName,
       departmentCode: rec.DepartmentCode,
       departments: effectiveDepts(rec),
+      parentCode: rec.ParentCode ?? null,
+      hasOwnDepartments: (rec.Departments ?? "").trim().length > 0,
       sortOrder: rec.SortOrder,
       isActive: rec.IsActive,
     }))
@@ -266,6 +312,7 @@ export async function createArea(input: AreaInput): Promise<AreaAdminRow> {
       AreaName: input.name,
       DepartmentCode: input.departmentCode,
       Departments: (input.departments ?? (input.departmentCode ? [input.departmentCode] : [])).join(","),
+      ParentCode: input.parentCode ?? "",
       IsActive: input.isActive ?? true,
       SortOrder: input.sortOrder ?? 0,
     },
@@ -276,6 +323,7 @@ export async function createArea(input: AreaInput): Promise<AreaAdminRow> {
     name: input.name,
     departmentCode: input.departmentCode,
     departments: input.departments ?? (input.departmentCode ? [input.departmentCode] : []),
+    parentCode: input.parentCode ?? null,
     sortOrder: input.sortOrder ?? 0,
     isActive: input.isActive ?? true,
   };
@@ -288,6 +336,7 @@ export async function updateArea(id: string, input: Partial<AreaInput>): Promise
   if (input.name !== undefined) fields.AreaName = input.name;
   if (input.departmentCode !== undefined) fields.DepartmentCode = input.departmentCode;
   if (input.departments !== undefined) fields.Departments = [...new Set(input.departments.map((x) => x.trim()).filter(Boolean))].join(",");
+  if (input.parentCode !== undefined) fields.ParentCode = input.parentCode ?? "";
   if (input.sortOrder !== undefined) fields.SortOrder = input.sortOrder;
   if (input.isActive !== undefined) fields.IsActive = input.isActive;
   if (Object.keys(fields).length === 0) return;

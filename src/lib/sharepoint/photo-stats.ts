@@ -7,6 +7,7 @@
  */
 import { getSubmissions, getSubmissionPhotos } from "./submission-service";
 import { listActiveDepartments } from "./department-service";
+import { areaGroupNameMap } from "./area-service";
 import { vnDateKey } from "./report-service";
 
 export type StatGroup = "day" | "week" | "month";
@@ -96,10 +97,11 @@ export function parseStatParams(sp: URLSearchParams): { from: string; to: string
 }
 
 export async function aggregatePhotoStats(from: string, to: string, group: StatGroup, type: StatType = "all", dim: StatDim = "dept"): Promise<PhotoStats> {
-  const [subs, photos, active] = await Promise.all([
+  const [subs, photos, active, groupMap] = await Promise.all([
     getSubmissions(999).catch(() => []),
     getSubmissionPhotos().catch(() => []),
     listActiveDepartments().catch(() => []),
+    areaGroupNameMap().catch(() => new Map<string, string>()),
   ]);
   const headerById = new Map(subs.map((s) => [s.SubmissionId, s]));
   const nameByCode = new Map(active.map((d) => [d.code, d.name]));
@@ -130,11 +132,16 @@ export async function aggregatePhotoStats(from: string, to: string, group: StatG
     const rawDept = header?.DepartmentCode || parsed?.dept || "?";
     const deptCode = byNorm.get(norm(rawDept)) ?? rawDept;
     const areaName = header?.AreaName || "—";
-    // dim=dept: dòng = phòng ban, chi tiết = khu vực.
-    // dim=area: dòng = KHU VỰC (gộp mọi phòng ban dùng chung), chi tiết = phòng ban.
-    const rowKey = dim === "area" ? areaName : deptCode;
-    const rowName = dim === "area" ? areaName : (nameByCode.get(deptCode) ?? deptCode);
-    const area = dim === "area" ? `${deptCode} · ${nameByCode.get(deptCode) ?? deptCode}` : areaName;
+    // NHÓM khu vực: khu con quy về tên nhóm cha (2 cấp); khu độc lập = chính nó;
+    // ảnh cũ không có trong config → dùng AreaName lưu trên header.
+    const groupName = (header?.AreaCode && groupMap.get(header.AreaCode)) || areaName;
+    // dim=dept: dòng = phòng ban, chi tiết = khu vực (tên nhóm).
+    // dim=area: dòng = NHÓM KHU VỰC (gộp mọi phòng ban), chi tiết = phòng ban · vị trí.
+    const rowKey = dim === "area" ? groupName : deptCode;
+    const rowName = dim === "area" ? groupName : (nameByCode.get(deptCode) ?? deptCode);
+    const area = dim === "area"
+      ? `${deptCode}${areaName !== groupName ? ` · ${areaName}` : ""}`
+      : groupName;
     const code = rowKey;
 
     let row = rowsMap.get(code);

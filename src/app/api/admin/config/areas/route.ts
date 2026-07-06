@@ -6,6 +6,7 @@ import {
   countAreasByDepartment,
   createArea,
   createMasterArea,
+  createChildArea,
   type AreaInput,
 } from "@/lib/sharepoint/area-service";
 
@@ -43,6 +44,15 @@ export async function POST(req: NextRequest) {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "invalid body" }, { status: 400 });
+  }
+  // Khu vực 2 cấp: tạo KHU VỰC CON trong một nhóm {name, parentCode}.
+  if (!body.code && body.name?.trim() && typeof (body as { parentCode?: string }).parentCode === "string" && (body as { parentCode?: string }).parentCode) {
+    try {
+      const r = await createChildArea((body as { parentCode: string }).parentCode, body.name.trim());
+      return NextResponse.json({ ok: true, ...r });
+    } catch (e) {
+      return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+    }
   }
   // Mô hình mới: tạo KHU VỰC GỐC — chỉ cần name + departments[] (mã sinh tự động).
   if (!body.code && body.name?.trim() && Array.isArray(body.departments)) {

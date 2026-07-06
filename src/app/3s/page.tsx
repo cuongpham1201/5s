@@ -8,7 +8,7 @@ import { useSessionCapture } from "@/features/capture/session-context";
 import { fetchMe } from "@/lib/client/me-cache";
 import type { MeResponse } from "@/lib/graph/graph-types";
 
-interface AreaOption { code: string; name: string }
+interface AreaOption { code: string; name: string; parentCode?: string | null }
 
 /**
  * Thực hành 3S (M1 · HD-01) — LỐI VÀO RIÊNG, tách khỏi luồng "chụp ảnh hàng
@@ -24,6 +24,7 @@ export default function ThreeSPage() {
   const [areas, setAreas] = useState<AreaOption[]>([]);
   const [areasLoading, setAreasLoading] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
+  const [selectedChild, setSelectedChild] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -40,7 +41,7 @@ export default function ThreeSPage() {
       const d = r.ok ? await r.json() : null;
       const list: AreaOption[] = d?.areas ?? [];
       setAreas(list);
-      setSelected(list[0]?.code ?? null);
+      setSelected(list.filter((x) => !x.parentCode)[0]?.code ?? null);
     } finally { setAreasLoading(false); }
   }, []);
 
@@ -49,8 +50,16 @@ export default function ThreeSPage() {
     else setAreas([]);
   }, [department, loadAreas]);
 
+  const groups = areas.filter((a) => !a.parentCode);
+  const childrenOfSelected = areas.filter((a) => a.parentCode === selected);
+  useEffect(() => { setSelectedChild(areas.filter((a) => a.parentCode === selected)[0]?.code ?? null); }, [selected, areas]);
+
   const begin = () => {
-    const area = areas.find((a) => a.code === selected);
+    const group = areas.find((a) => a.code === selected);
+    const child = selectedChild ? areas.find((a) => a.code === selectedChild) : null;
+    const area = child
+      ? { ...child, name: `${group?.name ?? ""} - ${child.name}`.replace(/^ - /, "") }
+      : group;
     if (!area || !department) return;
     startSession({
       departmentCode: department,
@@ -100,7 +109,7 @@ export default function ThreeSPage() {
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-3">
-                {areas.map((a) => {
+                {groups.map((a) => {
                   const isSel = selected === a.code;
                   return (
                     <button
@@ -115,6 +124,21 @@ export default function ThreeSPage() {
                   );
                 })}
               </div>
+            )}
+            {childrenOfSelected.length > 0 && (
+              <>
+                <label className="block mt-4 text-[13px] font-semibold text-ink-muted mb-2">
+                  Vị trí cụ thể <span className="text-danger">*</span>
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {childrenOfSelected.map((c) => (
+                    <button key={c.code} onClick={() => setSelectedChild(c.code)}
+                      className={`px-3.5 py-2.5 rounded-pill border-[1.5px] text-[14px] font-semibold ${selectedChild === c.code ? "border-primary-600 bg-primary-100 text-primary-700" : "border-line bg-white"}`}>
+                      📍 {c.name}
+                    </button>
+                  ))}
+                </div>
+              </>
             )}
           </>
         )}

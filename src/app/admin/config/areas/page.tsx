@@ -6,6 +6,7 @@ import { AdminShell } from "@/components/layout/AdminShell";
 interface Area {
   id: string; code: string; name: string;
   departmentCode: string; departments: string[];
+  parentCode: string | null; hasOwnDepartments?: boolean;
   sortOrder: number; isActive: boolean;
 }
 interface Dept { code: string; name: string }
@@ -45,6 +46,7 @@ export default function AdminAreasPage() {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDepts, setNewDepts] = useState<Set<string>>(new Set());
+  const [childName, setChildName] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -66,9 +68,20 @@ export default function AdminAreasPage() {
     if (selected) { setEditName(selected.name); setEditDepts(new Set(selected.departments)); }
   }, [selected]);
 
+  const children = useMemo(() => areas.filter((a) => a.parentCode), [areas]);
+  const childrenOf = useMemo(() => {
+    const m = new Map<string, Area[]>();
+    for (const c of children) {
+      const g = m.get(c.parentCode as string) ?? [];
+      g.push(c);
+      m.set(c.parentCode as string, g);
+    }
+    return m;
+  }, [children]);
   const shown = useMemo(() => {
     const t = search.trim().toLowerCase();
     return areas
+      .filter((a) => !a.parentCode) // chỉ NHÓM/khu vực độc lập; con quản lý trong panel
       .filter((a) => showInactive || a.isActive)
       .filter((a) => !t || a.name.toLowerCase().includes(t) || a.code.toLowerCase().includes(t) || a.departments.some((d) => d.toLowerCase().includes(t)));
   }, [areas, search, showInactive]);
@@ -91,6 +104,22 @@ export default function AdminAreasPage() {
       const j = await r.json();
       if (!r.ok || j.error) { flash(null, j.error ?? "Lỗi"); return; }
       flash(`Đã lưu "${editName.trim()}" (${editDepts.size} phòng ban).`, null);
+      await load();
+    } finally { setBusy(false); }
+  };
+
+  const addChild = async () => {
+    if (!selected || !childName.trim()) return;
+    setBusy(true);
+    try {
+      const r = await fetch("/api/admin/config/areas", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: childName.trim(), parentCode: selected.code }),
+      });
+      const j = await r.json();
+      if (!r.ok || j.error) { flash(null, j.error ?? "Thêm khu con thất bại."); return; }
+      flash(`Đã thêm khu vực con "${childName.trim()}" vào "${selected.name}".`, null);
+      setChildName("");
       await load();
     } finally { setBusy(false); }
   };
@@ -219,6 +248,9 @@ export default function AdminAreasPage() {
                       className="w-6 h-6 grid place-items-center rounded hover:bg-line text-[13px]"
                     >✏️</button>
                     <span className="text-[11px] font-bold px-2 py-0.5 rounded-pill bg-success-bg text-success">{a.departments.length} PB</span>
+                    {(childrenOf.get(a.code)?.length ?? 0) > 0 && (
+                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-pill bg-info-bg text-info">{childrenOf.get(a.code)!.length} khu con</span>
+                    )}
                   </span>
                 </div>
                 <div className="text-[11.5px] text-ink-muted truncate mt-0.5">{a.departments.join(", ") || "(chưa gán)"} {!a.isActive && "· ĐÃ ẨN"}</div>
@@ -256,6 +288,40 @@ export default function AdminAreasPage() {
               <button onClick={saveSelected} disabled={busy || !editName.trim() || editDepts.size === 0} className="btn btn-primary !min-h-9 mt-3">
                 {busy ? "Đang lưu…" : "Lưu thay đổi"}
               </button>
+
+              {/* Khu vực CON (vd Văn phòng → Tầng 1/2, WC, Sảnh…) */}
+              <div className="mt-5 pt-4 border-t border-line">
+                <div className="text-[13px] font-semibold text-ink-muted mb-2">
+                  Khu vực con của &quot;{selected.name}&quot; ({(childrenOf.get(selected.code) ?? []).length})
+                  <span className="font-normal"> — khi chụp, nhân viên chọn nhóm rồi chọn vị trí cụ thể</span>
+                </div>
+                <div className="flex gap-2 mb-2.5">
+                  <input value={childName} onChange={(e) => setChildName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") void addChild(); }}
+                    placeholder="Tên khu con (vd: Tầng 1, Khu WC, Dây chuyền 2…)"
+                    className="flex-1 rounded-md border border-line px-3 py-2 text-[13px]" />
+                  <button onClick={() => void addChild()} disabled={busy || !childName.trim()} className="btn btn-primary !min-h-9">+ Thêm</button>
+                </div>
+                {(childrenOf.get(selected.code) ?? []).length === 0 ? (
+                  <div className="text-[12.5px] text-ink-muted">Chưa có khu vực con — nhóm này dùng trực tiếp khi chụp.</div>
+                ) : (
+                  <div className="flex flex-col gap-1.5">
+                    {(childrenOf.get(selected.code) ?? []).map((c) => (
+                      <div key={c.id} className={`flex items-center gap-2 rounded-md border border-line px-3 py-2 ${c.isActive ? "" : "opacity-50"}`}>
+                        <span className="text-[13px] font-medium flex-1 truncate">📍 {c.name} {!c.isActive && <i className="text-ink-muted">(đã ẩn)</i>}</span>
+                        <span className="text-[11px] text-ink-muted flex-none">{c.hasOwnDepartments ? `PB riêng: ${c.departments.join(",")}` : "kế thừa nhóm"}</span>
+                        <button onClick={() => void quickRename(c)} title="Đổi tên" className="w-6 h-6 grid place-items-center rounded hover:bg-line text-[13px]">✏️</button>
+                        <button onClick={() => void toggleActive(c)} title={c.isActive ? "Ẩn" : "Khôi phục"} className="w-6 h-6 grid place-items-center rounded hover:bg-line text-[13px]">{c.isActive ? "🚫" : "↩️"}</button>
+                        <button onClick={() => void hardDelete(c)} title="Xóa vĩnh viễn (chưa có ảnh)" className="w-6 h-6 grid place-items-center rounded hover:bg-line text-[13px]">🗑</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <p className="text-[11.5px] text-ink-muted mt-2">
+                  Khu con mặc định KẾ THỪA phòng ban của nhóm. Muốn gán riêng (chỉ vài phòng thấy khu con đó): dùng API/giai đoạn sau.
+                </p>
+              </div>
+
               <p className="text-[11.5px] text-ink-muted mt-2.5">
                 Nhân viên các phòng ban được gán sẽ thấy khu vực này khi chuẩn bị chụp. Ảnh cũ không bị ảnh hưởng.
               </p>

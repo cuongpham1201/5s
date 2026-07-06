@@ -48,6 +48,8 @@ const LIST_SPECS: ListSpec[] = [
       { name: "DepartmentCode", type: "text", indexed: true },
       // Khu vực là dữ liệu gốc — gán N phòng ban (CSV mã).
       { name: "Departments", type: "text" },
+      // Khu vực 2 cấp: con trỏ về mã nhóm.
+      { name: "ParentCode", type: "text", indexed: true },
       { name: "IsActive", type: "boolean" },
       { name: "SortOrder", type: "number" },
     ],

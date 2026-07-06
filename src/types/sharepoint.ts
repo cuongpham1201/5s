@@ -35,6 +35,9 @@ export interface AreaRecord {
   /** Mô hình mới: khu vực là DỮ LIỆU GỐC, gán N phòng ban (CSV mã, vd "TCKS,KT").
    *  Trống → fallback [DepartmentCode] để dữ liệu cũ chạy nguyên. */
   Departments: string | null;
+  /** Khu vực CON: trỏ về mã khu vực NHÓM (vd Tầng 1 → KV_VAN_PHONG).
+   *  Trống = nhóm/khu vực độc lập. Con trống Departments = kế thừa nhóm. */
+  ParentCode: string | null;
   IsActive: boolean;
   SortOrder: number;
 }
