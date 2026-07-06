@@ -13,6 +13,7 @@ const NAV: { href: string; label: string; icon: IconName }[] = [
   { href: "/dashboard", label: "Trang chủ", icon: "home" },
   { href: "/capture", label: "Thực hành 5S", icon: "camera" },
   { href: "/3s", label: "Audit 5S", icon: "check" },
+  { href: "/capa", label: "Khắc phục", icon: "alert" },
   { href: "/overview", label: "Toàn cảnh", icon: "chart" },
   { href: "/gallery", label: "Thư viện", icon: "image" },
   { href: "/history", label: "Lịch sử", icon: "clock" },

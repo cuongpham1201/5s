@@ -21,6 +21,7 @@ function hhmm(iso?: string): string {
 
 const QUICK: { href: string; icon: IconName; label: string }[] = [
   { href: "/3s", icon: "check", label: "Audit 5S" },
+  { href: "/capa", icon: "alert", label: "Khắc phục" },
   { href: "/gallery", icon: "image", label: "Thư viện" },
   { href: "/history", icon: "clock", label: "Lịch sử" },
   { href: "/overview", icon: "chart", label: "Toàn cảnh" },

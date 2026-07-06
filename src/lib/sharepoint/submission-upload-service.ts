@@ -16,6 +16,7 @@ import { ensureSubmissionFolder, uploadPhotoPair, downloadFromImgPath } from "./
 import { detectImageType, edgeHex, bytesRoundTripOk } from "./image-bytes";
 import { trace } from "@/lib/debug/trace";
 import { ulog, ulogAlways } from "@/lib/debug/upload-log";
+import { createCapaFromViolation } from "./capa-service";
 import type { GraphCollection, GraphListItem } from "./sharepoint-types";
 import type { SubmissionStatus, SyncStatus } from "@/types/sharepoint";
 
@@ -277,6 +278,20 @@ export async function uploadSubmissionPhotos(input: UploadSubmissionInput): Prom
     }
     // Always-on per-photo timing: putMs = both Graph PUTs; rowMs = photo-row upsert.
     ulogAlways("server.photo.timing", { submissionId: input.submissionId, seq: p.seqNo, putMs: tRow - tPut, rowMs: Date.now() - tRow, bytes: p.original.byteLength + p.watermarked.byteLength });
+    // GÓI A: ảnh VI PHẠM (Audit 5S) → tự sinh CAPA giao phòng ban. BEST-EFFORT +
+    // idempotent theo PhotoId — tuyệt đối không làm fail upload.
+    if (p.photoKind === "violation") {
+      try {
+        await createCapaFromViolation({
+          submissionId: input.submissionId, photoId, photoPath: res.watermarkedPath,
+          departmentCode: input.departmentCode, areaCode: input.areaCode, areaName: input.areaName,
+          sTag: p.sTag, issueNote: p.violationNote,
+          reporterName: input.reporterName, reporterEmail: input.reporterEmail,
+        });
+      } catch (ce) {
+        ulogAlways("capa.create:failed", { submissionId: input.submissionId, photoId, message: (ce as Error)?.message?.slice(0, 120) });
+      }
+    }
     photos.push({ seqNo: p.seqNo, originalPath: res.originalPath, watermarkedPath: res.watermarkedPath });
   }
 
