@@ -137,6 +137,8 @@ const LIST_SPECS: ListSpec[] = [
       { name: "PhotoKind", type: "text" },
       { name: "ViolationNote", type: "text" },
       { name: "LinkedPhotoId", type: "text" },
+      { name: "ViolatorEmail", type: "text", indexed: true },
+      { name: "ViolatorName", type: "text" },
     ],
   },
   {

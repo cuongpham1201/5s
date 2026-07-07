@@ -65,6 +65,9 @@ export interface SessionPhoto {
   sTag?: STag;
   photoKind?: PhotoKind;
   violationNote?: string;
+  /** Người vi phạm được TAG từ danh bạ (CAPA sẽ giao đích danh người này). */
+  violatorEmail?: string;
+  violatorName?: string;
   /** Local photoId của ảnh "trước" khi ảnh này là "sau" (ghép cặp). */
   linkedPhotoId?: string;
   // NOTE (Phase 2B.1): NO image payload here. All binaries (original /

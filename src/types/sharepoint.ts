@@ -117,6 +117,8 @@ export interface SubmissionPhotoRecord {
   PhotoKind: string | null;
   ViolationNote: string | null;
   LinkedPhotoId: string | null;
+  ViolatorEmail: string | null;
+  ViolatorName: string | null;
 }
 
 export interface SyncLogRecord {

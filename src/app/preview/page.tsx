@@ -37,6 +37,21 @@ export default function PreviewPage() {
   const [sTag, setSTag] = useState<STag>("S1");
   const [kind, setKind] = useState<PhotoKind>("good");
   const [note, setNote] = useState("");
+  // Người vi phạm — pick từ danh bạ (M365 + hồ sơ + nội bộ)
+  const [violator, setViolator] = useState<{ email: string; name: string } | null>(null);
+  const [vQuery, setVQuery] = useState("");
+  const [vSuggest, setVSuggest] = useState<Array<{ email: string; displayName: string; department: string | null }>>([]);
+
+  useEffect(() => {
+    if (kind !== "violation" || !vQuery.trim() || violator) { setVSuggest([]); return; }
+    const t = setTimeout(() => {
+      fetch(`/api/users/search?q=${encodeURIComponent(vQuery.trim())}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => setVSuggest(j?.users ?? []))
+        .catch(() => {});
+    }, 250);
+    return () => clearTimeout(t);
+  }, [vQuery, kind, violator]);
 
   // Guard: missing session/pending → restart appropriately. Wait for hydration
   // so we don't bounce away during the pre-hydration null window.
@@ -91,7 +106,8 @@ export default function PreviewPage() {
       // — một lượt canvas thêm (~0.3s), luồng daily không bị ảnh hưởng.
       let wmUrl = watermarkedUrl;
       if (is3S && pendingCapture) {
-        const tagLine = `3S: ${sTag} · ${KIND_LABEL[kind]}${kind === "violation" && note.trim() ? " — " + note.trim() : ""}`;
+        const who = kind === "violation" ? (violator?.name || note.trim()) : "";
+        const tagLine = `3S: ${sTag} · ${KIND_LABEL[kind]}${who ? " — " + who : ""}${violator && note.trim() ? " · " + note.trim() : ""}`;
         const res3 = await generateWatermarkedImage({ source: pendingCapture.originalDataUrl, metadata: { ...meta, checkItem: tagLine } });
         wmUrl = res3.watermarkedDataUrl;
       }
@@ -183,7 +199,13 @@ export default function PreviewPage() {
         longitude: pendingCapture.geo.longitude,
         address: pendingCapture.geo.address,
         status: "ready",
-        ...(is3S ? { sTag, photoKind: kind, violationNote: kind === "violation" ? note.trim() || undefined : undefined, linkedPhotoId } : {}),
+        ...(is3S ? {
+          sTag, photoKind: kind,
+          violationNote: kind === "violation" ? ((violator ? `${violator.name}${note.trim() ? " – " + note.trim() : ""}` : note.trim()) || undefined) : undefined,
+          violatorEmail: kind === "violation" ? violator?.email : undefined,
+          violatorName: kind === "violation" ? violator?.name : undefined,
+          linkedPhotoId,
+        } : {}),
       };
       ctrace("preview.addPhoto:before", { sessionId: submissionId, currentPhotos: session.photos.length, newPhotoId: photoId });
       addPhoto(photo);
@@ -263,12 +285,42 @@ export default function PreviewPage() {
               ))}
             </div>
             {kind === "violation" && (
-              <input
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                placeholder="Họ tên – S vi phạm (vd: Nguyễn Văn A – S2)"
-                className="w-full mt-3 rounded-md border border-line-strong px-3 py-2.5 text-[14px]"
-              />
+              <div className="mt-3">
+                <div className="text-[12.5px] font-semibold text-ink-muted mb-1">Người vi phạm (chọn từ danh bạ)</div>
+                {violator ? (
+                  <div className="flex items-center gap-2 rounded-md border border-primary-600 bg-primary-100 px-3 py-2">
+                    <span className="text-[14px] font-semibold text-primary-700 flex-1 truncate">👤 {violator.name}</span>
+                    <span className="text-[11.5px] text-ink-muted truncate">{violator.email}</span>
+                    <button onClick={() => { setViolator(null); setVQuery(""); }} className="w-5 h-5 rounded-pill bg-black/10 text-[11px] flex-none">✕</button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <input
+                      value={vQuery}
+                      onChange={(e) => setVQuery(e.target.value)}
+                      placeholder="Gõ tên để tìm (vd: nguyễn văn a)…"
+                      className="w-full rounded-md border border-line-strong px-3 py-2.5 text-[14px]"
+                    />
+                    {vSuggest.length > 0 && (
+                      <div className="absolute z-20 left-0 right-0 mt-1 rounded-md border border-line bg-white shadow-e4 max-h-[200px] overflow-y-auto">
+                        {vSuggest.map((u) => (
+                          <button key={u.email} onClick={() => { setViolator({ email: u.email, name: u.displayName }); setVSuggest([]); }}
+                            className="w-full text-left px-3 py-2 hover:bg-surface border-b border-line last:border-0">
+                            <span className="text-[13.5px] font-semibold">{u.displayName}</span>
+                            <span className="block text-[11.5px] text-ink-muted">{u.email}{u.department ? ` · ${u.department}` : ""}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+                <input
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder={violator ? "Ghi chú thêm (tuỳ chọn)" : "Hoặc gõ tay: Họ tên – S vi phạm"}
+                  className="w-full mt-2 rounded-md border border-line-strong px-3 py-2.5 text-[14px]"
+                />
+              </div>
             )}
             {kind === "after" && (
               <p className="text-[12px] text-ink-muted mt-2.5">Ảnh &quot;Sau&quot; sẽ tự ghép cặp với ảnh &quot;Trước&quot; gần nhất trong phiên này.</p>

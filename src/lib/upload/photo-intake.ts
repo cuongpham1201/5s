@@ -25,7 +25,7 @@ export interface UploadMetaIn {
   checkItemName?: string;
   submittedAt?: string;
   reporterName?: string;
-  photos?: Array<{ seqNo: number; capturedAt?: string; latitude?: number | null; longitude?: number | null; address?: string | null; sTag?: string; photoKind?: string; violationNote?: string; linkedSeqNo?: number }>;
+  photos?: Array<{ seqNo: number; capturedAt?: string; latitude?: number | null; longitude?: number | null; address?: string | null; sTag?: string; photoKind?: string; violationNote?: string; violatorEmail?: string; violatorName?: string; linkedSeqNo?: number }>;
   /** "3s" = Thực hành 3S; mặc định "daily". */
   submissionType?: string;
   clientParts?: Array<{ seqNo: number; originalSize: number; watermarkedSize: number }>;
@@ -85,7 +85,7 @@ export async function runPhotoUploadIntake(
   // TRANSPORT_TRUNCATED), never a whole-request failure while other photos exist.
   const clientBySeq = new Map((meta.clientParts ?? []).map((c) => [c.seqNo, c]));
   const serverParts: Array<{ seqNo: number; originalSize: number; watermarkedSize: number }> = [];
-  const photos: Array<{ seqNo: number; capturedAt: string; latitude: number | null; longitude: number | null; address: string | null; original: ArrayBuffer; watermarked: ArrayBuffer; contentType: string; sTag?: string; photoKind?: string; violationNote?: string; linkedSeqNo?: number }> = [];
+  const photos: Array<{ seqNo: number; capturedAt: string; latitude: number | null; longitude: number | null; address: string | null; original: ArrayBuffer; watermarked: ArrayBuffer; contentType: string; sTag?: string; photoKind?: string; violationNote?: string; violatorEmail?: string; violatorName?: string; linkedSeqNo?: number }> = [];
   const preErrors: PhotoUploadResult["errors"] = [];
   for (const mp of meta.photos) {
     const pair = pairBySeq(mp.seqNo);
@@ -116,7 +116,7 @@ export async function runPhotoUploadIntake(
       seqNo: mp.seqNo, capturedAt: mp.capturedAt ?? meta.submittedAt ?? new Date().toISOString(),
       latitude: mp.latitude ?? null, longitude: mp.longitude ?? null, address: mp.address ?? null,
       original: pair.original, watermarked: pair.watermarked, contentType: type,
-      sTag: mp.sTag, photoKind: mp.photoKind, violationNote: mp.violationNote, linkedSeqNo: mp.linkedSeqNo,
+      sTag: mp.sTag, photoKind: mp.photoKind, violationNote: mp.violationNote, violatorEmail: mp.violatorEmail, violatorName: mp.violatorName, linkedSeqNo: mp.linkedSeqNo,
     });
   }
   const diag = { clientParts: meta.clientParts ?? [], serverParts };

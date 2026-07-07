@@ -58,7 +58,7 @@ async function collectPayload(sub: CompletedSubmission, attemptCount: number, qu
     : stored.map((s) => ({ photoId: s.photoId, submissionId: s.submissionId, capturedAt: s.createdAt, watermarkMetadata: undefined as never, latitude: null, longitude: null, address: "", status: "ready" }));
 
   const items: PayloadItem[] = [];
-  const metaPhotos: Array<{ seqNo: number; capturedAt: string; latitude: number | null; longitude: number | null; address: string | null; sTag?: string; photoKind?: string; violationNote?: string; linkedSeqNo?: number }> = [];
+  const metaPhotos: Array<{ seqNo: number; capturedAt: string; latitude: number | null; longitude: number | null; address: string | null; sTag?: string; photoKind?: string; violationNote?: string; violatorEmail?: string; violatorName?: string; linkedSeqNo?: number }> = [];
   // Client's claim of the bytes it is sending per seq — echoed back by the server
   // (diag) so a truncated part is provable from the response alone (no DEBUG_LOG).
   const clientParts: Array<{ seqNo: number; originalSize: number; watermarkedSize: number }> = [];
@@ -90,6 +90,7 @@ async function collectPayload(sub: CompletedSubmission, attemptCount: number, qu
       seqNo: seq, capturedAt: sp.capturedAt ?? rec.createdAt, latitude: sp.latitude ?? null,
       longitude: sp.longitude ?? null, address: sp.address ?? null,
       sTag: sp.sTag, photoKind: sp.photoKind, violationNote: sp.violationNote,
+      violatorEmail: sp.violatorEmail, violatorName: sp.violatorName,
       linkedSeqNo: linkedIdx >= 0 ? linkedIdx + 1 : undefined,
     });
     clientParts.push({ seqNo: seq, originalSize: original.size, watermarkedSize: watermarked.size });

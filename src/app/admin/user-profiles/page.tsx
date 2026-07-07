@@ -65,7 +65,27 @@ export default function UserProfilesPage() {
   }, [rows, search]);
 
   return (
-    <AdminShell title="Hồ sơ người dùng" subtitle="Data_UserProfiles · phòng ban resolve 1 lần, đồng bộ khi đổi">
+    <AdminShell
+      title="Hồ sơ người dùng"
+      subtitle="Data_UserProfiles · phòng ban resolve 1 lần, đồng bộ khi đổi"
+      actions={
+        <button
+          onClick={async () => {
+            if (!window.confirm("Đồng bộ DANH BẠ toàn công ty từ Microsoft 365?\n(Dùng cho ô chọn người vi phạm khi chụp — cần quyền User.Read.All)")) return;
+            setBusy("__dir__");
+            try {
+              const r = await fetch("/api/admin/directory/sync", { method: "POST" });
+              const j = await r.json();
+              setMsg(j.ok ? `Đồng bộ danh bạ xong: ${j.total} user (${j.created} mới, ${j.updated} cập nhật).` : (j.error ?? "Đồng bộ thất bại."));
+            } finally { setBusy(null); }
+          }}
+          disabled={busy === "__dir__"}
+          className="btn btn-primary !min-h-9"
+        >
+          {busy === "__dir__" ? "Đang đồng bộ…" : "🔄 Đồng bộ danh bạ M365"}
+        </button>
+      }
+    >
       {msg && <div className="mb-4 text-[13px] bg-info-bg text-info px-3.5 py-2.5 rounded-md">{msg}</div>}
       <div className="mb-3">
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tìm email / tên…" className="rounded-md border border-line px-3 py-2 text-[14px] w-full max-w-sm" />

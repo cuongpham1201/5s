@@ -35,6 +35,8 @@ export interface UploadPhotoInput {
   sTag?: string;
   photoKind?: string;
   violationNote?: string;
+  violatorEmail?: string;
+  violatorName?: string;
   /** seqNo của ảnh "trước" trong CÙNG lần gửi (server dịch sang PhotoId). */
   linkedSeqNo?: number;
 }
@@ -150,6 +152,7 @@ async function upsertPhotoRow(
     originalPath: string; watermarkedPath: string;
     captureTime: string; latitude: number | null; longitude: number | null; address: string | null;
     sTag?: string; photoKind?: string; violationNote?: string; linkedPhotoId?: string;
+    violatorEmail?: string; violatorName?: string;
   },
 ): Promise<void> {
   const fields: Record<string, unknown> = {
@@ -169,6 +172,8 @@ async function upsertPhotoRow(
   if (rec.photoKind) fields.PhotoKind = rec.photoKind;
   if (rec.violationNote) fields.ViolationNote = rec.violationNote;
   if (rec.linkedPhotoId) fields.LinkedPhotoId = rec.linkedPhotoId;
+  if (rec.violatorEmail) fields.ViolatorEmail = rec.violatorEmail.toLowerCase();
+  if (rec.violatorName) fields.ViolatorName = rec.violatorName;
   const existingId = await findItemIdByField(client, siteId, listId, "PhotoId", rec.photoId);
   if (existingId) {
     await client.patch(`/sites/${siteId}/lists/${listId}/items/${existingId}/fields`, fields);
@@ -268,6 +273,7 @@ export async function uploadSubmissionPhotos(input: UploadSubmissionInput): Prom
         originalPath: res.originalPath, watermarkedPath: res.watermarkedPath,
         captureTime: p.capturedAt, latitude: p.latitude, longitude: p.longitude, address: p.address,
         sTag: p.sTag, photoKind: p.photoKind, violationNote: p.violationNote,
+        violatorEmail: p.violatorEmail, violatorName: p.violatorName,
         linkedPhotoId: p.linkedSeqNo ? `${input.submissionId}-P${String(p.linkedSeqNo).padStart(2, "0")}` : undefined,
       });
       ulog("server.photoRow.upsert.done", { submissionId: input.submissionId, seq: p.seqNo });
@@ -287,6 +293,8 @@ export async function uploadSubmissionPhotos(input: UploadSubmissionInput): Prom
           departmentCode: input.departmentCode, areaCode: input.areaCode, areaName: input.areaName,
           sTag: p.sTag, issueNote: p.violationNote,
           reporterName: input.reporterName, reporterEmail: input.reporterEmail,
+          // Người vi phạm được tag → CAPA giao ĐÍCH DANH người đó.
+          violatorEmail: p.violatorEmail, violatorName: p.violatorName,
         });
       } catch (ce) {
         ulogAlways("capa.create:failed", { submissionId: input.submissionId, photoId, message: (ce as Error)?.message?.slice(0, 120) });

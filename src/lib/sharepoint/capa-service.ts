@@ -175,6 +175,7 @@ export async function createCapaFromViolation(input: {
   submissionId: string; photoId: string; photoPath: string;
   departmentCode: string; areaCode: string; areaName: string;
   sTag?: string; issueNote?: string; reporterName?: string; reporterEmail?: string;
+  violatorEmail?: string; violatorName?: string;
 }): Promise<{ created: boolean; capaId: string }> {
   const capaId = `CAPA-${input.photoId}`;
   const { client, siteId, listId } = await ctx();
@@ -182,10 +183,11 @@ export async function createCapaFromViolation(input: {
   if (items.some((it) => (it.fields as Record<string, unknown>).CapaId === capaId)) {
     return { created: false, capaId };
   }
-  // Người xử lý mặc định = quản lý phòng ban (Config_Departments).
-  let assigneeEmail: string | null = null;
-  let assigneeName: string | null = null;
-  try {
+  // Ưu tiên 1: NGƯỜI BỊ TAG vi phạm (đăng nhập sẽ thấy việc "Của tôi").
+  // Ưu tiên 2: quản lý phòng ban (Config_Departments).
+  let assigneeEmail: string | null = (input.violatorEmail ?? "").toLowerCase() || null;
+  let assigneeName: string | null = input.violatorName ?? null;
+  if (!assigneeEmail) try {
     const deptListId = await findListId(client, siteId, "Config_Departments");
     if (deptListId) {
       const depts = await getAllListItems<GraphListItem>(client, `/sites/${siteId}/lists/${deptListId}/items?expand=fields&$top=999`);
@@ -194,6 +196,7 @@ export async function createCapaFromViolation(input: {
       assigneeName = (d?.DepartmentManager as string) || null;
     }
   } catch { /* giao sau bởi admin */ }
+  void 0;
   const due = new Date();
   due.setDate(due.getDate() + DUE_DAYS_DEFAULT);
   await client.post(`/sites/${siteId}/lists/${listId}/items`, {

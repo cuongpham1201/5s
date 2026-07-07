@@ -163,6 +163,8 @@ export function mapSubmissionPhoto(f: GraphListItemFields): SubmissionPhotoRecor
     PhotoKind: strOrNull(f, "PhotoKind"),
     ViolationNote: strOrNull(f, "ViolationNote"),
     LinkedPhotoId: strOrNull(f, "LinkedPhotoId"),
+    ViolatorEmail: strOrNull(f, "ViolatorEmail"),
+    ViolatorName: strOrNull(f, "ViolatorName"),
   };
 }
 
