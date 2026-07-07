@@ -50,7 +50,7 @@ export default function CapturePage() {
       const d = r.ok ? await r.json() : null;
       const list: AreaOption[] = d?.areas ?? [];
       setAreas(list);
-      setSelected(selectCode ?? list[0]?.code ?? null);
+      setSelected(selectCode ?? list.filter((x) => !x.parentCode)[0]?.code ?? null);
     } finally {
       setAreasLoading(false);
     }
@@ -211,38 +211,32 @@ export default function CapturePage() {
                 </div>
               )
             ) : (
-              <div className="grid grid-cols-2 gap-3">
-                {groups.map((a) => {
-                  const isSel = selected === a.code;
-                  return (
-                    <button
-                      key={a.code}
-                      onClick={() => setSelected(a.code)}
-                      className={`flex items-center gap-2.5 p-4 rounded-md border-[1.5px] text-[16px] font-semibold min-h-[60px] text-left transition-colors ${
-                        isSel ? "border-primary-600 bg-primary-100 text-primary-700 shadow-e2" : "border-line bg-white"
-                      }`}
-                    >
-                      <span className="text-[22px]">📍</span> {a.name}
-                    </button>
-                  );
-                })}
-              </div>
+              <select
+                value={selected ?? ""}
+                onChange={(e) => setSelected(e.target.value || null)}
+                className="w-full rounded-md border-[1.5px] border-line-strong bg-white px-3 py-3 text-[15px] font-semibold"
+              >
+                {groups.map((a) => (
+                  <option key={a.code} value={a.code}>📍 {a.name}</option>
+                ))}
+              </select>
             )}
 
-            {/* Vị trí cụ thể trong nhóm (khu vực con) */}
+            {/* Vị trí cụ thể trong nhóm (khu vực con) — combo box */}
             {childrenOfSelected.length > 0 && (
               <>
-                <label className="block mt-4 text-[13px] font-semibold text-ink-muted">
-                  Vị trí cụ thể trong {selectedArea?.name ?? "khu vực"} <span className="text-danger">*</span>
+                <label className="block mt-4 mb-2 text-[13px] font-semibold text-ink-muted">
+                  Vị trí cụ thể <span className="text-danger">*</span>
                 </label>
-                <div className="flex flex-wrap gap-2 mt-2">
+                <select
+                  value={selectedChild ?? ""}
+                  onChange={(e) => setSelectedChild(e.target.value || null)}
+                  className="w-full rounded-md border-[1.5px] border-line-strong bg-white px-3 py-3 text-[15px] font-semibold"
+                >
                   {childrenOfSelected.map((c) => (
-                    <button key={c.code} onClick={() => setSelectedChild(c.code)}
-                      className={`px-3.5 py-2.5 rounded-pill border-[1.5px] text-[14px] font-semibold ${selectedChild === c.code ? "border-primary-600 bg-primary-100 text-primary-700" : "border-line bg-white"}`}>
-                      📍 {c.name}
-                    </button>
+                    <option key={c.code} value={c.code}>📍 {c.name}</option>
                   ))}
-                </div>
+                </select>
               </>
             )}
 

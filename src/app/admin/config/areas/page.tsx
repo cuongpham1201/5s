@@ -47,6 +47,8 @@ export default function AdminAreasPage() {
   const [newName, setNewName] = useState("");
   const [newDepts, setNewDepts] = useState<Set<string>>(new Set());
   const [childName, setChildName] = useState("");
+  const [expandedChild, setExpandedChild] = useState<string | null>(null);
+  const [childDepts, setChildDepts] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -94,16 +96,39 @@ export default function AdminAreasPage() {
 
   const saveSelected = async () => {
     if (!selected) return;
-    if (editDepts.size === 0) { flash(null, "Khu vực phải gán ít nhất 1 phòng ban."); return; }
+    const hasKids = (childrenOf.get(selected.code)?.length ?? 0) > 0;
+    if (!hasKids && editDepts.size === 0) { flash(null, "Khu vực phải gán ít nhất 1 phòng ban."); return; }
     setBusy(true);
     try {
       const r = await fetch(`/api/admin/config/areas/${selected.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: editName.trim(), departments: [...editDepts] }),
+        // Nhóm CÓ khu con = danh mục — chỉ đổi tên; gán PB nằm ở từng khu con.
+        body: JSON.stringify(hasKids ? { name: editName.trim() } : { name: editName.trim(), departments: [...editDepts] }),
       });
       const j = await r.json();
       if (!r.ok || j.error) { flash(null, j.error ?? "Lỗi"); return; }
       flash(`Đã lưu "${editName.trim()}" (${editDepts.size} phòng ban).`, null);
+      await load();
+    } finally { setBusy(false); }
+  };
+
+  const openChildDepts = (c: Area) => {
+    if (expandedChild === c.id) { setExpandedChild(null); return; }
+    setExpandedChild(c.id);
+    setChildDepts(new Set(c.hasOwnDepartments ? c.departments : []));
+  };
+
+  const saveChildDepts = async (c: Area) => {
+    setBusy(true);
+    try {
+      const r = await fetch(`/api/admin/config/areas/${c.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ departments: [...childDepts] }),
+      });
+      const j = await r.json();
+      if (!r.ok || j.error) { flash(null, j.error ?? "Lỗi"); return; }
+      flash(`Đã gán ${childDepts.size} phòng ban cho "${c.name}".`, null);
+      setExpandedChild(null);
       await load();
     } finally { setBusy(false); }
   };
@@ -281,11 +306,20 @@ export default function AdminAreasPage() {
                   </button>
                 </div>
               </div>
-              <div className="text-[12.5px] font-semibold text-ink-muted mb-1.5">
-                Phòng ban sử dụng khu vực này ({editDepts.size}):
-              </div>
-              <DeptChecks depts={depts} set={editDepts} onToggle={(c) => toggleDept(editDepts, setEditDepts, c)} />
-              <button onClick={saveSelected} disabled={busy || !editName.trim() || editDepts.size === 0} className="btn btn-primary !min-h-9 mt-3">
+              {(childrenOf.get(selected.code)?.length ?? 0) === 0 ? (
+                <>
+                  <div className="text-[12.5px] font-semibold text-ink-muted mb-1.5">
+                    Phòng ban sử dụng khu vực này ({editDepts.size}):
+                  </div>
+                  <DeptChecks depts={depts} set={editDepts} onToggle={(c) => toggleDept(editDepts, setEditDepts, c)} />
+                </>
+              ) : (
+                <div className="rounded-md bg-info-bg text-info p-3 text-[12.5px]">
+                  Nhóm này là DANH MỤC — phòng ban được gán Ở TỪNG KHU VỰC CON bên dưới.
+                  Hiện hợp các khu con: <b>{[...new Set((childrenOf.get(selected.code) ?? []).flatMap((c) => (c.hasOwnDepartments ? c.departments : [])))].join(", ") || "(chưa khu con nào được gán)"}</b>
+                </div>
+              )}
+              <button onClick={saveSelected} disabled={busy || !editName.trim() || ((childrenOf.get(selected.code)?.length ?? 0) === 0 && editDepts.size === 0)} className="btn btn-primary !min-h-9 mt-3">
                 {busy ? "Đang lưu…" : "Lưu thay đổi"}
               </button>
 
@@ -307,18 +341,30 @@ export default function AdminAreasPage() {
                 ) : (
                   <div className="flex flex-col gap-1.5">
                     {(childrenOf.get(selected.code) ?? []).map((c) => (
-                      <div key={c.id} className={`flex items-center gap-2 rounded-md border border-line px-3 py-2 ${c.isActive ? "" : "opacity-50"}`}>
-                        <span className="text-[13px] font-medium flex-1 truncate">📍 {c.name} {!c.isActive && <i className="text-ink-muted">(đã ẩn)</i>}</span>
-                        <span className="text-[11px] text-ink-muted flex-none">{c.hasOwnDepartments ? `PB riêng: ${c.departments.join(",")}` : "kế thừa nhóm"}</span>
-                        <button onClick={() => void quickRename(c)} title="Đổi tên" className="w-6 h-6 grid place-items-center rounded hover:bg-line text-[13px]">✏️</button>
-                        <button onClick={() => void toggleActive(c)} title={c.isActive ? "Ẩn" : "Khôi phục"} className="w-6 h-6 grid place-items-center rounded hover:bg-line text-[13px]">{c.isActive ? "🚫" : "↩️"}</button>
-                        <button onClick={() => void hardDelete(c)} title="Xóa vĩnh viễn (chưa có ảnh)" className="w-6 h-6 grid place-items-center rounded hover:bg-line text-[13px]">🗑</button>
+                      <div key={c.id} className={`rounded-md border border-line ${c.isActive ? "" : "opacity-50"}`}>
+                        <div className="flex items-center gap-2 px-3 py-2">
+                          <span className="text-[13px] font-medium flex-1 truncate">📍 {c.name} {!c.isActive && <i className="text-ink-muted">(đã ẩn)</i>}</span>
+                          <button onClick={() => openChildDepts(c)}
+                            className={`text-[11px] font-bold px-2 py-1 rounded-pill flex-none ${c.hasOwnDepartments && c.departments.length > 0 ? "bg-success-bg text-success" : "bg-warning-bg text-warning"}`}>
+                            {c.hasOwnDepartments && c.departments.length > 0 ? `${c.departments.length} PB ▾` : "⚠ chưa gán ▾"}
+                          </button>
+                          <button onClick={() => void quickRename(c)} title="Đổi tên" className="w-6 h-6 grid place-items-center rounded hover:bg-line text-[13px]">✏️</button>
+                          <button onClick={() => void toggleActive(c)} title={c.isActive ? "Ẩn" : "Khôi phục"} className="w-6 h-6 grid place-items-center rounded hover:bg-line text-[13px]">{c.isActive ? "🚫" : "↩️"}</button>
+                          <button onClick={() => void hardDelete(c)} title="Xóa vĩnh viễn (chưa có ảnh)" className="w-6 h-6 grid place-items-center rounded hover:bg-line text-[13px]">🗑</button>
+                        </div>
+                        {expandedChild === c.id && (
+                          <div className="border-t border-line px-3 py-2.5">
+                            <div className="text-[12px] font-semibold text-ink-muted mb-1.5">Phòng ban được chụp tại &quot;{c.name}&quot; ({childDepts.size}) — chưa gán = không ai thấy:</div>
+                            <DeptChecks depts={depts} set={childDepts} onToggle={(code) => toggleDept(childDepts, setChildDepts, code)} />
+                            <button onClick={() => void saveChildDepts(c)} disabled={busy} className="btn btn-primary !min-h-8 mt-2 text-[12.5px]">Lưu gán PB</button>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
                 )}
                 <p className="text-[11.5px] text-ink-muted mt-2">
-                  Khu con mặc định KẾ THỪA phòng ban của nhóm. Muốn gán riêng (chỉ vài phòng thấy khu con đó): dùng API/giai đoạn sau.
+                  Mỗi khu con gán phòng ban RIÊNG (bấm nút &quot;n PB&quot;). Khu con chưa gán sẽ không hiện với ai khi chụp.
                 </p>
               </div>
 

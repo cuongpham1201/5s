@@ -81,14 +81,33 @@ async function readAreas(): Promise<AreaRecord[]> {
 
 export async function listActiveAreas(): Promise<AreaOption[]> {
   const areas = await readAreas();
-  const byCode = new Map(areas.map((a) => [a.AreaCode, a]));
-  return areas
-    .filter((a) => a.AreaCode && a.IsActive)
+  const active = areas.filter((a) => a.AreaCode && a.IsActive);
+  const childrenByParent = new Map<string, AreaRecord[]>();
+  for (const a of active) {
+    if (!a.ParentCode) continue;
+    const g = childrenByParent.get(a.ParentCode) ?? [];
+    g.push(a);
+    childrenByParent.set(a.ParentCode, g);
+  }
+  return active
     .map((a) => {
-      const own = (a.Departments ?? "").trim().length > 0;
-      // Khu vực CON không gán riêng → KẾ THỪA phòng ban của nhóm cha.
-      const parent = a.ParentCode ? byCode.get(a.ParentCode) : undefined;
-      const departments = own || !parent ? effectiveDepts(a) : effectiveDepts(parent);
+      const own = (a.Departments ?? "").trim().length > 0 || !!a.DepartmentCode;
+      const kids = !a.ParentCode ? (childrenByParent.get(a.AreaCode) ?? []) : [];
+      let departments: string[];
+      if (a.ParentCode) {
+        // KHU CON: chỉ GÁN TƯỜNG MINH — không kế thừa. Trống = không ai thấy (Q2).
+        departments = own ? effectiveDepts(a) : [];
+      } else if (kids.length > 0) {
+        // NHÓM có con: chỉ là DANH MỤC — phòng ban = HỢP các khu con đã gán.
+        const u = new Set<string>();
+        for (const k of kids) {
+          if ((k.Departments ?? "").trim() || k.DepartmentCode) effectiveDepts(k).forEach((d) => u.add(d));
+        }
+        departments = [...u];
+      } else {
+        // Khu vực độc lập / nhóm chưa có con: gán trực tiếp, chụp trực tiếp (Q1).
+        departments = effectiveDepts(a);
+      }
       return {
         code: a.AreaCode, name: a.AreaName, departmentCode: a.DepartmentCode,
         departments, parentCode: a.ParentCode ?? null, hasOwnDepartments: own,
@@ -111,11 +130,13 @@ export async function listAreasByDepartmentCode(
 
 /** Map of DepartmentCode -> count of ACTIVE areas (for the admin selector). */
 export async function countAreasByDepartment(): Promise<Record<string, number>> {
-  const areas = await readAreas();
+  const options = await listActiveAreas();
+  const hasKids = new Set(options.filter((o) => o.parentCode).map((o) => o.parentCode as string));
   const counts: Record<string, number> = {};
-  for (const a of areas) {
-    if (!a.AreaCode || !a.IsActive) continue;
-    for (const d of effectiveDepts(a)) counts[d] = (counts[d] ?? 0) + 1;
+  for (const o of options) {
+    // Đếm vị trí CHỤP ĐƯỢC: khu con + khu độc lập (nhóm chỉ là danh mục).
+    if (!o.parentCode && hasKids.has(o.code)) continue;
+    for (const d of o.departments) counts[d] = (counts[d] ?? 0) + 1;
   }
   return counts;
 }
