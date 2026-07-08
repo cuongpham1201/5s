@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { AppHeader } from "@/components/layout/AppHeader";
+import { STag } from "@/components/ui/STag";
 
 interface Capa {
   capaId: string; departmentCode: string; areaName: string; sTag: string | null;
@@ -83,7 +84,7 @@ export default function CapaListPage() {
                   <div className="flex-1 min-w-0 text-[12.5px]">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="font-bold">{c.departmentCode} · {c.areaName}</span>
-                      {c.sTag && <span className="text-[10.5px] font-bold px-1.5 py-0.5 rounded bg-surface">{c.sTag}</span>}
+                      <STag code={c.sTag} size="sm" />
                       {c.reopenedCount > 0 && <span className="text-[10.5px] font-bold text-warning">↺ {c.reopenedCount} lần trả lại</span>}
                     </div>
                     {c.issueNote && <div className="text-danger truncate mt-0.5">⚠ {c.issueNote}</div>}

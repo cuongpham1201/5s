@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
+import { STag } from "@/components/ui/STag";
 import { PhotoViewerModal, type ViewerPhoto } from "@/components/media/PhotoViewerModal";
 
 interface Row {
@@ -112,7 +113,7 @@ export default function ThreeSLogPage() {
                     className="w-[64px] h-[64px] rounded-md object-cover bg-surface flex-none" />
                   <div className="flex-1 min-w-0 text-[12.5px]">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="font-bold">{r.sTag ?? "—"}</span>
+                      {r.sTag ? <STag code={r.sTag} size="sm" /> : <span className="font-bold">—</span>}
                       <span className={`text-[10.5px] font-bold px-1.5 py-0.5 rounded-pill ${kind.cls}`}>{kind.label}</span>
                       {r.linkedPhotoId && <span className="text-[10.5px] text-ink-muted">↔ cặp {r.linkedPhotoId.slice(-6)}</span>}
                     </div>

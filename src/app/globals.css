@@ -218,3 +218,9 @@ body {
   .focus-ring:focus-visible { outline: 2px solid var(--primary-600); outline-offset: 2px; }
   ::selection { background: var(--primary-100); }
 }
+
+/* Flash trắng khi bấm nút chụp (camera). */
+@keyframes fadeOut {
+  from { opacity: 0.9; }
+  to { opacity: 0; }
+}

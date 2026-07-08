@@ -26,7 +26,10 @@ export type IconName =
   | "award"
   | "shield"
   | "key"
-  | "activity";
+  | "activity"
+  | "clipboard"
+  | "settings"
+  | "wifiOff";
 
 const PATHS: Record<IconName, React.ReactNode> = {
   home: <path d="M3 10.5 12 3l9 7.5M5 9.5V21h14V9.5" />,
@@ -114,6 +117,24 @@ const PATHS: Record<IconName, React.ReactNode> = {
     </>
   ),
   activity: <path d="M3 12h4l2.5-7 5 14 2.5-7H21" />,
+  clipboard: (
+    <>
+      <rect x="5" y="4.5" width="14" height="16.5" rx="2" />
+      <path d="M9 4.5a3 3 0 0 1 6 0M8.5 12l2.5 2.5 4.5-4.5" />
+    </>
+  ),
+  settings: (
+    <>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 2.5v3M12 18.5v3M4.2 7l2.6 1.5M17.2 15.5l2.6 1.5M4.2 17l2.6-1.5M17.2 8.5l2.6-1.5" />
+    </>
+  ),
+  wifiOff: (
+    <>
+      <path d="M3 9a16 16 0 0 1 6-3.3M21 9a16 16 0 0 0-5-3.1M6.5 12.5a11 11 0 0 1 3-1.9M17.5 12.5a11 11 0 0 0-2.5-1.6M9.5 16a6 6 0 0 1 5 0M12 20h.01" />
+      <path d="M3 3l18 18" />
+    </>
+  ),
 };
 
 export function Icon({

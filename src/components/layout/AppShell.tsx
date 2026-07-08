@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { BottomNav } from "./BottomNav";
 import { AppSidebar } from "./AppSidebar";
+import { SyncStatusBar } from "@/components/system/SyncStatusBar";
 
 /**
  * Responsive application shell.
@@ -28,6 +29,7 @@ export function AppShell({
       <AppSidebar />
       <div className="shell-main">
         <div className="app-screen">{children}</div>
+        <SyncStatusBar />
         <BottomNav />
       </div>
     </div>

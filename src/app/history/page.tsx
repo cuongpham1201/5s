@@ -104,32 +104,33 @@ export default function HistoryPage() {
             <div className="text-[13px] mt-1">Chụp ảnh 5S để bắt đầu.</div>
           </div>
         ) : (
-          <div className="flex flex-col gap-2.5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
             {subs.map((s) => {
               const failed = s.syncStatus === "failed" || s.syncStatus === "uploading" || s.syncStatus === "queued";
               return (
-                <div key={s.submissionId} className="card-flat p-3">
-                  <div className="flex items-center gap-3">
-                    {photoSrc(s.thumbnailPath) ? (
-                      <button onClick={() => openViewer(s.submissionId)} className="w-12 h-12 flex-none rounded-[10px] overflow-hidden bg-surface" aria-label="Xem ảnh">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={photoSrc(s.thumbnailPath)!} alt="" className="w-full h-full object-cover" />
-                      </button>
-                    ) : (
-                      <MockPhoto className="w-12 h-12 flex-none" rounded="10px" />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-[15px]">{s.departmentCode} · {s.areaName}</div>
-                      <div className="text-[12px] text-ink-muted">{fmt(s.submittedAt)} · {s.photoCount} ảnh</div>
-                    </div>
-                    <StatusBadge tone={syncTone(s.syncStatus)}>{syncLabel(s.syncStatus)}</StatusBadge>
-                  </div>
-                  {failed && (
-                    <button onClick={() => setOpenDetail(openDetail === s.submissionId ? null : s.submissionId)} className="mt-2 text-[12px] font-semibold text-primary-600">
-                      {openDetail === s.submissionId ? "Ẩn chi tiết lỗi" : "Chi tiết lỗi"}
+                <div key={s.submissionId} className="card-flat p-0 overflow-hidden flex flex-col">
+                  {photoSrc(s.thumbnailPath) ? (
+                    <button onClick={() => openViewer(s.submissionId)} className="relative block w-full aspect-[4/3] bg-surface" aria-label="Xem ảnh">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={photoSrc(s.thumbnailPath)!} alt="" loading="lazy" className="w-full h-full object-cover" />
+                      {s.photoCount > 1 && (
+                        <span className="absolute top-1.5 right-1.5 rounded-pill bg-black/60 text-white text-[11px] font-semibold px-1.5 py-0.5">{s.photoCount}</span>
+                      )}
                     </button>
+                  ) : (
+                    <MockPhoto className="w-full aspect-[4/3]" rounded="0" />
                   )}
-                  {failed && openDetail === s.submissionId && <SyncErrorDetail submissionId={s.submissionId} />}
+                  <div className="p-2.5 flex flex-col gap-1.5 flex-1">
+                    <div className="font-semibold text-[13.5px] leading-tight truncate">{s.departmentCode} · {s.areaName}</div>
+                    <div className="text-[11.5px] text-ink-muted">{fmt(s.submittedAt)}</div>
+                    <div className="mt-auto"><StatusBadge tone={syncTone(s.syncStatus)}>{syncLabel(s.syncStatus)}</StatusBadge></div>
+                    {failed && (
+                      <button onClick={() => setOpenDetail(openDetail === s.submissionId ? null : s.submissionId)} className="text-left text-[11.5px] font-semibold text-primary-600">
+                        {openDetail === s.submissionId ? "Ẩn chi tiết lỗi" : "Chi tiết lỗi"}
+                      </button>
+                    )}
+                    {failed && openDetail === s.submissionId && <SyncErrorDetail submissionId={s.submissionId} />}
+                  </div>
                 </div>
               );
             })}

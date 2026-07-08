@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { Thumb } from "@/components/media/Thumb";
+import { STag } from "@/components/ui/STag";
 import { PhotoViewerModal, type ViewerPhoto } from "@/components/media/PhotoViewerModal";
 
 interface GalleryPhoto {
@@ -139,7 +140,7 @@ export default function GalleryPage() {
                 <Thumb path={g.watermarkedPath} alt={g.areaName} className="w-full h-full rounded-lg" />
                 {g.type === "3s" && (
                   <span className="absolute top-1.5 left-1.5 flex gap-1 pointer-events-none">
-                    {g.sTag && <span className="text-[10px] font-bold text-white px-1.5 py-0.5 rounded bg-black/60">{g.sTag}</span>}
+                    <STag code={g.sTag} size="sm" />
                     {g.photoKind && KIND_BADGE[g.photoKind] && (
                       <span className={`text-[10px] font-bold text-white px-1.5 py-0.5 rounded ${KIND_BADGE[g.photoKind].cls}`}>{KIND_BADGE[g.photoKind].label}</span>
                     )}

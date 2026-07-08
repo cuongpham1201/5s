@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
+import { STag } from "@/components/ui/STag";
 
 interface Capa {
   capaId: string; submissionId: string; photoId: string; violationPhotoPath: string;
@@ -114,7 +115,7 @@ export default function CapaDetailPage() {
 
         {/* Vi phạm (ảnh TRƯỚC) */}
         <div className="card-flat p-3">
-          <div className="text-[13px] font-semibold text-ink-muted mb-2">⚠ Vi phạm được ghi nhận {capa.sTag ? `· ${capa.sTag}` : ""}</div>
+          <div className="text-[13px] font-semibold text-ink-muted mb-2 flex items-center gap-1.5">Vi phạm được ghi nhận <STag code={capa.sTag} size="sm" /></div>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={`/api/photo?path=${encodeURIComponent(capa.violationPhotoPath)}`} alt="Ảnh vi phạm" className="w-full max-h-[320px] object-contain rounded-md bg-surface" />
           {capa.issueNote && <div className="text-danger text-[13px] font-medium mt-2">⚠ {capa.issueNote}</div>}

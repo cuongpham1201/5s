@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { Icon, type IconName } from "@/components/ui/Icon";
+import { ModuleCard } from "@/components/ui/ModuleCard";
 import { PhotoViewerModal, type ViewerPhoto } from "@/components/media/PhotoViewerModal";
 import { ensureProfile, subscribeMe } from "@/lib/client/me-cache";
 import { displayNameFrom } from "@/lib/profile/display";
@@ -12,6 +13,7 @@ import type { MeResponse } from "@/lib/graph/graph-types";
 import type { TodaySummary, LatestSubmission } from "@/lib/sharepoint/report-service";
 
 interface WhoAmI { isAdmin: boolean }
+interface CapaLite { status: string; dueDate: string | null }
 
 function hhmm(iso?: string): string {
   if (!iso) return "";
@@ -20,8 +22,6 @@ function hhmm(iso?: string): string {
 }
 
 const QUICK: { href: string; icon: IconName; label: string }[] = [
-  { href: "/3s", icon: "check", label: "Audit 5S" },
-  { href: "/capa", icon: "alert", label: "Khắc phục" },
   { href: "/gallery", icon: "image", label: "Thư viện" },
   { href: "/history", icon: "clock", label: "Lịch sử" },
   { href: "/overview", icon: "chart", label: "Toàn cảnh" },
@@ -33,6 +33,7 @@ export default function DashboardPage() {
   const [today, setToday] = useState<TodaySummary | null>(null);
   const [mine, setMine] = useState<LatestSubmission[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [myCapas, setMyCapas] = useState<CapaLite[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewer, setViewer] = useState<number | null>(null);
 
@@ -41,18 +42,23 @@ export default function DashboardPage() {
     const unsub = subscribeMe((m) => active && setMe(m)); // resume/refresh updates
     // ensureProfile = refresh + (if incomplete) force server sync + refresh again.
     (async () => {
-      const [m, t, h, w] = await Promise.all([
+      const [m, t, h, w, c] = await Promise.all([
         ensureProfile(),
         fetch("/api/reports/today").then((r) => (r.ok ? r.json() : null)),
         fetch("/api/history/mine").then((r) => (r.ok ? r.json() : null)),
         fetch("/api/admin/whoami").then((r) => (r.ok ? r.json() : null)),
+        fetch("/api/capas?scope=mine").then((r) => (r.ok ? r.json() : null)),
       ]);
       if (!active) return;
       setMe(m); setToday(t); setMine(h?.submissions ?? []); setIsAdmin(!!(w as WhoAmI)?.isAdmin);
+      setMyCapas((c?.capas ?? []) as CapaLite[]);
       setLoading(false);
     })();
     return () => { active = false; unsub(); };
   }, []);
+
+  const capaOpen = myCapas.filter((c) => c.status !== "closed").length;
+  const capaOverdue = myCapas.filter((c) => c.status !== "closed" && c.dueDate && new Date(c.dueDate).getTime() < Date.now()).length;
 
   const pct = Math.round((today?.completionRate ?? 0) * 100);
   const todayKey = today?.date ?? "";
@@ -81,45 +87,52 @@ export default function DashboardPage() {
         title={`Xin chào, ${me ? displayNameFrom({ displayName: me.displayName, email: me.email }) : (loading ? "…" : "bạn")}`}
         subtitle={me?.departmentResolved ? `${me.departmentCode} · ${me.departmentName}` : (loading ? "Đang đồng bộ hồ sơ…" : "Phòng ban: chưa xác định")}
       />
-      <div className="px-4 pb-6 flex flex-col gap-4 lg:grid lg:grid-cols-3 lg:gap-4 lg:items-start">
+      <div className="px-4 pb-6 flex flex-col gap-4">
 
-        {/* My status today */}
-        <div className={`card flex items-center gap-3 lg:col-span-1 ${submittedToday ? "" : ""}`}>
-          <span className={`w-11 h-11 rounded-[14px] grid place-items-center flex-none ${submittedToday ? "bg-success-bg text-success" : "bg-danger-bg text-danger"}`}>
-            <Icon name={submittedToday ? "check" : "alert"} size={22} strokeWidth={2.2} />
-          </span>
-          <div className="flex-1 min-w-0">
-            <div className="text-[15px] font-bold leading-tight">{loading ? "Đang tải…" : submittedToday ? "Bạn đã gửi hôm nay" : "Bạn chưa gửi hôm nay"}</div>
-            <div className="text-[12.5px] text-ink-muted mt-0.5">{lastMine ? `Gần nhất: ${hhmm(lastMine.submittedAt)} · ${lastMine.areaName}` : "Chưa có lần gửi nào"}</div>
-          </div>
-        </div>
-
-        {/* Today summary */}
-        <div className="card lg:col-span-1">
-          <div className="text-[12px] text-ink-muted">Hôm nay · {today?.date ?? "…"}</div>
-          <div className="flex items-end justify-between mt-1.5">
-            <div className="text-[30px] font-extrabold leading-none">{loading ? "…" : today?.submittedDepartments ?? 0}<span className="text-ink-disabled text-[18px] font-bold">/{today?.expectedDepartments ?? 0}</span></div>
-            <div className="text-[24px] font-extrabold text-success leading-none">{pct}%</div>
-          </div>
-          <div className="text-[12px] text-ink-muted mt-1">phòng ban đã chụp</div>
-          <div className="mt-2 h-2 rounded-pill bg-surface overflow-hidden"><i className="block h-full rounded-pill bg-success" style={{ width: `${pct}%` }} /></div>
-          {(today?.threeS?.photosToday ?? 0) > 0 && (
-            <div className="text-[12px] text-ink-muted mt-2">
-              Audit 5S hôm nay: <b className="text-ink">{today?.threeS?.photosToday}</b> ảnh
-              {(today?.threeS?.violationsToday ?? 0) > 0 && <> · <b className="text-danger">{today?.threeS?.violationsToday}</b> vi phạm</>}
-            </div>
-          )}
-        </div>
-
-        {/* CTA */}
-        <Link href="/capture" className="flex items-center gap-3 bg-white rounded-[16px] border border-line p-3 shadow-e2 active:bg-surface-2 lg:col-span-1">
-          <span className="w-12 h-12 rounded-[14px] grid place-items-center bg-success-bg text-success flex-none"><Icon name="camera" size={22} /></span>
-          <span className="flex-1 min-w-0"><span className="block text-[15px] font-bold leading-tight">Thực hành 5S</span><span className="block text-[12.5px] text-ink-muted">Phòng ban của bạn · &lt;30 giây</span></span>
-          <Icon name="chevronRight" size={20} className="text-ink-disabled flex-none" />
-        </Link>
+        {/* Module dashboard — 4 module lớn, dễ chạm */}
+        <section className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <ModuleCard
+            href="/capture"
+            icon="camera"
+            tone="success"
+            title="Thực hành 5S hàng ngày"
+            description="Chụp & gửi phiếu 5S cho phòng ban của bạn"
+            stat={loading ? "…" : `${myToday.length} phiếu`}
+            statSub={submittedToday ? `hôm nay · gần nhất ${hhmm(lastMine?.submittedAt)}` : "hôm nay · bắt đầu ngay"}
+            badge={!loading && !submittedToday ? { text: "Chưa gửi", tone: "danger" } : undefined}
+          />
+          <ModuleCard
+            href="/3s"
+            icon="clipboard"
+            tone="primary"
+            title="Kiểm tra 5S"
+            description="Audit 5S, ghi nhận điểm chưa đạt"
+            stat={loading ? "…" : `${today?.threeS?.photosToday ?? 0} ảnh`}
+            statSub={(today?.threeS?.violationsToday ?? 0) > 0 ? `hôm nay · ${today?.threeS?.violationsToday} vi phạm` : "hôm nay"}
+          />
+          <ModuleCard
+            href="/capa"
+            icon="alert"
+            tone="warning"
+            title="CAPA / Giao việc"
+            description="Khắc phục điểm chưa đạt, theo dõi tiến độ"
+            stat={loading ? "…" : `${capaOpen} việc`}
+            statSub={capaOpen > 0 ? "chưa hoàn thành" : "đã xong hết"}
+            badge={capaOverdue > 0 ? { text: `${capaOverdue} quá hạn`, tone: "danger" } : undefined}
+          />
+          <ModuleCard
+            href="/overview"
+            icon="chart"
+            tone="info"
+            title="Thống kê"
+            description="Tiến độ chụp & tỷ lệ hoàn thành hôm nay"
+            stat={loading ? "…" : `${pct}%`}
+            statSub={`${today?.submittedDepartments ?? 0}/${today?.expectedDepartments ?? 0} phòng ban`}
+          />
+        </section>
 
         {/* Latest photos */}
-        <section className="lg:col-span-2">
+        <section>
           <div className="flex items-center justify-between mb-2">
             <span className="text-[15px] font-bold">Ảnh mới nhất</span>
             <Link href="/gallery" className="text-[13px] font-semibold text-primary-600">Xem tất cả →</Link>
@@ -140,7 +153,7 @@ export default function DashboardPage() {
         </section>
 
         {/* Missing departments */}
-        <section className="lg:col-span-1">
+        <section>
           <div className="flex items-center gap-2 mb-2">
             <span className="text-[15px] font-bold">Chưa chụp hôm nay</span>
             <span className="min-w-[20px] h-5 px-1.5 rounded-pill grid place-items-center text-[11px] font-bold bg-danger-bg text-danger">{missing.length}</span>
@@ -158,8 +171,8 @@ export default function DashboardPage() {
         </section>
 
         {/* Quick links */}
-        <section className="lg:col-span-3">
-          <div className="grid grid-cols-4 lg:grid-cols-8 gap-2.5">
+        <section>
+          <div className="grid grid-cols-4 lg:grid-cols-5 gap-2.5">
             {QUICK.map((q) => (
               <Link key={q.href} href={q.href} className="bg-white rounded-[14px] border border-line p-3 shadow-e2 flex flex-col items-center gap-1.5 hover:border-primary-600/40 hover:shadow-md transition active:bg-surface-2">
                 <Icon name={q.icon} size={22} className="text-primary-600" />
