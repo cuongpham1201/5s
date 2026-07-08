@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { fetchMe, subscribeMe } from "@/lib/client/me-cache";
 import { displayNameFrom, initialsFrom } from "@/lib/profile/display";
+import { Icon, type IconName } from "@/components/ui/Icon";
 import type { MeResponse } from "@/lib/graph/graph-types";
 
 const ROLE_LABEL: Record<string, string> = {
@@ -13,25 +14,27 @@ const ROLE_LABEL: Record<string, string> = {
   employee: "Nhân viên",
 };
 
-const NAV = [
+type NavEntry = { section: string } | { href: string; label: string; icon: IconName };
+
+const NAV: NavEntry[] = [
   { section: "Tổng quan" },
-  { href: "/admin", label: "Dashboard", icon: "📊" },
-  { href: "/admin/pending", label: "Chưa gửi", icon: "⚠️" },
-  { href: "/admin/calendar", label: "Lịch tổng hợp", icon: "🗓️" },
+  { href: "/admin", label: "Dashboard", icon: "grid" },
+  { href: "/admin/pending", label: "Chưa gửi", icon: "alert" },
+  { href: "/admin/calendar", label: "Lịch tổng hợp", icon: "calendar" },
   { section: "Phân tích" },
-  { href: "/admin/photo-stats", label: "Thống kê ảnh", icon: "📈" },
-  { href: "/admin/ranking", label: "Xếp hạng", icon: "🏆" },
-  { href: "/admin/gallery", label: "Thư viện ảnh", icon: "🖼️" },
+  { href: "/admin/photo-stats", label: "Thống kê ảnh", icon: "chart" },
+  { href: "/admin/ranking", label: "Xếp hạng", icon: "award" },
+  { href: "/admin/gallery", label: "Thư viện ảnh", icon: "image" },
   { section: "Cấu hình" },
-  { href: "/admin/config/departments", label: "Phòng ban", icon: "🏢" },
-  { href: "/admin/config/areas", label: "Khu vực", icon: "📍" },
-  { href: "/admin/config/check-items", label: "Hạng mục 5S", icon: "✅" },
-  { href: "/admin/config/role-mapping", label: "Phân quyền", icon: "🛡️" },
-  { href: "/admin/user-profiles", label: "Hồ sơ người dùng", icon: "👤" },
-  { href: "/admin/local-users", label: "Tài khoản nội bộ", icon: "🔑" },
-  { href: "/admin/queue", label: "Hàng đợi đồng bộ", icon: "🔄" },
-  { href: "/admin/sharepoint-health", label: "SharePoint Health", icon: "🩺" },
-] as const;
+  { href: "/admin/config/departments", label: "Phòng ban", icon: "building" },
+  { href: "/admin/config/areas", label: "Khu vực", icon: "mapPin" },
+  { href: "/admin/config/check-items", label: "Hạng mục 5S", icon: "check" },
+  { href: "/admin/config/role-mapping", label: "Phân quyền", icon: "shield" },
+  { href: "/admin/user-profiles", label: "Hồ sơ người dùng", icon: "user" },
+  { href: "/admin/local-users", label: "Tài khoản nội bộ", icon: "key" },
+  { href: "/admin/queue", label: "Hàng đợi đồng bộ", icon: "refresh" },
+  { href: "/admin/sharepoint-health", label: "SharePoint Health", icon: "activity" },
+];
 
 export function AdminShell({
   title,
@@ -94,7 +97,7 @@ export function AdminShell({
               onClick={() => setOpen(false)}
               className={`nav-item ${pathname === n.href ? "is-active" : ""}`}
             >
-              <span className="text-[18px] w-[22px] text-center">{n.icon}</span>
+              <Icon name={n.icon} size={18} strokeWidth={pathname === n.href ? 2.1 : 1.8} className="w-[22px] flex-none" />
               {n.label}
             </Link>
           ),
@@ -113,7 +116,7 @@ export function AdminShell({
       <div className="flex flex-col min-w-0">
         <header className="flex items-center gap-4 px-4 md:px-7 py-4 bg-white border-b border-line sticky top-0 z-20">
           <button
-            className="md:hidden w-10 h-10 rounded-sm grid place-items-center bg-surface text-lg"
+            className="md:hidden w-10 h-10 rounded-[12px] grid place-items-center bg-surface text-ink text-lg border border-line"
             onClick={() => setOpen((v) => !v)}
             aria-label="Mở menu"
           >

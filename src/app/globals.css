@@ -38,6 +38,16 @@
   --gold: #C99700;
   --silver: #8A8886;
   --bronze: #A55A2A;
+
+  /* Shape & elevation — synced with the internal ecosystem (Approval/Văn bản):
+     large card radius, soft minimal shadows, defined primary button. */
+  --radius-card: 20px;
+  --radius-btn: 12px;
+  --radius-field: 12px;
+  --sh-card: 0 1px 2px rgba(15, 23, 42, .05), 0 1px 3px rgba(15, 23, 42, .04);
+  --sh-card-hover: 0 6px 18px rgba(15, 23, 42, .08);
+  --sh-8: 0 4px 12px rgba(15, 23, 42, .08);
+  --sh-16: 0 12px 28px rgba(15, 23, 42, .14);
 }
 
 html,
@@ -76,27 +86,31 @@ body {
     @apply flex-1 min-h-0 overflow-y-auto flex flex-col;
   }
 
-  /* Buttons */
+  /* Buttons — defined primary with a soft lift, matching the ecosystem. */
   .btn {
-    @apply inline-flex items-center justify-center gap-2 font-semibold rounded-md transition-colors;
-    min-height: 48px;
-    padding: 12px 20px;
-    font-size: 16px;
+    @apply inline-flex items-center justify-center gap-2 font-semibold transition-all;
+    min-height: 44px;
+    padding: 11px 18px;
+    font-size: 15px;
     line-height: 20px;
+    border-radius: var(--radius-btn);
   }
-  .btn-primary { @apply text-white; background: var(--primary-600); }
-  .btn-primary:hover { background: var(--primary-700); }
-  .btn-secondary { @apply text-ink; background: var(--surface); box-shadow: inset 0 0 0 1px var(--border-strong); }
+  .btn-primary { @apply text-white; background: var(--primary-600); box-shadow: 0 1px 2px rgba(11, 116, 209, .28); }
+  .btn-primary:hover { background: var(--primary-700); box-shadow: 0 3px 10px rgba(11, 116, 209, .26); }
+  .btn-primary:active { transform: translateY(.5px); }
+  .btn-secondary { @apply text-ink; background: var(--bg); box-shadow: inset 0 0 0 1px var(--border-strong); }
+  .btn-secondary:hover { background: var(--surface-2); }
   .btn-ghost { background: transparent; color: var(--primary-600); }
   .btn-ghost:hover { background: var(--primary-100); }
-  .btn-danger { @apply text-white; background: var(--danger); }
-  .btn-lg { min-height: 56px; font-size: 17px; border-radius: 16px; }
+  .btn-danger { @apply text-white; background: var(--danger); box-shadow: 0 1px 2px rgba(220, 38, 38, .25); }
+  .btn-danger:hover { filter: brightness(.95); }
+  .btn-lg { min-height: 52px; font-size: 16px; border-radius: 14px; }
   .btn-block { @apply w-full; }
-  .btn[disabled] { background: var(--surface); color: var(--text-disabled); pointer-events: none; }
+  .btn[disabled] { background: var(--surface); color: var(--text-disabled); box-shadow: none; pointer-events: none; }
 
-  /* Cards — thin, near-flat (border + a whisper of shadow) */
-  .card { @apply bg-white p-4; border-radius: 16px; border: 1px solid var(--border); box-shadow: 0 1px 2px rgba(15, 23, 42, .04); }
-  .card-flat { @apply bg-white; border-radius: 16px; border: 1px solid var(--border); }
+  /* Cards — clean, card-based, large radius + soft shadow (ecosystem style). */
+  .card { @apply bg-white p-4; border-radius: var(--radius-card); border: 1px solid var(--border); box-shadow: var(--sh-card); }
+  .card-flat { @apply bg-white; border-radius: var(--radius-card); border: 1px solid var(--border); }
 
   /* Badges */
   .badge { @apply inline-flex items-center gap-1.5 text-xs font-semibold rounded-pill; padding: 4px 10px; }
