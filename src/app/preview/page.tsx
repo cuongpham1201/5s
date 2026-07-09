@@ -7,6 +7,7 @@ import { Card, InfoRow } from "@/components/ui/Card";
 import { useSessionCapture } from "@/features/capture/session-context";
 import { generateWatermarkedImage } from "@/lib/watermark/watermark-engine";
 import { buildWatermarkMetadata } from "@/lib/submissions/metadata";
+import { DEFAULT_WATERMARK_CONFIG, type WatermarkConfig } from "@/lib/watermark/watermark-types";
 import { dataUrlToBlob, getDataUrlDims, makeThumbnailDataUrl } from "@/lib/storage/image-utils";
 import { putPhoto, getPhoto, listPhotosBySubmission, sha256Hex } from "@/lib/storage/photo-store";
 import { ulog } from "@/lib/debug/upload-log";
@@ -29,6 +30,7 @@ export default function PreviewPage() {
   const [watermarkedUrl, setWatermarkedUrl] = useState<string | null>(null);
   const [originalUrl, setOriginalUrl] = useState<string | null>(null);
   const [meta, setMeta] = useState<WatermarkMetadata | null>(null);
+  const [wmConfig, setWmConfig] = useState<WatermarkConfig>(DEFAULT_WATERMARK_CONFIG);
   const [busy, setBusy] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +55,16 @@ export default function PreviewPage() {
     return () => clearTimeout(t);
   }, [vQuery, kind, violator]);
 
+  // Watermark config (admin, global) — nạp một lần; lỗi thì dùng mặc định.
+  useEffect(() => {
+    let active = true;
+    fetch("/api/config/watermark", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => active && d?.config && setWmConfig(d.config as WatermarkConfig))
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
+
   // Guard: missing session/pending → restart appropriately. Wait for hydration
   // so we don't bounce away during the pre-hydration null window.
   useEffect(() => {
@@ -74,7 +86,7 @@ export default function PreviewPage() {
     setError(null);
     const when = new Date(pendingCapture.capturedAt);
     const m = buildWatermarkMetadata(session, pendingCapture.geo, when);
-    generateWatermarkedImage({ source: pendingCapture.originalDataUrl, metadata: m })
+    generateWatermarkedImage({ source: pendingCapture.originalDataUrl, metadata: m, config: wmConfig })
       .then((res) => {
         if (!active) return;
         setMeta(m);
@@ -86,7 +98,7 @@ export default function PreviewPage() {
     return () => {
       active = false;
     };
-  }, [session, pendingCapture]);
+  }, [session, pendingCapture, wmConfig]);
 
   if (!session || !pendingCapture) return null;
 
@@ -108,7 +120,8 @@ export default function PreviewPage() {
       if (is3S && pendingCapture) {
         const who = kind === "violation" ? (violator?.name || note.trim()) : "";
         const tagLine = `3S: ${sTag} · ${KIND_LABEL[kind]}${who ? " — " + who : ""}${violator && note.trim() ? " · " + note.trim() : ""}`;
-        const res3 = await generateWatermarkedImage({ source: pendingCapture.originalDataUrl, metadata: { ...meta, checkItem: tagLine } });
+        // Dòng thẻ 3S bám vào checkItem → luôn bật showCheckItem cho ảnh 3S dù admin tắt.
+        const res3 = await generateWatermarkedImage({ source: pendingCapture.originalDataUrl, metadata: { ...meta, checkItem: tagLine }, config: { ...wmConfig, showCheckItem: true } });
         wmUrl = res3.watermarkedDataUrl;
       }
       const thumbnailDataUrl = await makeThumbnailDataUrl(wmUrl);

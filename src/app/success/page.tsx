@@ -103,7 +103,10 @@ export default function SuccessPage() {
             </button>
           )}
           <Link href="/capture" className="btn btn-primary btn-lg btn-block">+ Chụp phiên mới</Link>
-          <Link href="/history" className="btn btn-ghost btn-block">Xem lịch sử</Link>
+          <div className="flex gap-3">
+            <Link href="/dashboard" className="btn btn-secondary btn-block flex-1">Về trang chủ</Link>
+            <Link href="/history" className="btn btn-ghost btn-block flex-1">Xem lịch sử</Link>
+          </div>
         </div>
       </div>
     </AppShell>

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { AppHeader } from "@/components/layout/AppHeader";
-import { Icon, type IconName } from "@/components/ui/Icon";
+import { Icon } from "@/components/ui/Icon";
 import { ModuleCard } from "@/components/ui/ModuleCard";
 import { PhotoViewerModal, type ViewerPhoto } from "@/components/media/PhotoViewerModal";
 import { ensureProfile, subscribeMe } from "@/lib/client/me-cache";
@@ -20,13 +20,6 @@ function hhmm(iso?: string): string {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? "" : `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
-
-const QUICK: { href: string; icon: IconName; label: string }[] = [
-  { href: "/gallery", icon: "image", label: "Thư viện" },
-  { href: "/history", icon: "clock", label: "Lịch sử" },
-  { href: "/overview", icon: "chart", label: "Toàn cảnh" },
-  { href: "/me", icon: "user", label: "Hồ sơ" },
-];
 
 export default function DashboardPage() {
   const [me, setMe] = useState<MeResponse | null>(null);
@@ -170,23 +163,18 @@ export default function DashboardPage() {
           )}
         </section>
 
-        {/* Quick links */}
-        <section>
-          <div className="grid grid-cols-4 lg:grid-cols-5 gap-2.5">
-            {QUICK.map((q) => (
-              <Link key={q.href} href={q.href} className="bg-white rounded-[14px] border border-line p-3 shadow-e2 flex flex-col items-center gap-1.5 hover:border-primary-600/40 hover:shadow-md transition active:bg-surface-2">
-                <Icon name={q.icon} size={22} className="text-primary-600" />
-                <span className="text-[12px] font-semibold">{q.label}</span>
-              </Link>
-            ))}
-            {isAdmin && (
-              <Link href="/admin" className="bg-primary-100 rounded-[14px] border border-primary-600/30 p-3 shadow-e2 flex flex-col items-center gap-1.5 hover:shadow-md transition active:opacity-90">
-                <Icon name="building" size={22} className="text-primary-700" />
-                <span className="text-[12px] font-semibold text-primary-700">Quản trị</span>
-              </Link>
-            )}
-          </div>
-        </section>
+        {/* Quản trị — chỉ admin (giữ lối vào cho mobile vì BottomNav không có tab này).
+            Các quick-link Thư viện/Lịch sử/Toàn cảnh/Hồ sơ đã bỏ: desktop dùng
+            menu trái, mobile dùng BottomNav + card module ở trên. */}
+        {isAdmin && (
+          <section>
+            <Link href="/admin" className="bg-primary-100 rounded-[14px] border border-primary-600/30 p-3.5 shadow-e2 flex items-center gap-3 hover:shadow-md transition active:opacity-90">
+              <Icon name="building" size={22} className="text-primary-700" />
+              <span className="text-[14px] font-semibold text-primary-700">Quản trị</span>
+              <Icon name="chevronRight" size={18} className="text-primary-700/60 ml-auto" />
+            </Link>
+          </section>
+        )}
       </div>
       {viewer != null && (
         <PhotoViewerModal photos={viewerPhotos} index={viewer} onClose={() => setViewer(null)} onIndexChange={setViewer} />

@@ -9,6 +9,8 @@
 import type { WatermarkMetadata } from "@/types/submission";
 import {
   DEFAULT_WATERMARK_OPTIONS,
+  DEFAULT_WATERMARK_CONFIG,
+  type WatermarkConfig,
   type WatermarkInput,
   type WatermarkResult,
 } from "./watermark-types";
@@ -38,19 +40,22 @@ function estimateBytes(dataUrl: string): number {
   return Math.round((b64.length * 3) / 4);
 }
 
-/** The watermark text lines, in render order. */
-export function watermarkLines(m: WatermarkMetadata): string[] {
-  return [
-    `${m.time} | ${m.date}`,
-    m.weekday,
-    m.address,
-    `Phòng ban: ${m.department}`,
-    `Khu vực: ${m.area}`,
-    ...(m.checkItem ? [`Hạng mục: ${m.checkItem}`] : []),
-    `Người chụp: ${m.reporter}`,
-    `GPS: ${m.gps}`,
-    m.verifiedText,
-  ];
+/**
+ * The watermark text lines, in render order. Dòng thời gian LUÔN hiện; các dòng
+ * khác bật/tắt theo `config`; dòng tùy chỉnh chèn trước dòng "5S Verified".
+ */
+export function watermarkLines(m: WatermarkMetadata, config: WatermarkConfig = DEFAULT_WATERMARK_CONFIG): string[] {
+  const lines: string[] = [`${m.time} | ${m.date}`];
+  if (config.showWeekday && m.weekday) lines.push(m.weekday);
+  if (config.showAddress && m.address) lines.push(m.address);
+  if (config.showDepartment) lines.push(`Phòng ban: ${m.department}`);
+  if (config.showArea) lines.push(`Khu vực: ${m.area}`);
+  if (config.showCheckItem && m.checkItem) lines.push(`Hạng mục: ${m.checkItem}`);
+  if (config.showReporter) lines.push(`Người chụp: ${m.reporter}`);
+  if (config.showGps) lines.push(`GPS: ${m.gps}`);
+  if (config.customLine && config.customLine.trim()) lines.push(config.customLine.trim());
+  if (config.showVerified && m.verifiedText) lines.push(m.verifiedText);
+  return lines;
 }
 
 export async function generateWatermarkedImage(input: WatermarkInput): Promise<WatermarkResult> {
@@ -78,7 +83,8 @@ export async function generateWatermarkedImage(input: WatermarkInput): Promise<W
   if (!ctx) throw new Error("Không khởi tạo được canvas.");
   ctx.drawImage(img, 0, 0, w, h);
 
-  const lines = watermarkLines(input.metadata);
+  const lines = watermarkLines(input.metadata, input.config);
+  const verified = input.metadata.verifiedText;
   // Font scales with image size, clamped for legibility on mobile.
   const fontSize = Math.max(13, Math.min(34, Math.round(h * 0.024)));
   const lineHeight = Math.round(fontSize * 1.34);
@@ -98,11 +104,12 @@ export async function generateWatermarkedImage(input: WatermarkInput): Promise<W
   ctx.fillStyle = "rgba(255,255,255,0.18)";
   ctx.fillRect(boxX, boxY, boxW, Math.max(1, Math.round(fontSize * 0.06)));
 
-  // Text lines (first line bold; last line = verified, green).
+  // Text lines (first line bold; the "5S Verified" line green + bold wherever it sits).
   lines.forEach((line, i) => {
-    ctx.fillStyle = i === lines.length - 1 ? "#6FE26F" : "#FFFFFF";
+    const isVerified = !!verified && line === verified;
+    ctx.fillStyle = isVerified ? "#6FE26F" : "#FFFFFF";
     ctx.font =
-      (i === 0 || i === lines.length - 1 ? "bold " : "") +
+      (i === 0 || isVerified ? "bold " : "") +
       `${fontSize}px "Segoe UI", system-ui, Arial, sans-serif`;
     ctx.fillText(line, boxX + pad, boxY + pad + i * lineHeight, boxW - pad * 2);
   });

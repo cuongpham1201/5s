@@ -10,6 +10,12 @@ import type { MeResponse } from "@/lib/graph/graph-types";
 import type { AreaOption } from "@/lib/sharepoint/area-service";
 import type { CheckItemOption } from "@/lib/sharepoint/checkitem-service";
 
+/** Hạng mục "Thực hành 5S hàng ngày" — chọn mặc định khi vào màn chụp. */
+function isDailyPractice(name: string): boolean {
+  const n = (name ?? "").toLowerCase();
+  return n.includes("thực hành") && n.includes("hàng ngày");
+}
+
 export default function CapturePage() {
   const router = useRouter();
   const { startSession } = useSessionCapture();
@@ -74,7 +80,14 @@ export default function CapturePage() {
     setSelectedChecks(new Set());
     fetch(`/api/config/check-items?departmentCode=${encodeURIComponent(department)}&areaCode=${encodeURIComponent(selected)}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => active && setCheckItems(d?.checkItems ?? []))
+      .then((d) => {
+        if (!active) return;
+        const items: CheckItemOption[] = d?.checkItems ?? [];
+        setCheckItems(items);
+        // Mặc định chọn sẵn hạng mục "Thực hành 5S hàng ngày" nếu có.
+        const daily = items.find((c) => isDailyPractice(c.name));
+        if (daily) setSelectedChecks(new Set([daily.code]));
+      })
       .finally(() => active && setCheckLoading(false));
     return () => { active = false; };
   }, [selected, department]);

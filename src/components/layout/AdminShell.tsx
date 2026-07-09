@@ -29,6 +29,7 @@ const NAV: NavEntry[] = [
   { href: "/admin/config/departments", label: "Phòng ban", icon: "building" },
   { href: "/admin/config/areas", label: "Khu vực", icon: "mapPin" },
   { href: "/admin/config/check-items", label: "Hạng mục 5S", icon: "check" },
+  { href: "/admin/config/watermark", label: "Watermark", icon: "image" },
   { href: "/admin/config/role-mapping", label: "Phân quyền", icon: "shield" },
   { href: "/admin/user-profiles", label: "Hồ sơ người dùng", icon: "user" },
   { href: "/admin/local-users", label: "Tài khoản nội bộ", icon: "key" },

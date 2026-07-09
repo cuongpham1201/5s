@@ -9,18 +9,22 @@ import { fetchMe } from "@/lib/client/me-cache";
 import type { MeResponse } from "@/lib/graph/graph-types";
 
 interface AreaOption { code: string; name: string; parentCode?: string | null }
+interface DeptOption { code: string; name: string }
 
 /**
  * Thực hành 3S (M1 · HD-01) — LỐI VÀO RIÊNG, tách khỏi luồng "chụp ảnh hàng
- * ngày" (/capture giữ nguyên). Chọn khu vực → chụp; thẻ S1/S2/S3 + loại ảnh
- * (tốt / vi phạm / trước–sau) chọn cho TỪNG ẢNH ở bước xem lại. Toàn bộ hạ tầng
- * (camera, watermark, queue, upload) dùng chung.
+ * ngày" (/capture giữ nguyên). Bản chất AUDIT: người kiểm tra đi CÁC PHÒNG BAN
+ * KHÁC để chụp → chọn phòng ban cần audit (mặc định phòng của mình) rồi chọn
+ * khu vực. Bản ghi lưu departmentCode = PHÒNG BỊ AUDIT; reporter = người audit.
+ * Thẻ S1/S2/S3 + loại ảnh chọn cho TỪNG ẢNH ở bước xem lại. Hạ tầng dùng chung.
  */
 export default function ThreeSPage() {
   const router = useRouter();
   const { startSession } = useSessionCapture();
   const [me, setMe] = useState<MeResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [departments, setDepartments] = useState<DeptOption[]>([]);
+  const [selectedDept, setSelectedDept] = useState<string | null>(null);
   const [areas, setAreas] = useState<AreaOption[]>([]);
   const [areasLoading, setAreasLoading] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
@@ -29,13 +33,20 @@ export default function ThreeSPage() {
   useEffect(() => {
     let active = true;
     fetchMe().then((d) => { if (active) { setMe(d); setLoading(false); } });
+    fetch("/api/config/departments", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => active && setDepartments((d?.departments ?? []) as DeptOption[]));
     return () => { active = false; };
   }, []);
 
-  const department = me?.departmentResolved ? me.departmentCode ?? null : null;
+  // Mặc định audit phòng ban của chính người dùng (có thể đổi sang phòng khác).
+  useEffect(() => {
+    if (!selectedDept && me?.departmentResolved && me.departmentCode) setSelectedDept(me.departmentCode);
+  }, [me, selectedDept]);
 
   const loadAreas = useCallback(async (dept: string) => {
     setAreasLoading(true);
+    setSelected(null);
     try {
       const r = await fetch(`/api/config/areas?departmentCode=${encodeURIComponent(dept)}`, { cache: "no-store" });
       const d = r.ok ? await r.json() : null;
@@ -46,10 +57,12 @@ export default function ThreeSPage() {
   }, []);
 
   useEffect(() => {
-    if (department) void loadAreas(department);
+    if (selectedDept) void loadAreas(selectedDept);
     else setAreas([]);
-  }, [department, loadAreas]);
+  }, [selectedDept, loadAreas]);
 
+  const selectedDeptName = departments.find((d) => d.code === selectedDept)?.name
+    ?? (selectedDept === me?.departmentCode ? me?.departmentName : "") ?? "";
   const groups = areas.filter((a) => !a.parentCode);
   const childrenOfSelected = areas.filter((a) => a.parentCode === selected);
   useEffect(() => { setSelectedChild(areas.filter((a) => a.parentCode === selected)[0]?.code ?? null); }, [selected, areas]);
@@ -60,12 +73,14 @@ export default function ThreeSPage() {
     const area = child
       ? { ...child, name: `${group?.name ?? ""} - ${child.name}`.replace(/^ - /, "") }
       : group;
-    if (!area || !department) return;
+    if (!area || !selectedDept) return;
     startSession({
-      departmentCode: department,
-      departmentName: me?.departmentName ?? "",
+      // departmentCode = PHÒNG BỊ AUDIT (không phải phòng của người chụp).
+      departmentCode: selectedDept,
+      departmentName: selectedDeptName,
       areaCode: area.code,
       areaName: area.name,
+      // reporter = người đi audit (tài khoản đăng nhập).
       reporterName: me?.displayName ?? "",
       reporterEmail: me?.email ?? "",
       submissionType: "3s",
@@ -92,12 +107,28 @@ export default function ThreeSPage() {
 
         {loading ? (
           <div className="text-[13px] text-ink-muted">Đang tải…</div>
-        ) : !department ? (
+        ) : departments.length === 0 ? (
           <div className="rounded-md bg-warning-bg text-warning p-3.5 text-[13px] font-medium">
-            Chưa xác định được phòng ban của tài khoản. Vui lòng liên hệ quản trị.
+            Chưa tải được danh sách phòng ban. Vui lòng thử lại hoặc liên hệ quản trị.
           </div>
         ) : (
           <>
+            <label className="block text-[13px] font-semibold text-ink-muted mb-1">
+              Phòng ban cần audit <span className="text-danger">*</span>
+            </label>
+            <div className="text-[12.5px] text-ink-muted mb-2">
+              Chọn phòng ban bạn đang đi kiểm tra (mặc định phòng của bạn).
+            </div>
+            <select
+              value={selectedDept ?? ""}
+              onChange={(e) => setSelectedDept(e.target.value || null)}
+              className="w-full rounded-md border-[1.5px] border-line-strong bg-white px-3 py-3 text-[15px] font-semibold mb-4"
+            >
+              {departments.map((d) => (
+                <option key={d.code} value={d.code}>{d.code} · {d.name}</option>
+              ))}
+            </select>
+
             <label className="block text-[13px] font-semibold text-ink-muted mb-1">
               Khu vực <span className="text-danger">*</span>
             </label>
