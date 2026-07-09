@@ -17,6 +17,7 @@ const SOURCE_LABEL: Record<string, string> = {
 
 const CARDS = [
   { href: "/admin/calendar", icon: "📊", title: "Tổng quan hệ thống", desc: "Lịch tổng hợp gửi ảnh theo ngày" },
+  { href: "/admin/hrm-sync", icon: "🗄️", title: "HRM Sync Monitor", desc: "Đồng bộ phòng ban & nhân viên từ HRM (read-only)" },
   { href: "/admin/config/departments", icon: "🔄", title: "Đồng bộ phòng ban Microsoft 365", desc: "Đồng bộ Config_Departments từ M365" },
   { href: "/admin/config/departments", icon: "🏢", title: "Quản lý phòng ban", desc: "Danh sách phòng ban đang hoạt động" },
   { href: "/admin/config/areas", icon: "📍", title: "Gán khu vực chụp", desc: "Khu vực 5S theo từng phòng ban" },
