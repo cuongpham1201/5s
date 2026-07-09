@@ -8,17 +8,25 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "db:migrate": "node scripts/migrate.mjs",
+    "db:migrate:status": "node scripts/migrate.mjs status",
+    "db:rollback": "node scripts/migrate.mjs rollback",
+    "hrm:sync": "node scripts/hrm-sync.mjs full",
+    "hrm:sync:departments": "node scripts/hrm-sync.mjs departments",
+    "hrm:sync:employees": "node scripts/hrm-sync.mjs employees"
   },
   "dependencies": {
     "next": "^14.2.35",
     "next-auth": "5.0.0-beta.20",
+    "pg": "^8.22.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/node": "20.14.10",
+    "@types/pg": "^8.20.0",
     "@types/react": "18.3.3",
     "@types/react-dom": "18.3.0",
     "autoprefixer": "10.4.19",
