@@ -2,7 +2,8 @@ import NextAuth, { type DefaultSession } from "next-auth";
 import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
 import Credentials from "next-auth/providers/credentials";
 import { resolveRole } from "@/lib/auth/roles";
-import { mapEntraDepartment } from "@/lib/department-mapping";
+
+const LOCAL_EMAIL_DOMAIN = "local.biahalong.com";
 
 /**
  * Auth.js (NextAuth v5) configuration — Phase 1B.
@@ -23,8 +24,10 @@ export type AppRole = "employee" | "environment" | "admin";
 declare module "next-auth" {
   interface Session {
     user: {
-      department?: string; // 5S department code (mapped)
+      department?: string; // 5S department code (local/dev providers only; MS resolves via /api/me → ban5s_app)
       role?: AppRole;
+      /** Microsoft Entra object id — identity anchor for ban5s_app resolution. */
+      oid?: string;
     } & DefaultSession["user"];
     /** Set to "RefreshAccessTokenError" when the Graph token could not be refreshed. */
     error?: string;
@@ -39,6 +42,7 @@ declare module "next-auth/jwt" {
   interface JWT {
     role?: AppRole;
     department?: string;
+    oid?: string;
     accessToken?: string;
     refreshToken?: string;
     /** Epoch SECONDS when the access token expires (matches account.expires_at). */
@@ -89,15 +93,39 @@ providers.push(
       password: { label: "Mật khẩu", type: "password" },
     },
     authorize: async (creds) => {
+      const username = String(creds?.username ?? "");
+      const password = String(creds?.password ?? "");
+      // 1) app_users (ban5s_app) — verified via node internal route so pg never
+      //    enters the edge bundle. app_users is the identity center (Phase 3).
+      try {
+        const base = process.env.INTERNAL_BASE_URL || process.env.NEXTAUTH_URL || process.env.AUTH_URL || "http://localhost:3000";
+        const r = await fetch(`${base}/api/identity/local-verify`, {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-internal-token": process.env.AUTH_SECRET ?? "" },
+          body: JSON.stringify({ username, password }),
+          // Fail fast so a stuck internal call falls back to the legacy store
+          // instead of hanging the login request.
+          signal: AbortSignal.timeout(3500),
+        });
+        if (r.ok) {
+          const d = await r.json();
+          if (d?.ok && d.identity) {
+            const i = d.identity;
+            const email = i.email || `${i.username}@${LOCAL_EMAIL_DOMAIN}`;
+            return { id: `local:${i.username}`, email, name: i.displayName, role: (i.role as AppRole) || "employee", department: i.departmentCode ?? undefined };
+          }
+        }
+      } catch { /* fall through to legacy store */ }
+      // 2) Legacy fallback — Data_LocalUsers (SharePoint) so existing accounts keep working.
       const { verifyLocalLogin } = await import("@/lib/auth/local-users");
-      const user = await verifyLocalLogin(String(creds?.username ?? ""), String(creds?.password ?? ""));
+      const user = await verifyLocalLogin(username, password);
       if (!user) return null;
       return {
         id: user.email,
         email: user.email,
         name: user.displayName,
         role: (user.role as AppRole) || "employee",
-        department: user.departmentCode, // resolved CODE — dept resolver matches code-exact first
+        department: user.departmentCode,
       };
     },
   }),
@@ -152,8 +180,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (profile) {
         const email = (profile.email as string) || (profile.preferred_username as string) || "";
         token.role = token.role ?? resolveRole(email);
-        const entraDept = (profile as { department?: string }).department;
-        token.department = token.department ?? mapEntraDepartment(entraDept);
+        // Microsoft object id = identity anchor. Department/jobTitle/role are now
+        // resolved from ban5s_app (in /api/me), NOT from Microsoft Graph.
+        token.oid = (profile.oid as string) || (profile.sub as string) || token.oid;
       }
       token.role = token.role ?? "employee";
       return token;
@@ -161,7 +190,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async session({ session, token }) {
       if (session.user) {
         session.user.role = (token.role as AppRole) ?? "employee";
-        session.user.department = token.department;
+        session.user.department = token.department; // undefined for MS → client reads /api/me
+        session.user.oid = token.oid as string | undefined;
       }
       return session;
     },

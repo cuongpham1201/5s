@@ -26,6 +26,7 @@ const NAV: NavEntry[] = [
   { href: "/admin/ranking", label: "Xếp hạng", icon: "award" },
   { href: "/admin/gallery", label: "Thư viện ảnh", icon: "image" },
   { section: "Cấu hình" },
+  { href: "/admin/identity", label: "Identity Center", icon: "user" },
   { href: "/admin/hrm-sync", label: "HRM Sync", icon: "refresh" },
   { href: "/admin/config/departments", label: "Phòng ban", icon: "building" },
   { href: "/admin/config/areas", label: "Khu vực", icon: "mapPin" },
