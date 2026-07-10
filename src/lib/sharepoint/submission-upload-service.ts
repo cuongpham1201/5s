@@ -56,6 +56,13 @@ export interface UploadSubmissionInput {
   status?: SubmissionStatus;
   /** "3s" = Thực hành 3S; mặc định "daily". */
   submissionType?: string;
+  /** Phân loại workflow đã xác định phía server: "daily" | "audit". */
+  workflowKind?: string;
+  /** Tên phòng ban của phiếu (bị kiểm tra với audit / người gửi với daily). */
+  departmentName?: string | null;
+  /** Snapshot phòng ban NGƯỜI KIỂM TRA (audit). */
+  reporterDepartmentCode?: string | null;
+  reporterDepartmentName?: string | null;
   photos: UploadPhotoInput[];
   queueId?: string;
   attemptCount?: number;
@@ -103,10 +110,16 @@ export async function upsertSubmissionHeader(
     UploadSubmissionInput,
     | "submissionId" | "departmentCode" | "areaCode" | "areaName" | "reporterName"
     | "reporterEmail" | "submittedAt" | "submissionDate" | "latitude" | "longitude" | "address"
-  > & { photoCount: number; status: SubmissionStatus; syncStatus: SyncStatus; submissionType?: string },
+  > & {
+    photoCount: number; status: SubmissionStatus; syncStatus: SyncStatus; submissionType?: string;
+    workflowKind?: string; departmentName?: string | null;
+    reporterDepartmentCode?: string | null; reporterDepartmentName?: string | null;
+  },
 ): Promise<void> {
   const { client, siteId } = await ctx();
   const listId = await requireList(client, siteId, DATA_LISTS.submissions);
+  // Audit → giữ SubmissionType="3s" (tương thích báo cáo/gallery cũ) dù code dùng "audit".
+  const isAudit = input.workflowKind === "audit" || input.submissionType === "3s" || input.submissionType === "audit";
   const fields = {
     Title: input.submissionId,
     SubmissionId: input.submissionId,
@@ -123,8 +136,11 @@ export async function upsertSubmissionHeader(
     Address: input.address,
     Status: input.status,
     SyncStatus: input.syncStatus,
-    // Chỉ ghi khi là 3S — record daily/cũ giữ nguyên (cột có thể chưa tồn tại ở env cũ).
-    ...(input.submissionType === "3s" ? { SubmissionType: "3s" } : {}),
+    // Additive (cột có thể chưa tồn tại ở env chưa provision → chỉ ghi khi có giá trị).
+    ...(input.departmentName ? { DepartmentName: input.departmentName } : {}),
+    ...(input.reporterDepartmentCode ? { ReporterDepartmentCode: input.reporterDepartmentCode } : {}),
+    ...(input.reporterDepartmentName ? { ReporterDepartmentName: input.reporterDepartmentName } : {}),
+    ...(isAudit ? { SubmissionType: "3s" } : {}),
   };
   const existingId = await findItemIdByField(client, siteId, listId, "SubmissionId", input.submissionId);
   if (existingId) {
@@ -313,7 +329,9 @@ export async function uploadSubmissionPhotos(input: UploadSubmissionInput): Prom
       submittedAt: input.submittedAt, submissionDate: input.submissionDate,
       latitude: input.latitude, longitude: input.longitude, address: input.address,
       photoCount: photos.length, status: input.status ?? "complete", syncStatus: ok ? "uploaded" : "failed",
-      submissionType: input.submissionType,
+      submissionType: input.submissionType, workflowKind: input.workflowKind,
+      departmentName: input.departmentName,
+      reporterDepartmentCode: input.reporterDepartmentCode, reporterDepartmentName: input.reporterDepartmentName,
     });
   } catch (he) {
     ulog("server.header:warn", { submissionId: input.submissionId, message: (he as Error)?.message ?? "header optional" });

@@ -73,6 +73,27 @@ async function readCheckItems(): Promise<CheckItemRecord[]> {
   return items.map((it) => mapCheckItem(it.fields));
 }
 
+/**
+ * Server-authoritative workflow kind for the given check-item codes, read from
+ * Config_CheckItems.WorkflowKind (raw field; blank → "daily"). Used by the upload
+ * intake to classify daily vs audit WITHOUT trusting the client's submissionType.
+ */
+export async function getCheckItemKinds(codes: string[]): Promise<Map<string, "daily" | "audit">> {
+  const wanted = new Set(codes.map((c) => c.trim()).filter(Boolean));
+  const out = new Map<string, "daily" | "audit">();
+  if (!wanted.size) return out;
+  const { client, siteId, listId } = await ctx();
+  if (!listId) return out;
+  for (const it of await readItems(client, siteId, listId)) {
+    const code = (it.fields?.CheckItemCode as string) ?? (it.fields?.Title as string) ?? "";
+    if (code && wanted.has(code)) {
+      const wk = String(it.fields?.WorkflowKind ?? "").toLowerCase();
+      out.set(code, wk === "audit" ? "audit" : "daily");
+    }
+  }
+  return out;
+}
+
 function toOption(r: CheckItemRecord): CheckItemOption {
   return {
     code: r.CheckItemCode,

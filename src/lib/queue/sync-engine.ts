@@ -106,6 +106,8 @@ async function collectPayload(sub: CompletedSubmission, attemptCount: number, qu
     reporterName: sub.reporterName, reporterEmail: sub.reporterEmail, submittedAt: sub.submittedAt, queueId, attemptCount,
     latitude: first?.latitude ?? null, longitude: first?.longitude ?? null, address: first?.address ?? null, photos: metaPhotos,
     submissionType: sub.submissionType ?? "daily",
+    departmentName: sub.departmentName ?? null,
+    checkItemCode: sub.checkItemCode ?? null,
     clientParts,
     // Correlation for server-side structured logs (requestId ties client attempt ↔
     // server entry; platform tells us iOS/PWA/Safari without needing device logs).

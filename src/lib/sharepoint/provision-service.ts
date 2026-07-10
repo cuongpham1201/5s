@@ -64,6 +64,9 @@ const LIST_SPECS: ListSpec[] = [
       { name: "SortOrder", type: "number" },
       { name: "IsActive", type: "boolean" },
       { name: "Description", type: "text" },
+      // Workflow của hạng mục: "daily" | "audit" (trống → daily). Server dùng cột
+      // này để phân loại phiếu (KHÔNG tin submissionType do client gửi).
+      { name: "WorkflowKind", type: "text" },
     ],
   },
   {
@@ -102,8 +105,13 @@ const LIST_SPECS: ListSpec[] = [
       { name: "DepartmentCode", type: "text", indexed: true },
       { name: "AreaCode", type: "text", indexed: true },
       { name: "AreaName", type: "text" },
+      { name: "DepartmentName", type: "text" },
       { name: "ReporterName", type: "text" },
       { name: "ReporterEmail", type: "text", indexed: true },
+      // Audit 5S: phòng ban NGƯỜI KIỂM TRA (reporter) — tách khỏi DepartmentCode
+      // (= phòng bị kiểm tra với audit; = phòng người gửi với daily).
+      { name: "ReporterDepartmentCode", type: "text", indexed: true },
+      { name: "ReporterDepartmentName", type: "text" },
       { name: "PhotoCount", type: "number" },
       { name: "SubmissionDate", type: "dateTime", indexed: true },
       { name: "SubmittedAt", type: "dateTime", indexed: true },
