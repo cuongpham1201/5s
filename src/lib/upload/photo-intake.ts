@@ -10,6 +10,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { resolveRequestUser } from "@/lib/auth/request-department";
 import { uploadSubmissionPhotos, type PhotoUploadResult } from "@/lib/sharepoint/submission-upload-service";
+import { resolveWorkflowKind } from "@/lib/sharepoint/workflow-kind";
+import { canCreateAudit } from "@/lib/auth/audit-guard";
+import { listAreasByDepartmentCode } from "@/lib/sharepoint/area-service";
 import { vnDateKey } from "@/lib/sharepoint/report-service";
 import { ulogAlways } from "@/lib/debug/upload-log";
 
@@ -18,7 +21,9 @@ export const MAX_PHOTOS = 20;
 
 export interface UploadMetaIn {
   submissionId?: string;
+  /** audit: phòng BỊ kiểm tra; daily: phòng người gửi. */
   departmentCode?: string;
+  departmentName?: string;
   areaCode?: string;
   areaName?: string;
   checkItemCode?: string;
@@ -53,15 +58,11 @@ export async function runPhotoUploadIntake(
   const rid = meta?.requestId ?? "-";
   const tEntry = Date.now();
 
-  // 1) Auth + profile (server-trusted identity).
+  // 1) Auth (server-trusted identity).
   const me = await resolveRequestUser(req);
   if (!me?.email) {
     ulogAlways("server.reject", { rid, mode, errorCode: "AUTH_REQUIRED" });
     return errRes("AUTH_REQUIRED", "Chưa đăng nhập.", 401);
-  }
-  if (!me.departmentResolved || !me.departmentCode) {
-    ulogAlways("server.reject", { rid, mode, email: me.email, errorCode: "PROFILE_UNRESOLVED" });
-    return errRes("PROFILE_UNRESOLVED", "Chưa xác định được phòng ban của tài khoản.", 403);
   }
   if (!meta) return errRes("NO_PHOTOS", "meta JSON không hợp lệ.", 400);
 
@@ -76,9 +77,63 @@ export async function runPhotoUploadIntake(
   if (!Array.isArray(meta.photos) || meta.photos.length === 0) return errRes("NO_PHOTOS", "Cần ít nhất 1 ảnh.", 400);
   if (meta.photos.length > MAX_PHOTOS) return errRes("NO_PHOTOS", `Tối đa ${MAX_PHOTOS} ảnh mỗi lần gửi.`, 400);
 
-  // 2) Department comes from the SERVER profile (never trust the client's).
-  if (meta.departmentCode && meta.departmentCode !== me.departmentCode) {
-    return errRes("PROFILE_UNRESOLVED", `Không thể gửi cho phòng ban khác (${meta.departmentCode} ≠ ${me.departmentCode}).`, 403);
+  // 2) Phân loại workflow phía SERVER (Config_CheckItems.WorkflowKind — không tin
+  //    submissionType client làm nguồn duy nhất) rồi tách luật DAILY vs AUDIT.
+  //    Luật DÙNG CHUNG với sync-intake: resolveWorkflowKind + canCreateAudit.
+  const canAudit = canCreateAudit({ email: me.email });
+  const wf = await resolveWorkflowKind({ checkItemCode: meta.checkItemCode, submissionType: meta.submissionType }, canAudit);
+  // Phòng ban của PHIẾU: audit = phòng bị kiểm tra (client chọn); daily = phòng người gửi (server).
+  const targetDept = wf.kind === "audit" ? (meta.departmentCode ?? "") : (me.departmentCode ?? "");
+  let reporterDeptWarning: string | null = null;
+  const wflog = (extra: Record<string, unknown>) => ulogAlways("server.workflow", {
+    rid, pipeline: `upload-photos:${mode}`, submissionId: meta.submissionId,
+    submissionType: meta.submissionType ?? null, checkItemCode: meta.checkItemCode ?? null,
+    resolvedWorkflowKind: wf.kind, kindSource: wf.source,
+    reporterDepartmentCode: me.departmentCode ?? null, targetDepartmentCode: targetDept || null,
+    ...extra,
+  });
+
+  if (wf.kind === "audit") {
+    // AUDIT: cho phép phòng bị kiểm tra khác phòng người kiểm tra. Chặn theo QUYỀN.
+    if (!canAudit) {
+      wflog({ validationBranch: "audit", returnedErrorCode: "AUDIT_FORBIDDEN" });
+      return errRes("AUDIT_FORBIDDEN", "Bạn không có quyền tạo Audit 5S.", 403);
+    }
+    if (!targetDept) {
+      wflog({ validationBranch: "audit", returnedErrorCode: "NO_PHOTOS" });
+      return errRes("NO_PHOTOS", "Thiếu phòng ban bị kiểm tra (departmentCode).", 400);
+    }
+    if (!me.departmentResolved || !me.departmentCode) {
+      // KHÔNG chặn — chỉ warning + vẫn cố lưu snapshot (null).
+      reporterDeptWarning = "reporter department chưa resolve";
+    }
+    // Area phải thuộc PHÒNG BỊ KIỂM TRA (hỗ trợ khu vực đa phòng — Departments CSV).
+    try {
+      const deptAreas = await listAreasByDepartmentCode(targetDept);
+      if (deptAreas.length > 0 && !deptAreas.some((a) => a.code === meta.areaCode)) {
+        wflog({ validationBranch: "audit", returnedErrorCode: "AREA_NOT_IN_DEPT", areaCode: meta.areaCode });
+        return errRes("AREA_NOT_IN_DEPT", `Khu vực ${meta.areaCode} không thuộc phòng ban bị kiểm tra ${targetDept}.`, 403);
+      }
+    } catch { /* area list optional */ }
+    wflog({ validationBranch: "audit", returnedErrorCode: null, reporterDeptWarning });
+  } else {
+    // DAILY: bắt buộc resolve phòng người gửi + phiếu đúng phòng + area thuộc phòng đó.
+    if (!me.departmentResolved || !me.departmentCode) {
+      wflog({ validationBranch: "daily", returnedErrorCode: "PROFILE_UNRESOLVED" });
+      return errRes("PROFILE_UNRESOLVED", "Chưa xác định được phòng ban của tài khoản.", 403);
+    }
+    if (meta.departmentCode && meta.departmentCode !== me.departmentCode) {
+      wflog({ validationBranch: "daily", returnedErrorCode: "DEPT_MISMATCH" });
+      return errRes("DEPT_MISMATCH", `Không thể gửi cho phòng ban khác (${meta.departmentCode} ≠ ${me.departmentCode}).`, 403);
+    }
+    try {
+      const deptAreas = await listAreasByDepartmentCode(me.departmentCode);
+      if (deptAreas.length > 0 && !deptAreas.some((a) => a.code === meta.areaCode)) {
+        wflog({ validationBranch: "daily", returnedErrorCode: "AREA_NOT_IN_DEPT", areaCode: meta.areaCode });
+        return errRes("AREA_NOT_IN_DEPT", `Khu vực ${meta.areaCode} không thuộc phòng ban ${me.departmentCode}.`, 403);
+      }
+    } catch { /* area list optional */ }
+    wflog({ validationBranch: "daily", returnedErrorCode: null });
   }
 
   // 3) Resolve byte pairs; per-photo problems become per-photo errors (BAD_FILE /
@@ -131,21 +186,27 @@ export async function runPhotoUploadIntake(
     const submittedAt = meta.submittedAt || new Date().toISOString();
     const result = await uploadSubmissionPhotos({
       submissionId: meta.submissionId,
-      departmentCode: me.departmentCode,
+      // audit: phòng BỊ kiểm tra; daily: phòng người gửi (server-trusted).
+      departmentCode: targetDept,
+      departmentName: meta.departmentName ?? null,
       areaCode: meta.areaCode,
       areaName: meta.areaName ?? meta.areaCode,
       reporterName: meta.reporterName ?? me.displayName ?? "",
       reporterEmail: me.email,
+      // Snapshot phòng ban NGƯỜI KIỂM TRA — tách khỏi DepartmentCode.
+      reporterDepartmentCode: me.departmentCode ?? null,
+      reporterDepartmentName: me.departmentName ?? null,
+      workflowKind: wf.kind,
       submittedAt,
       submissionDate: vnDateKey(new Date(submittedAt)),
       latitude: photos[0]?.latitude ?? null,
       longitude: photos[0]?.longitude ?? null,
       address: photos[0]?.address ?? null,
-      submissionType: meta.submissionType === "3s" ? "3s" : "daily",
+      submissionType: wf.kind === "audit" ? "3s" : "daily",
       photos,
     });
     const errors = [...preErrors, ...result.errors];
-    const body = { ...result, failedPhotoCount: errors.length, errors, diag };
+    const body = { ...result, failedPhotoCount: errors.length, errors, diag, workflowKind: wf.kind, ...(reporterDeptWarning ? { warning: reporterDeptWarning } : {}) };
     ulogAlways(body.ok ? "server.done" : "server.failed", {
       rid, mode, submissionId: meta.submissionId, uploaded: body.uploadedPhotoCount,
       failed: body.failedPhotoCount, errors: errors.map((e) => `${e.seqNo}:${e.errorCode}`),
