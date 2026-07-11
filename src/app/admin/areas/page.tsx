@@ -302,6 +302,7 @@ export default function AdminAreasPage() {
   const [cmpData, setCmpData] = useState<Record<string, unknown> | null>(null);
   const [cmpTitle, setCmpTitle] = useState("");
   const [preview, setPreview] = useState<{ id: number; data: Record<string, unknown> } | null>(null);
+  const [restoreAck, setRestoreAck] = useState(false);
   const loadVers = useCallback(async () => {
     const d = await api("/api/admin/areas/versions");
     setVers((d.versions as Ver[]) ?? []);
@@ -320,6 +321,7 @@ export default function AdminAreasPage() {
   }, "Đã so sánh.");
   const doPreview = (v: Ver) => run(async () => {
     const d = await api(`/api/admin/areas/versions/${v.id}/restore-preview`, {});
+    setRestoreAck(false);
     setPreview({ id: v.id, data: (d.preview as Record<string, unknown>) ?? {} });
     return d;
   }, "Đã tạo preview restore.");
@@ -733,11 +735,28 @@ export default function AdminAreasPage() {
                 </div>
                 <div className="text-[13px] mb-1.5">Kế hoạch: upsert {pd.planned?.areasUpsert ?? 0} khu · ẩn {pd.planned?.areasDeactivate ?? 0} khu · upsert {pd.planned?.assignmentsUpsert ?? 0} assignment · ẩn {pd.planned?.assignmentsDeactivate ?? 0} assignment</div>
                 {pd.compare?.kpi && <div className="text-[13px] mb-1.5">KPI: điểm chụp {String((pd.compare.kpi as Record<string, unknown>).physicalBefore)}→{String((pd.compare.kpi as Record<string, unknown>).physicalAfter)} · nghĩa vụ {String((pd.compare.kpi as Record<string, unknown>).obligationsBefore)}→{String((pd.compare.kpi as Record<string, unknown>).obligationsAfter)}</div>}
+                {(() => {
+                  const per = ((pd.compare?.kpi as Record<string, unknown>)?.perDepartmentDiff ?? []) as Array<{ departmentCode: string; before: number; after: number }>;
+                  return per.length > 0 ? (
+                    <div className="text-[13px] mt-1.5 mb-1">
+                      <b>{per.length} phòng ban bị thay đổi nghĩa vụ:</b>{" "}
+                      {per.map((d) => (
+                        <span key={d.departmentCode} className={`inline-block mr-2.5 ${d.after > d.before ? "text-success" : "text-danger"}`}>
+                          {d.departmentCode} {d.before}→{d.after}
+                        </span>
+                      ))}
+                    </div>
+                  ) : <div className="text-[13px] text-ink-muted mt-1.5 mb-1">Không phòng ban nào thay đổi nghĩa vụ KPI.</div>;
+                })()}
                 {(pd.warnings ?? []).map((w, i) => <div key={i} className="text-[12.5px] text-warning">⚠ {w}</div>)}
                 <div className="text-[12.5px] text-ink-muted mt-2 mb-2">Thao tác này thay đổi cấu hình khu vực hiện hành nhưng KHÔNG thay đổi lịch sử ảnh.</div>
+                <label className="flex items-start gap-2 text-[13px] font-medium mb-2.5 cursor-pointer">
+                  <input type="checkbox" checked={restoreAck} onChange={(e) => setRestoreAck(e.target.checked)} className="mt-0.5" />
+                  Tôi xác nhận hiện không có người đang thao tác chụp hoặc đồng bộ ảnh 5S.
+                </label>
                 <div className="flex gap-2">
-                  {pd.valid && v && <button onClick={() => doRestore(v)} disabled={busy} className="btn btn-primary !min-h-9">Xác nhận RESTORE</button>}
-                  <button onClick={() => setPreview(null)} className="btn btn-secondary !min-h-9">Đóng</button>
+                  {pd.valid && v && <button onClick={() => doRestore(v)} disabled={busy || !restoreAck} className="btn btn-primary !min-h-9" title={!restoreAck ? "Tick xác nhận trước" : ""}>Xác nhận RESTORE</button>}
+                  <button onClick={() => { setPreview(null); setRestoreAck(false); }} className="btn btn-secondary !min-h-9">Đóng</button>
                 </div>
               </div>
             );
