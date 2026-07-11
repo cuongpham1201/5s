@@ -7,7 +7,7 @@ import { AppHeader } from "@/components/layout/AppHeader";
 import { Icon } from "@/components/ui/Icon";
 import { Thumb } from "@/components/media/Thumb";
 import { PhotoViewerModal, type ViewerPhoto } from "@/components/media/PhotoViewerModal";
-import type { TodaySummary } from "@/lib/sharepoint/report-service";
+import type { TodaySummary, ProgressSummary } from "@/lib/sharepoint/report-service";
 
 interface Dept { code: string; name: string }
 interface PhotoItem { submissionId: string; seqNo: number; watermarkedPath: string; departmentCode: string; areaName: string; reporterName?: string; submittedAt: string }
@@ -21,6 +21,7 @@ function hhmm(iso?: string): string {
 export default function OverviewPage() {
   const [depts, setDepts] = useState<Dept[]>([]);
   const [today, setToday] = useState<TodaySummary | null>(null);
+  const [progress, setProgress] = useState<ProgressSummary | null>(null);
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
@@ -32,11 +33,13 @@ export default function OverviewPage() {
       fetch("/api/config/departments").then((r) => (r.ok ? r.json() : null)),
       fetch("/api/reports/today").then((r) => (r.ok ? r.json() : null)),
       fetch("/api/photos?limit=200&type=daily").then((r) => (r.ok ? r.json() : null)),
-    ]).then(([d, t, p]) => {
+      fetch("/api/reports/progress").then((r) => (r.ok ? r.json() : null)),
+    ]).then(([d, t, p, pg]) => {
       if (!active) return;
       setDepts(d?.departments ?? []);
       setToday(t);
       setPhotos(p?.photos ?? []);
+      setProgress(pg as ProgressSummary | null);
       setLoading(false);
     });
     return () => { active = false; };
@@ -61,14 +64,19 @@ export default function OverviewPage() {
     return m;
   }, [photos, todayKey]);
 
+  const progByDept = useMemo(
+    () => new Map((progress?.departments ?? []).map((d) => [d.departmentCode, d])),
+    [progress],
+  );
+
   const list = useMemo(() => {
     const term = q.trim().toLowerCase();
     return depts
       .filter((d) => !term || d.code.toLowerCase().includes(term) || d.name.toLowerCase().includes(term))
-      .map((d) => ({ ...d, shot: submitted.has(d.code), agg: byDept.get(d.code) }))
+      .map((d) => ({ ...d, shot: submitted.has(d.code), agg: byDept.get(d.code), prog: progByDept.get(d.code) }))
       .sort((a, b) => (a.shot !== b.shot ? (a.shot ? 1 : -1) : a.code.localeCompare(b.code)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, depts, today, byDept]);
+  }, [q, depts, today, byDept, progByDept]);
 
   const openThumb = (p: PhotoItem | null | undefined, name: string) => {
     if (!p) return;
@@ -84,6 +92,12 @@ export default function OverviewPage() {
           <div className="flex-1">
             <div className="text-[12.5px] text-ink-muted mb-1.5">phòng ban đã chụp · {pct}%</div>
             <div className="h-2 rounded-pill bg-surface overflow-hidden"><i className="block h-full rounded-pill bg-success" style={{ width: `${pct}%` }} /></div>
+            {progress && (
+              <div className="text-[12.5px] text-ink-muted mt-1.5">
+                Khu vực: <b className="text-ink">{progress.areaSummary.completedAreas}</b>/{progress.areaSummary.totalAreas} đã chụp
+                {" · "}{Math.round(progress.areaSummary.completionRate * 100)}%
+              </div>
+            )}
           </div>
         </div>
 
@@ -117,6 +131,14 @@ export default function OverviewPage() {
                   <span className="block text-[11.5px] text-ink-muted mt-0.5">
                     {d.agg?.todayCount ? `${d.agg.todayCount} ảnh hôm nay` : "Chưa có ảnh hôm nay"}{d.agg?.last ? ` · cuối ${hhmm(d.agg.last)}` : ""}
                   </span>
+                  {d.prog && d.prog.totalAreas > 0 && (
+                    <span className="block text-[11.5px] mt-0.5">
+                      <b className={d.prog.areaState === "done" ? "text-success" : d.prog.areaState === "in_progress" ? "text-warning" : "text-danger"}>
+                        {d.prog.completedAreas}/{d.prog.totalAreas} khu
+                      </b>
+                      <span className="text-ink-muted"> · {Math.round(d.prog.completionRate * 100)}% · {d.prog.areaState === "done" ? "Hoàn thành" : d.prog.areaState === "in_progress" ? "Đang thực hiện" : "Chưa bắt đầu"}</span>
+                    </span>
+                  )}
                 </Link>
                 <Icon name="chevronRight" size={16} className="text-ink-disabled flex-none" />
               </div>

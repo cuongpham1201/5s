@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AdminShell } from "@/components/layout/AdminShell";
 import { displayNameFrom, initialsFrom } from "@/lib/profile/display";
+import type { ProgressSummary } from "@/lib/sharepoint/report-service";
 
 interface WhoAmI { email: string | null; displayName: string | null; isAdmin: boolean; source: string; mappedRole: string | null }
 interface Dashboard { date: string; expected: number; submitted: number; missingCount: number; completionRate: number; hasData: boolean }
@@ -33,13 +34,13 @@ const CARDS = [
 export default function AdminHome() {
   const [me, setMe] = useState<WhoAmI | null>(null);
   const [dash, setDash] = useState<Dashboard | null>(null);
+  const [progress, setProgress] = useState<ProgressSummary | null>(null);
 
   useEffect(() => {
     fetch("/api/admin/whoami").then((r) => (r.ok ? r.json() : null)).then(setMe).catch(() => {});
     fetch("/api/admin/dashboard").then((r) => (r.ok ? r.json() : null)).then(setDash).catch(() => {});
+    fetch("/api/reports/progress").then((r) => (r.ok ? r.json() : null)).then((p) => setProgress(p as ProgressSummary | null)).catch(() => {});
   }, []);
-
-  const pct = Math.round((dash?.completionRate ?? 0) * 100);
 
   return (
     <AdminShell title="Quản trị 5S" subtitle="Bảng điều khiển quản trị">
@@ -62,13 +63,31 @@ export default function AdminHome() {
         </div>
       </div>
 
-      {/* KPI mini summary */}
+      {/* KPI mini summary — PHÒNG BAN (giữ rule cũ) */}
+      <div className="text-[12px] font-bold text-ink-muted mb-1.5">PHÒNG BAN</div>
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
+        {[
+          { label: "Tổng phòng", value: dash?.expected ?? "…" },
+          { label: "Đã gửi hôm nay", value: dash?.submitted ?? "…" },
+          { label: "Hoàn thành (đủ khu)", value: progress?.departmentSummary.completedAll ?? "…" },
+          { label: "Đang thực hiện", value: progress?.departmentSummary.inProgress ?? "…" },
+          { label: "Chưa bắt đầu", value: progress?.departmentSummary.notStarted ?? "…" },
+        ].map((k) => (
+          <div key={k.label} className="bg-white rounded-lg border border-line shadow-e2 p-4">
+            <div className="text-[12px] text-ink-muted font-semibold">{k.label}</div>
+            <div className="text-[26px] font-bold mt-1 tracking-tight">{k.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* KPI — KHU VỰC (bổ sung) */}
+      <div className="text-[12px] font-bold text-ink-muted mb-1.5">KHU VỰC</div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
         {[
-          { label: "Phòng ban kỳ vọng", value: dash?.expected ?? "…" },
-          { label: "Đã gửi hôm nay", value: dash?.submitted ?? "…" },
-          { label: "Chưa gửi", value: dash?.missingCount ?? "…" },
-          { label: "Hoàn thành", value: dash ? `${pct}%` : "…" },
+          { label: "Tổng khu vực", value: progress?.areaSummary.totalAreas ?? "…" },
+          { label: "Đã chụp", value: progress?.areaSummary.completedAreas ?? "…" },
+          { label: "Chưa chụp", value: progress?.areaSummary.remainingAreas ?? "…" },
+          { label: "Tỷ lệ khu vực", value: progress ? `${Math.round(progress.areaSummary.completionRate * 100)}%` : "…" },
         ].map((k) => (
           <div key={k.label} className="bg-white rounded-lg border border-line shadow-e2 p-4">
             <div className="text-[12px] text-ink-muted font-semibold">{k.label}</div>

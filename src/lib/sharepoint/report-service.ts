@@ -3,6 +3,7 @@
  * All KPIs derived from submission metadata. Safe fallback to empty on read fail.
  */
 import { listActiveDepartments } from "./department-service";
+import { listActiveAreas } from "./area-service";
 import { getSubmissions, getSubmissionPhotos } from "./submission-service";
 import type { SubmissionRecord, SubmissionPhotoRecord } from "@/types/sharepoint";
 
@@ -218,6 +219,128 @@ export async function getTodaySubmissionSummary(): Promise<TodaySummary> {
       photosToday: threeSPhotos.filter((t) => t.dateKey === today).length,
       violationsToday: threeSPhotos.filter((t) => t.dateKey === today && t.kind === "violation").length,
     },
+  };
+}
+
+// ---- Tiến độ theo KHU VỰC (bổ sung — KHÔNG thay đổi KPI phòng ban ở trên) ----
+
+export interface DepartmentProgress {
+  departmentCode: string;
+  departmentName: string;
+  totalAreas: number;
+  completedAreas: number;
+  remainingAreas: number;
+  /** 0..1 theo khu vực; phòng không cấu hình khu vực → 1 nếu đã chụp (rule cũ), 0 nếu chưa. */
+  completionRate: number;
+  /** RULE CŨ giữ nguyên: phòng "đã chụp" khi có ≥1 phiếu hôm nay. */
+  departmentCompleted: boolean;
+  /** Trạng thái theo khu vực (góc nhìn bổ sung): done | in_progress | not_started. */
+  areaState: "done" | "in_progress" | "not_started";
+}
+
+export interface ProgressSummary {
+  date: string;
+  departmentSummary: {
+    total: number;
+    /** RULE CŨ (≥1 phiếu hôm nay) — trùng submittedDepartments của TodaySummary. */
+    submitted: number;
+    /** Theo khu vực: đã chụp đủ mọi khu vực lá. */
+    completedAll: number;
+    inProgress: number;
+    notStarted: number;
+  };
+  areaSummary: { totalAreas: number; completedAreas: number; remainingAreas: number; completionRate: number };
+  departments: DepartmentProgress[];
+}
+
+/**
+ * Service DÙNG CHUNG cho Home / Toàn cảnh / Dashboard quản trị / báo cáo.
+ * Quy tắc khu vực:
+ *  - chỉ tính Area ACTIVE; nhóm cha có khu con → chỉ tính khu LÁ;
+ *  - khu vực đa phòng ban (Departments CSV) tính cho TỪNG phòng nó thuộc về;
+ *  - một khu nhiều ảnh trong ngày chỉ tính 1 lần (distinct theo phòng+khu);
+ *  - nguồn "đã chụp" = photo facts (ảnh thật trên SharePoint) → failed/pending
+ *    không tính; 3S không tính (buildPhotoFacts đã tách);
+ *  - ngày theo Asia/Ho_Chi_Minh (vnDateKey).
+ */
+export async function getDepartmentProgress(): Promise<ProgressSummary> {
+  const today = vnDateKey();
+  const [active, subs, areas] = await Promise.all([
+    listActiveDepartments().catch(() => []),
+    safeSubmissions(),
+    listActiveAreas().catch(() => []),
+  ]);
+  const { facts } = await buildPhotoFacts(subs);
+  const headerById = new Map(subs.map((s) => [s.SubmissionId, s]));
+  const norm = (s: string) => s.replace(/[^\w-]/g, "_");
+  const byNorm = new Map(active.map((d) => [norm(d.code), d.code]));
+
+  // Khu vực LÁ: loại các nhóm cha đã có khu con.
+  const hasKids = new Set(areas.filter((a) => a.parentCode).map((a) => a.parentCode as string));
+  const leaves = areas.filter((a) => !hasKids.has(a.code));
+  const leavesByDept = new Map<string, Set<string>>();
+  for (const a of leaves) {
+    for (const dc of a.departments) {
+      if (!leavesByDept.has(dc)) leavesByDept.set(dc, new Set());
+      leavesByDept.get(dc)!.add(a.code);
+    }
+  }
+
+  // Hôm nay: phòng đã chụp (rule cũ) + (phòng, khu) đã chụp từ photo facts.
+  const submittedToday = new Set<string>();
+  const doneByDept = new Map<string, Set<string>>();
+  for (const f of facts.values()) {
+    if (f.dateKey !== today || !f.departmentCode) continue;
+    const dept = byNorm.get(norm(f.departmentCode)) ?? f.departmentCode;
+    submittedToday.add(dept);
+    const areaCode = headerById.get(f.submissionId)?.AreaCode;
+    if (areaCode) {
+      if (!doneByDept.has(dept)) doneByDept.set(dept, new Set());
+      doneByDept.get(dept)!.add(areaCode);
+    }
+  }
+
+  const departments: DepartmentProgress[] = active.map((d) => {
+    const leafSet = leavesByDept.get(d.code) ?? new Set<string>();
+    const total = leafSet.size;
+    const done = doneByDept.get(d.code) ?? new Set<string>();
+    const completed = [...done].filter((c) => leafSet.has(c)).length;
+    const departmentCompleted = submittedToday.has(d.code);
+    const rate = total > 0 ? completed / total : departmentCompleted ? 1 : 0;
+    const areaState: DepartmentProgress["areaState"] =
+      total > 0
+        ? completed >= total ? "done" : completed > 0 || departmentCompleted ? "in_progress" : "not_started"
+        : departmentCompleted ? "done" : "not_started";
+    return {
+      departmentCode: d.code,
+      departmentName: d.name,
+      totalAreas: total,
+      completedAreas: completed,
+      remainingAreas: Math.max(0, total - completed),
+      completionRate: rate,
+      departmentCompleted,
+      areaState,
+    };
+  });
+
+  const totalAreas = departments.reduce((s, d) => s + d.totalAreas, 0);
+  const completedAreas = departments.reduce((s, d) => s + d.completedAreas, 0);
+  return {
+    date: today,
+    departmentSummary: {
+      total: active.length,
+      submitted: departments.filter((d) => d.departmentCompleted).length,
+      completedAll: departments.filter((d) => d.areaState === "done").length,
+      inProgress: departments.filter((d) => d.areaState === "in_progress").length,
+      notStarted: departments.filter((d) => d.areaState === "not_started").length,
+    },
+    areaSummary: {
+      totalAreas,
+      completedAreas,
+      remainingAreas: Math.max(0, totalAreas - completedAreas),
+      completionRate: totalAreas ? completedAreas / totalAreas : 0,
+    },
+    departments,
   };
 }
 

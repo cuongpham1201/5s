@@ -10,7 +10,7 @@ import { PhotoViewerModal, type ViewerPhoto } from "@/components/media/PhotoView
 import { ensureProfile, subscribeMe } from "@/lib/client/me-cache";
 import { displayNameFrom } from "@/lib/profile/display";
 import type { MeResponse } from "@/lib/graph/graph-types";
-import type { TodaySummary, LatestSubmission } from "@/lib/sharepoint/report-service";
+import type { TodaySummary, LatestSubmission, ProgressSummary } from "@/lib/sharepoint/report-service";
 
 interface WhoAmI { isAdmin: boolean }
 interface CapaLite { status: string; dueDate: string | null }
@@ -27,6 +27,7 @@ export default function DashboardPage() {
   const [mine, setMine] = useState<LatestSubmission[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [myCapas, setMyCapas] = useState<CapaLite[]>([]);
+  const [progress, setProgress] = useState<ProgressSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [viewer, setViewer] = useState<number | null>(null);
 
@@ -35,20 +36,28 @@ export default function DashboardPage() {
     const unsub = subscribeMe((m) => active && setMe(m)); // resume/refresh updates
     // ensureProfile = refresh + (if incomplete) force server sync + refresh again.
     (async () => {
-      const [m, t, h, w, c] = await Promise.all([
+      const [m, t, h, w, c, p] = await Promise.all([
         ensureProfile(),
         fetch("/api/reports/today").then((r) => (r.ok ? r.json() : null)),
         fetch("/api/history/mine").then((r) => (r.ok ? r.json() : null)),
         fetch("/api/admin/whoami").then((r) => (r.ok ? r.json() : null)),
         fetch("/api/capas?scope=mine").then((r) => (r.ok ? r.json() : null)),
+        fetch("/api/reports/progress").then((r) => (r.ok ? r.json() : null)),
       ]);
       if (!active) return;
       setMe(m); setToday(t); setMine(h?.submissions ?? []); setIsAdmin(!!(w as WhoAmI)?.isAdmin);
       setMyCapas((c?.capas ?? []) as CapaLite[]);
+      setProgress(p as ProgressSummary | null);
       setLoading(false);
     })();
     return () => { active = false; unsub(); };
   }, []);
+
+  // KPI khu vực (bổ sung) — map theo mã phòng cho chip "Chưa chụp hôm nay".
+  const progByDept = useMemo(
+    () => new Map((progress?.departments ?? []).map((d) => [d.departmentCode, d])),
+    [progress],
+  );
 
   const capaOpen = myCapas.filter((c) => c.status !== "closed").length;
   const capaOverdue = myCapas.filter((c) => c.status !== "closed" && c.dueDate && new Date(c.dueDate).getTime() < Date.now()).length;
@@ -120,7 +129,9 @@ export default function DashboardPage() {
             title="Thống kê"
             description="Tiến độ chụp & tỷ lệ hoàn thành hôm nay"
             stat={loading ? "…" : `${pct}%`}
-            statSub={`${today?.submittedDepartments ?? 0}/${today?.expectedDepartments ?? 0} phòng ban`}
+            statSub={progress
+              ? `Phòng ban ${today?.submittedDepartments ?? 0}/${today?.expectedDepartments ?? 0} · Khu vực ${progress.areaSummary.completedAreas}/${progress.areaSummary.totalAreas}`
+              : `${today?.submittedDepartments ?? 0}/${today?.expectedDepartments ?? 0} phòng ban`}
           />
         </section>
 
@@ -155,9 +166,15 @@ export default function DashboardPage() {
             <div className="text-[13px] text-ink-muted">{loading ? "Đang tải…" : "Tất cả phòng ban đã chụp 👍"}</div>
           ) : (
             <div className="flex flex-wrap gap-1.5">
-              {missing.slice(0, 12).map((d) => (
-                <Link key={d.code} href={`/gallery?departmentCode=${encodeURIComponent(d.code)}`} className="px-3 h-8 rounded-pill grid place-items-center text-[12.5px] font-semibold bg-danger-bg text-danger" title={d.name}>{d.code}</Link>
-              ))}
+              {missing.slice(0, 12).map((d) => {
+                const pg = progByDept.get(d.code);
+                const detail = pg && pg.totalAreas > 0 ? ` · còn ${pg.remainingAreas} khu` : "";
+                return (
+                  <Link key={d.code} href={`/gallery?departmentCode=${encodeURIComponent(d.code)}`} className="px-3 h-8 rounded-pill grid place-items-center text-[12.5px] font-semibold bg-danger-bg text-danger" title={d.name}>
+                    {d.code}{detail}
+                  </Link>
+                );
+              })}
               {missing.length > 12 && <span className="px-2 h-8 grid place-items-center text-[12.5px] text-ink-muted">+{missing.length - 12}</span>}
             </div>
           )}

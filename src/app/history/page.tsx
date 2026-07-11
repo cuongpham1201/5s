@@ -7,8 +7,11 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { MockPhoto } from "@/components/ui/MockPhoto";
 import { PhotoViewerModal, type ViewerPhoto } from "@/components/media/PhotoViewerModal";
 import { processQueue } from "@/lib/queue/sync-engine";
-import { getQueue } from "@/lib/queue/offline-queue";
+import { getQueue, removeBySubmission } from "@/lib/queue/offline-queue";
+import { deletePhotosBySubmission } from "@/lib/storage/photo-store";
+import { removeCompletedSubmission } from "@/lib/submissions/local-submission-store";
 import { SyncErrorDetail } from "@/components/system/SyncErrorDetail";
+import type { QueueItem } from "@/lib/queue/queue-types";
 import type { LatestSubmission } from "@/lib/sharepoint/report-service";
 
 function photoSrc(path: string | null): string | null {
@@ -36,17 +39,36 @@ export default function HistoryPage() {
   const [viewer, setViewer] = useState<number | null>(null);
   const [retrying, setRetrying] = useState(false);
   const [openDetail, setOpenDetail] = useState<string | null>(null);
+  // Phiếu lỗi trong queue LOCAL của máy này (nguồn của badge "n phiếu lỗi").
+  const [localFailed, setLocalFailed] = useState<QueueItem[]>([]);
+
+  const refreshLocalFailed = () => setLocalFailed(getQueue().filter((q) => q.status === "failed"));
 
   const load = () => fetch("/api/history/mine").then((r) => (r.ok ? r.json() : null)).then((d) => setSubs(d?.submissions ?? []));
 
   useEffect(() => {
     let active = true;
+    refreshLocalFailed();
     fetch("/api/history/mine")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => active && setSubs(d?.submissions ?? []))
       .finally(() => active && setLoading(false));
     return () => { active = false; };
   }, []);
+
+  /** Xóa phiếu lỗi — CHỈ xóa dữ liệu local (queue + ảnh IndexedDB + lịch sử máy),
+   *  KHÔNG đụng dữ liệu server. Có confirm trước khi xóa. */
+  const deleteFailed = async (submissionId: string) => {
+    const okConfirm = window.confirm(
+      `Xóa phiếu lỗi ${submissionId} khỏi máy này?\n\nẢnh của phiếu sẽ bị xóa khỏi thiết bị và không thể gửi lại. Dữ liệu đã ở trên server (nếu có) KHÔNG bị ảnh hưởng.`,
+    );
+    if (!okConfirm) return;
+    try { await deletePhotosBySubmission(submissionId); } catch { /* ảnh có thể đã mất */ }
+    removeBySubmission(submissionId);            // fires QUEUE_CHANGED_EVENT → badge tự cập nhật
+    removeCompletedSubmission(submissionId);     // lịch sử local của máy
+    refreshLocalFailed();
+    setRetryMsg(`Đã xóa phiếu lỗi ${submissionId} khỏi máy này.`);
+  };
 
   const unsynced = (subs ?? []).filter((s) => s.syncStatus === "failed" || s.syncStatus === "uploading" || s.syncStatus === "queued").length;
   const [retryMsg, setRetryMsg] = useState<string | null>(null);
@@ -67,7 +89,7 @@ export default function HistoryPage() {
       }
       await processQueue({ manual: true });
       await load();
-    } finally { setRetrying(false); }
+    } finally { setRetrying(false); refreshLocalFailed(); }
   };
 
   // Only submissions with a watermarked thumbnail can be viewed full.
@@ -96,6 +118,29 @@ export default function HistoryPage() {
           </div>
         )}
         {retryMsg && <div className="mb-3 rounded-md bg-info-bg text-info px-3.5 py-2.5 text-[13px] font-medium">{retryMsg}</div>}
+
+        {/* Phiếu lỗi trong queue LOCAL (badge "n phiếu lỗi" đếm từ đây). Xóa = chỉ local. */}
+        {localFailed.length > 0 && (
+          <div className="mb-3 rounded-md border border-danger/30 bg-white p-3">
+            <div className="text-[13px] font-bold text-danger mb-2">Phiếu lỗi trên máy này ({localFailed.length})</div>
+            <div className="flex flex-col gap-2">
+              {localFailed.map((q) => (
+                <div key={q.queueId} className="flex items-center gap-2.5">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13px] font-semibold truncate">{q.submissionId}</div>
+                    <div className="text-[11.5px] text-ink-muted truncate">
+                      {q.attemptCount ? `đã thử ${q.attemptCount} lần · ` : ""}{q.unrecoverable ? "ảnh cục bộ đã mất — không thể gửi lại" : (q.lastError ?? "lỗi đồng bộ")}
+                    </div>
+                  </div>
+                  <button onClick={() => deleteFailed(q.submissionId)} className="flex-none text-[12.5px] font-semibold text-danger border border-danger/40 rounded-md px-2.5 py-1.5 active:bg-danger-bg">
+                    Xóa phiếu lỗi
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="text-[11.5px] text-ink-muted mt-2">Chỉ xóa trên thiết bị này — dữ liệu server không bị ảnh hưởng.</div>
+          </div>
+        )}
         {loading ? (
           <div className="text-ink-muted text-[14px] px-1">Đang tải…</div>
         ) : !subs || subs.length === 0 ? (

@@ -121,6 +121,13 @@ export function setSubmissionUploadStatus(id: string, status: UploadStatus): voi
   if (changed) persistHistory(next);
 }
 
+/** Remove one completed submission from LOCAL history (server data untouched). */
+export function removeCompletedSubmission(id: string): void {
+  const list = listCompletedSubmissions();
+  const next = list.filter((s) => s.submissionId !== id);
+  if (next.length !== list.length) persistHistory(next);
+}
+
 /** Persist history, trimming oldest entries if the quota is exceeded. */
 function persistHistory(list: CompletedSubmission[]): void {
   let working = [...list];
