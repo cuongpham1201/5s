@@ -183,13 +183,16 @@ export async function unassignDepartmentFromArea(assignmentId: number, actor: st
   }
 }
 
-/** Duyệt assignment pending_review (Q2 — chỉ admin gọi qua API P3). */
+/** Duyệt assignment pending_review (Q2). CHẶN duyệt khi unresolved (Q4 — phải remap trước). */
 export async function approveAssignment(assignmentId: number, actor: string | null): Promise<void> {
   const client = await appPool().connect();
   try {
     await client.query("BEGIN");
-    const cur = await client.query(`SELECT review_status FROM department_area_assignments WHERE id=$1 FOR UPDATE`, [assignmentId]);
+    const cur = await client.query(`SELECT review_status, unresolved_department FROM department_area_assignments WHERE id=$1 FOR UPDATE`, [assignmentId]);
     if (!cur.rows[0]) throw new Error("Không tìm thấy assignment.");
+    if (cur.rows[0].unresolved_department) {
+      throw new Error("Assignment có mã phòng ban chưa resolve — phải remap mã phòng trước khi duyệt.");
+    }
     await client.query(
       `UPDATE department_area_assignments SET review_status='approved', updated_at=now(), updated_by=$2 WHERE id=$1`,
       [assignmentId, actor]);
@@ -202,6 +205,89 @@ export async function approveAssignment(assignmentId: number, actor: string | nu
   } finally {
     client.release();
   }
+}
+
+/**
+ * Remap MÃ PHÒNG BAN (fromCode → toCode) cho mọi assignment — update-in-place,
+ * KHÔNG tạo row mới; clear cờ unresolved. Nếu (toCode, area, type) đã tồn tại
+ * (đụng UNIQUE) → deactivate row cũ thay vì tạo trùng, ghi log. Dùng để xử lý
+ * 5 mã rác (Q4) trước khi duyệt.
+ */
+export async function remapAssignmentDepartmentCode(
+  fromCode: string,
+  toCode: string,
+  actor: string | null,
+): Promise<{ remapped: number; deactivatedConflicts: number }> {
+  const from = fromCode.trim();
+  const to = toCode.trim();
+  if (!from || !to) throw new Error("Thiếu mã phòng ban nguồn/đích.");
+  if (from === to) throw new Error("Mã nguồn và đích trùng nhau.");
+  const client = await appPool().connect();
+  const out = { remapped: 0, deactivatedConflicts: 0 };
+  try {
+    await client.query("BEGIN");
+    const rows = await client.query(
+      `SELECT * FROM department_area_assignments WHERE department_code=$1 FOR UPDATE`, [from]);
+    for (const raw of rows.rows) {
+      const row = mapRow(raw);
+      const conflict = await client.query(
+        `SELECT id FROM department_area_assignments
+         WHERE department_code=$1 AND area_id=$2 AND assignment_type=$3`,
+        [to, row.areaId, row.assignmentType]);
+      if (conflict.rows[0]) {
+        // Đích đã có assignment → không tạo trùng: deactivate row nguồn.
+        await client.query(
+          `UPDATE department_area_assignments SET is_active=FALSE, unresolved_department=FALSE,
+             note=COALESCE(note,'') || ' [remap-conflict → ' || $2 || ']', updated_at=now(), updated_by=$3
+           WHERE id=$1`, [row.id, to, actor]);
+        await logChange(client, "assignment", row.id, "update",
+          { departmentCode: from }, { deactivated: true, conflictWith: Number(conflict.rows[0].id) }, actor);
+        out.deactivatedConflicts++;
+      } else {
+        await client.query(
+          `UPDATE department_area_assignments SET department_code=$2, unresolved_department=FALSE,
+             updated_at=now(), updated_by=$3 WHERE id=$1`, [row.id, to, actor]);
+        await logChange(client, "assignment", row.id, "update",
+          { departmentCode: from, unresolvedDepartment: row.unresolvedDepartment },
+          { departmentCode: to, unresolvedDepartment: false }, actor);
+        out.remapped++;
+      }
+    }
+    await client.query("COMMIT");
+    return out;
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+/** Danh sách assignment cho màn review (join area, filter source/review/unresolved). */
+export interface ReviewRow extends AssignmentRow {
+  areaCode: string;
+  areaName: string;
+  areaActive: boolean;
+}
+
+export async function listAssignmentsForReview(filters: {
+  source?: string; reviewStatus?: string; unresolvedOnly?: boolean; limit?: number;
+} = {}): Promise<ReviewRow[]> {
+  const where: string[] = ["TRUE"];
+  const params: unknown[] = [];
+  if (filters.source) { params.push(filters.source); where.push(`s.source=$${params.length}`); }
+  if (filters.reviewStatus) { params.push(filters.reviewStatus); where.push(`s.review_status=$${params.length}`); }
+  if (filters.unresolvedOnly) where.push(`s.unresolved_department=TRUE`);
+  params.push(Math.min(Math.max(filters.limit ?? 200, 1), 500));
+  const r = await appPool().query(
+    `SELECT s.*, a.area_code, a.area_name, a.is_active AS area_active
+     FROM department_area_assignments s JOIN five_s_areas a ON a.id=s.area_id
+     WHERE ${where.join(" AND ")}
+     ORDER BY s.unresolved_department DESC, s.review_status DESC, s.department_code, a.area_code
+     LIMIT $${params.length}`, params);
+  return r.rows.map((x) => ({
+    ...mapRow(x), areaCode: x.area_code, areaName: x.area_name, areaActive: !!x.area_active,
+  }));
 }
 
 /** Q3: map lại FK HRM cho MỌI assignment của một mã phòng — không tạo row mới. */

@@ -136,6 +136,31 @@ try {
   const dq = await asgSvc.getAreaDataQualityIssues();
   ok("Q4 unresolved xuất hiện trong data-quality",
     dq.unresolvedAssignments.some((u) => u.departmentCode === "TESTX"));
+
+  console.log("P2 — REVIEW WORKFLOW");
+  // approve unresolved bị CHẶN
+  const uAsg = (await asgSvc.listAssignmentsByArea(U.id, true)).find((x) => x.departmentCode === "TESTX");
+  let blocked = false;
+  try { await asgSvc.approveAssignment(uAsg.id, ACTOR); } catch { blocked = true; }
+  ok("P2 approve unresolved bị chặn (phải remap trước)", blocked);
+  // remap TESTX → TESTZ: update-in-place, clear unresolved, rồi approve được
+  const rm = await asgSvc.remapAssignmentDepartmentCode("TESTX", "TESTZ", ACTOR);
+  const zAsg = (await asgSvc.listAssignmentsByArea(U.id, true)).find((x) => x.departmentCode === "TESTZ");
+  ok("P2 remap code update-in-place (cùng id, hết unresolved)",
+    rm.remapped === 1 && zAsg && zAsg.id === uAsg.id && !zAsg.unresolvedDepartment, JSON.stringify(rm));
+  await asgSvc.approveAssignment(zAsg.id, ACTOR);
+  ok("P2 sau remap → approve OK",
+    (await asgSvc.listAssignmentsByArea(U.id, true)).find((x) => x.id === zAsg.id).reviewStatus === "approved");
+  // remap đụng UNIQUE → deactivate row nguồn, không duplicate
+  await asgSvc.assignDepartmentToArea({ departmentCode: "TESTW", areaId: U.id, unresolvedDepartment: true, reviewStatus: "pending_review" }, ACTOR);
+  const rm2 = await asgSvc.remapAssignmentDepartmentCode("TESTW", "TESTZ", ACTOR);
+  const zCount = await appPool().query(
+    `SELECT count(*)::int n FROM department_area_assignments WHERE department_code='TESTZ' AND area_id=$1`, [U.id]);
+  ok("P2 remap đụng trùng → deactivate nguồn, KHÔNG duplicate",
+    rm2.deactivatedConflicts === 1 && zCount.rows[0].n === 1, JSON.stringify(rm2));
+  // listAssignmentsForReview filter
+  const rev = await asgSvc.listAssignmentsForReview({ reviewStatus: "pending_review" });
+  ok("P2 listAssignmentsForReview trả pending + join area", rev.every((x) => x.reviewStatus === "pending_review" && !!x.areaCode));
   ok("DQ khu required chưa gán (C2 inactive → assignment trỏ area inactive)",
     dq.assignmentsToInactiveArea.some((x) => x.departmentCode === "TESTA"));
 
