@@ -102,6 +102,75 @@ export async function getAreaById(id: number): Promise<AreaRow | null> {
   return r.rows[0] ? mapRow(r.rows[0]) : null;
 }
 
+/** Row kèm thống kê cho admin Tab 1: số phòng đang gán (active) + có con không. */
+export interface AreaStatsRow extends AreaRow {
+  assignedDeptCount: number;
+  childCount: number;
+  legacySpId: string | null;
+}
+
+export async function listAreasWithStats(includeInactive = true): Promise<AreaStatsRow[]> {
+  const r = await appPool().query(
+    `SELECT a.*,
+       (SELECT count(DISTINCT s.department_code)::int FROM department_area_assignments s
+         WHERE s.area_id=a.id AND s.is_active=TRUE AND s.unresolved_department=FALSE) AS dept_count,
+       (SELECT count(*)::int FROM five_s_areas c WHERE c.parent_id=a.id) AS child_count
+     FROM five_s_areas a
+     ${includeInactive ? "" : "WHERE a.is_active=TRUE"}
+     ORDER BY a.sort_order, a.area_name`);
+  return r.rows.map((x) => ({
+    ...mapRow(x),
+    assignedDeptCount: Number(x.dept_count ?? 0),
+    childCount: Number(x.child_count ?? 0),
+    legacySpId: x.legacy_sp_id ?? null,
+  }));
+}
+
+/** Lịch sử thay đổi (Tab 4) — filter entity/action, mới nhất trước. */
+export interface ChangeRow {
+  id: number;
+  entityType: string;
+  entityId: number;
+  action: string;
+  oldValue: unknown;
+  newValue: unknown;
+  actorEmail: string | null;
+  createdAt: string;
+}
+
+export async function listAreaChanges(filters: { entityType?: string; action?: string; limit?: number } = {}): Promise<ChangeRow[]> {
+  const where: string[] = ["TRUE"];
+  const params: unknown[] = [];
+  if (filters.entityType) { params.push(filters.entityType); where.push(`entity_type=$${params.length}`); }
+  if (filters.action) { params.push(filters.action); where.push(`action=$${params.length}`); }
+  params.push(Math.min(Math.max(filters.limit ?? 100, 1), 300));
+  const r = await appPool().query(
+    `SELECT * FROM area_assignment_changes WHERE ${where.join(" AND ")}
+     ORDER BY id DESC LIMIT $${params.length}`, params);
+  return r.rows.map((x) => ({
+    id: Number(x.id), entityType: x.entity_type, entityId: Number(x.entity_id), action: x.action,
+    oldValue: x.old_value_json ?? null, newValue: x.new_value_json ?? null,
+    actorEmail: x.actor_email ?? null, createdAt: x.created_at,
+  }));
+}
+
+/** Phát hiện cycle dữ liệu hiện có (DQ Tab 3) — trả các area nằm trong vòng. */
+export async function detectCycles(): Promise<Array<{ id: number; areaCode: string }>> {
+  const rows = await listAreas(true);
+  const parent = new Map(rows.map((r) => [r.id, r.parentId]));
+  const bad: Array<{ id: number; areaCode: string }> = [];
+  for (const r of rows) {
+    const seen = new Set<number>();
+    let cur: number | null = r.id;
+    while (cur != null) {
+      if (seen.has(cur)) { bad.push({ id: r.id, areaCode: r.areaCode }); break; }
+      seen.add(cur);
+      cur = parent.get(cur) ?? null;
+    }
+  }
+  return bad;
+}
+
 // ── CYCLE GUARD ──────────────────────────────────────────────────────────────
 /** Ném lỗi nếu đặt parent tạo cycle hoặc tự làm cha chính nó. */
 export async function assertNoCycle(areaId: number, newParentId: number | null): Promise<void> {

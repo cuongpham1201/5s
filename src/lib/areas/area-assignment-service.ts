@@ -162,6 +162,46 @@ export async function bulkAssignDepartmentToAreas(
   return out;
 }
 
+/** Sửa thuộc tính 1 assignment (required/type/responsible/effective/note) — audit log. */
+export async function updateAssignment(
+  id: number,
+  patch: Partial<Pick<AssignInput, "isRequired" | "assignmentType" | "responsibleEmployeeId" | "effectiveFrom" | "effectiveTo" | "note">>,
+  actor: string | null,
+): Promise<AssignmentRow> {
+  const client = await appPool().connect();
+  try {
+    await client.query("BEGIN");
+    const cur = await client.query(`SELECT * FROM department_area_assignments WHERE id=$1 FOR UPDATE`, [id]);
+    if (!cur.rows[0]) throw new Error("Không tìm thấy assignment.");
+    const old = mapRow(cur.rows[0]);
+    const r = await client.query(
+      `UPDATE department_area_assignments SET
+         is_required=COALESCE($2, is_required),
+         assignment_type=COALESCE($3, assignment_type),
+         responsible_employee_id=CASE WHEN $4::boolean THEN $5 ELSE responsible_employee_id END,
+         effective_from=CASE WHEN $6::boolean THEN $7::date ELSE effective_from END,
+         effective_to=CASE WHEN $8::boolean THEN $9::date ELSE effective_to END,
+         note=COALESCE($10, note),
+         updated_at=now(), updated_by=$11
+       WHERE id=$1 RETURNING *`,
+      [id, patch.isRequired ?? null, patch.assignmentType ?? null,
+       patch.responsibleEmployeeId !== undefined, patch.responsibleEmployeeId ?? null,
+       patch.effectiveFrom !== undefined, patch.effectiveFrom ?? null,
+       patch.effectiveTo !== undefined, patch.effectiveTo ?? null,
+       patch.note ?? null, actor],
+    );
+    const next = mapRow(r.rows[0]);
+    await logChange(client, "assignment", id, "update", old, next, actor);
+    await client.query("COMMIT");
+    return next;
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
 /** Bỏ gán (soft — is_active=false, giữ lịch sử). */
 export async function unassignDepartmentFromArea(assignmentId: number, actor: string | null): Promise<void> {
   const client = await appPool().connect();
@@ -271,12 +311,15 @@ export interface ReviewRow extends AssignmentRow {
 }
 
 export async function listAssignmentsForReview(filters: {
-  source?: string; reviewStatus?: string; unresolvedOnly?: boolean; limit?: number;
+  source?: string; reviewStatus?: string; unresolvedOnly?: boolean;
+  departmentCode?: string; areaId?: number; limit?: number;
 } = {}): Promise<ReviewRow[]> {
   const where: string[] = ["TRUE"];
   const params: unknown[] = [];
   if (filters.source) { params.push(filters.source); where.push(`s.source=$${params.length}`); }
   if (filters.reviewStatus) { params.push(filters.reviewStatus); where.push(`s.review_status=$${params.length}`); }
+  if (filters.departmentCode) { params.push(filters.departmentCode); where.push(`s.department_code=$${params.length}`); }
+  if (filters.areaId != null) { params.push(filters.areaId); where.push(`s.area_id=$${params.length}`); }
   if (filters.unresolvedOnly) where.push(`s.unresolved_department=TRUE`);
   params.push(Math.min(Math.max(filters.limit ?? 200, 1), 500));
   const r = await appPool().query(

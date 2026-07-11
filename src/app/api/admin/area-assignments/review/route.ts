@@ -15,6 +15,8 @@ export async function GET(req: Request) {
       source: sp.get("source") ?? undefined,
       reviewStatus: sp.get("review") ?? undefined,
       unresolvedOnly: sp.get("unresolved") === "1",
+      departmentCode: sp.get("departmentCode") ?? undefined,
+      areaId: sp.get("areaId") ? Number(sp.get("areaId")) : undefined,
     });
     return NextResponse.json({ ok: true, assignments: rows });
   } catch (e) {

@@ -161,6 +161,26 @@ try {
   // listAssignmentsForReview filter
   const rev = await asgSvc.listAssignmentsForReview({ reviewStatus: "pending_review" });
   ok("P2 listAssignmentsForReview trả pending + join area", rev.every((x) => x.reviewStatus === "pending_review" && !!x.areaCode));
+
+  console.log("P3A — UPDATE / STATS / CHANGES");
+  // updateAssignment: bỏ required → rớt khỏi KPI base
+  const c1Asg = (await asgSvc.listAssignmentsByArea(C1.id)).find((x) => x.departmentCode === "TESTA");
+  const upd = await asgSvc.updateAssignment(c1Asg.id, { isRequired: false, assignmentType: "shared", note: "test-note" }, ACTOR);
+  ok("P3A updateAssignment đổi required/type/note", !upd.isRequired && upd.assignmentType === "shared" && upd.note === "test-note");
+  const kpiAfterUpd = await asgSvc.getKpiBaseByDepartment();
+  ok("P3A bỏ required → C1 rớt khỏi KPI base TESTA",
+    !(kpiAfterUpd.find((k) => k.departmentCode === "TESTA")?.requiredAreaIds ?? []).includes(C1.id));
+  await asgSvc.updateAssignment(c1Asg.id, { isRequired: true }, ACTOR);
+  // listAreasWithStats: đếm phòng gán + con
+  const stats = await areaSvc.listAreasWithStats(true);
+  const gStat = stats.find((x) => x.areaCode === "TEST_G");
+  const sStat = stats.find((x) => x.areaCode === "TEST_S");
+  ok("P3A listAreasWithStats: G có 3 con, S có 2 phòng gán",
+    gStat?.childCount === 3 && sStat?.assignedDeptCount === 2, JSON.stringify({ g: gStat?.childCount, s: sStat?.assignedDeptCount }));
+  // listAreaChanges filter theo action
+  const moves = await areaSvc.listAreaChanges({ entityType: "area", action: "move", limit: 50 });
+  ok("P3A listAreaChanges filter action=move có bản ghi + old/new JSON",
+    moves.length >= 1 && moves[0].newValue != null);
   ok("DQ khu required chưa gán (C2 inactive → assignment trỏ area inactive)",
     dq.assignmentsToInactiveArea.some((x) => x.departmentCode === "TESTA"));
 
