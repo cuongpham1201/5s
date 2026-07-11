@@ -4,7 +4,7 @@
  * (/api/sync/submission-json). Validates identically, then calls the single
  * processSubmissionUpload service. No duplicated upload logic. No schema change.
  */
-import { listAreasByDepartmentCode } from "./area-service";
+import { listAreasByDepartmentCode } from "@/lib/areas/area-source";
 import { resolveRequestUser } from "@/lib/auth/request-department";
 import { processSubmissionUpload, type UploadPhotoInput } from "./submission-upload-service";
 import { resolveWorkflowKind } from "./workflow-kind";

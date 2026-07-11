@@ -7,7 +7,7 @@
  */
 import { getSubmissions, getSubmissionPhotos } from "./submission-service";
 import { listActiveDepartments } from "./department-service";
-import { areaGroupNameMap } from "./area-service";
+import { getAreaGroupNameMap } from "@/lib/areas/area-source";
 import { vnDateKey } from "./report-service";
 
 export type StatGroup = "day" | "week" | "month";
@@ -101,7 +101,7 @@ export async function aggregatePhotoStats(from: string, to: string, group: StatG
     getSubmissions(999).catch(() => []),
     getSubmissionPhotos().catch(() => []),
     listActiveDepartments().catch(() => []),
-    areaGroupNameMap().catch(() => new Map<string, string>()),
+    getAreaGroupNameMap().catch(() => new Map<string, string>()),
   ]);
   const headerById = new Map(subs.map((s) => [s.SubmissionId, s]));
   const nameByCode = new Map(active.map((d) => [d.code, d.name]));

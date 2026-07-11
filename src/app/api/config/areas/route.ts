@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auth } from "@/auth";
-import { listActiveAreas, listAreasByDepartmentCode, createAreaForDepartment } from "@/lib/sharepoint/area-service";
+import { createAreaForDepartment } from "@/lib/sharepoint/area-service";
+import { listAreaTree, listAreasByDepartmentCode } from "@/lib/areas/area-source";
 import { resolveRequestUser } from "@/lib/auth/request-department";
 import { denyIfNotAdmin } from "@/lib/sharepoint/admin-guard";
 
@@ -12,7 +13,7 @@ export async function GET(req: NextRequest) {
   if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const dept = new URL(req.url).searchParams.get("departmentCode");
   try {
-    const areas = dept ? await listAreasByDepartmentCode(dept) : await listActiveAreas();
+    const areas = dept ? await listAreasByDepartmentCode(dept) : await listAreaTree();
     return NextResponse.json({ count: areas.length, departmentCode: dept ?? null, areas });
   } catch (e) {
     return NextResponse.json({ count: 0, areas: [], error: (e as Error).message }, { status: 200 });

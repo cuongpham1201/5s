@@ -3,7 +3,7 @@
  * All KPIs derived from submission metadata. Safe fallback to empty on read fail.
  */
 import { listActiveDepartments } from "./department-service";
-import { listActiveAreas } from "./area-service";
+import { listAreaTree } from "@/lib/areas/area-source";
 import { getSubmissions, getSubmissionPhotos } from "./submission-service";
 import type { SubmissionRecord, SubmissionPhotoRecord } from "@/types/sharepoint";
 
@@ -268,16 +268,15 @@ export async function getDepartmentProgress(): Promise<ProgressSummary> {
   const [active, subs, areas] = await Promise.all([
     listActiveDepartments().catch(() => []),
     safeSubmissions(),
-    listActiveAreas().catch(() => []),
+    listAreaTree().catch(() => []),   // FACADE (AREA_SOURCE) — contract chuẩn hoá
   ]);
   const { facts } = await buildPhotoFacts(subs);
   const headerById = new Map(subs.map((s) => [s.SubmissionId, s]));
   const norm = (s: string) => s.replace(/[^\w-]/g, "_");
   const byNorm = new Map(active.map((d) => [norm(d.code), d.code]));
 
-  // Khu vực LÁ: loại các nhóm cha đã có khu con.
-  const hasKids = new Set(areas.filter((a) => a.parentCode).map((a) => a.parentCode as string));
-  const leaves = areas.filter((a) => !hasKids.has(a.code));
+  // Điểm chụp: facade đã chuẩn hoá areaType — nhóm (group) không tính.
+  const leaves = areas.filter((a) => a.areaType !== "group");
   const leavesByDept = new Map<string, Set<string>>();
   for (const a of leaves) {
     for (const dc of a.departments) {

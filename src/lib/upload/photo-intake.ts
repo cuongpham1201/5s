@@ -12,7 +12,7 @@ import { resolveRequestUser } from "@/lib/auth/request-department";
 import { uploadSubmissionPhotos, type PhotoUploadResult } from "@/lib/sharepoint/submission-upload-service";
 import { resolveWorkflowKind } from "@/lib/sharepoint/workflow-kind";
 import { canCreateAudit } from "@/lib/auth/audit-guard";
-import { listAreasByDepartmentCode } from "@/lib/sharepoint/area-service";
+import { listAreasByDepartmentCode } from "@/lib/areas/area-source";
 import { vnDateKey } from "@/lib/sharepoint/report-service";
 import { ulogAlways } from "@/lib/debug/upload-log";
 

@@ -9,7 +9,8 @@
 import { CONFIG_LISTS } from "./sharepoint-config";
 import { getAppOnlyClient, type SharePointGraphClient } from "./graph-client";
 import { findListId, resolveSite } from "./site-context";
-import { listActiveAreas, type AreaOption } from "./area-service";
+import type { AreaOption } from "./area-service";
+import { listAreaTree } from "@/lib/areas/area-source";
 import type { GraphCollection, GraphListItem, GraphListItemFields } from "./sharepoint-types";
 
 export interface UserAreaRow {
@@ -105,8 +106,8 @@ export async function listDepartmentUsers(departmentCode: string): Promise<Depar
 
 /** User's allowed areas resolved to {code,name,departmentCode} via Config_Areas. */
 export async function listUserAllowedAreas(email: string): Promise<AreaOption[]> {
-  const [rows, areas] = await Promise.all([listUserAreas(email), listActiveAreas()]);
-  const byCode = new Map(areas.map((a) => [a.code, a]));
+  const [rows, tree] = await Promise.all([listUserAreas(email), listAreaTree()]);
+  const byCode = new Map(tree.map((a) => [a.code, { code: a.code, name: a.name, departmentCode: a.departments[0] ?? "", departments: a.departments, parentCode: a.parentCode, sortOrder: a.sortOrder } as AreaOption]));
   const out: AreaOption[] = [];
   for (const r of rows) {
     const a = byCode.get(r.areaCode);
