@@ -64,7 +64,7 @@ async function api(url: string, body?: unknown, method = body ? "POST" : "GET"):
 }
 
 export default function AdminAreasPage() {
-  const [tab, setTab] = useState<"catalog" | "assign" | "quality" | "history">("catalog");
+  const [tab, setTab] = useState<"catalog" | "assign" | "quality" | "history" | "shadow">("catalog");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const flash = (ok: boolean, text: string) => setMsg({ ok, text });
@@ -247,6 +247,23 @@ export default function AdminAreasPage() {
   }, [cEntity, cAction]);
   useEffect(() => { if (tab === "history") void loadChanges(); }, [tab, loadChanges]);
 
+  /* ══ TAB 5 — Shadow Monitor ══ */
+  const [shadow, setShadow] = useState<Record<string, unknown> | null>(null);
+  const loadShadow = useCallback(async () => {
+    const d = await api("/api/admin/areas/shadow-stats");
+    setShadow((d.stats as Record<string, unknown>) ?? null);
+  }, []);
+  useEffect(() => { if (tab === "shadow") void loadShadow(); }, [tab, loadShadow]);
+  const exportShadow = async () => {
+    const d = await api("/api/admin/areas/shadow-stats?full=1");
+    const blob = new Blob([JSON.stringify(d.stats, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `area-shadow-${new Date().toISOString().slice(0, 19)}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
   /* ══ render ══ */
   const TabBtn = ({ k, label }: { k: typeof tab; label: string }) => (
     <button onClick={() => setTab(k)}
@@ -266,6 +283,7 @@ export default function AdminAreasPage() {
         <TabBtn k="assign" label="2 · Gán phòng ban" />
         <TabBtn k="quality" label="3 · Kiểm tra dữ liệu" />
         <TabBtn k="history" label="4 · Lịch sử" />
+        <TabBtn k="shadow" label="5 · Shadow Monitor" />
       </div>
       {msg && <div className={`text-[13px] mb-3 rounded-md px-3.5 py-2.5 ${msg.ok ? "bg-success-bg text-success" : "bg-danger-bg text-danger"}`}>{msg.text}</div>}
 
@@ -576,6 +594,81 @@ export default function AdminAreasPage() {
             </table>
           </div>
         </>
+      )}
+
+      {/* ════ TAB 5 — Shadow Monitor ════ */}
+      {tab === "shadow" && (
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[12.5px] text-ink-muted">
+              Nguồn: <b className="text-ink">{String(shadow?.source ?? "…")}</b> ·
+              shadow: <b className="text-ink">{shadow?.shadowEnabled ? "BẬT" : "tắt"}</b> ·
+              sample: <b className="text-ink">{String(shadow?.sampleRate ?? "…")}</b> ·
+              số liệu từ: {fmt(shadow?.since as string | undefined)} (in-memory, reset khi restart)
+            </span>
+            <span className="flex-1" />
+            <button onClick={() => loadShadow()} className="btn btn-secondary !min-h-9">Làm mới</button>
+            <button onClick={exportShadow} className="btn btn-secondary !min-h-9">Export JSON diff</button>
+          </div>
+
+          <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+            {([
+              ["Tổng request shadow", shadow?.total ?? "…", ""],
+              ["Parity", shadow?.parityPct != null ? `${shadow.parityPct}%` : "—", shadow?.realDiff === 0 ? "text-success" : "text-warning"],
+              ["Diff THẬT", shadow?.realDiff ?? "…", Number(shadow?.realDiff) > 0 ? "text-danger" : "text-success"],
+              ["Known diff (PMKT)", shadow?.knownOnly ?? "…", "text-ink-muted"],
+              ["Latency SP (avg)", shadow?.avgSpMs != null ? `${shadow.avgSpMs}ms` : "—", ""],
+              ["Latency PG (avg)", shadow?.avgPgMs != null ? `${shadow.avgPgMs}ms` : "—", "text-success"],
+            ] as Array<[string, unknown, string]>).map(([label, value, tone]) => (
+              <div key={label} className="bg-white rounded-lg border border-line shadow-e2 p-3.5">
+                <div className="text-[11.5px] text-ink-muted font-semibold">{label}</div>
+                <div className={`text-[22px] font-bold mt-0.5 tracking-tight ${tone}`}>{String(value)}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className={`text-[13px] rounded-md px-3.5 py-2.5 ${shadow?.okForCutover ? "bg-success-bg text-success" : "bg-warning-bg text-warning"}`}>
+            {shadow?.okForCutover
+              ? "✓ Sẵn sàng cutover: không diff thật, không shadow error (tích lũy từ lần restart)."
+              : Number(shadow?.errors) > 0 || Number(shadow?.realDiff) > 0
+                ? `⚠ Chưa sẵn sàng: ${shadow?.realDiff ?? 0} diff thật · ${shadow?.errors ?? 0} shadow error — xem bảng dưới.`
+                : "Chưa đủ dữ liệu — cần request thật từ người dùng (shadow sample theo tỷ lệ cấu hình)."}
+          </div>
+
+          <div className="bg-white rounded-lg border border-line shadow-e2 overflow-x-auto">
+            <div className="px-4 py-3 border-b border-line text-[14px] font-semibold">20 bản ghi shadow gần nhất (ưu tiên giữ diff/error)</div>
+            <table className="w-full text-[13px]">
+              <thead className="text-ink-muted text-left"><tr className="border-b border-line">
+                <th className="px-3 py-2">Thời gian</th><th className="px-3 py-2">Operation</th><th className="px-3 py-2">Phòng</th>
+                <th className="px-3 py-2">Diff thật</th><th className="px-3 py-2">Known</th><th className="px-3 py-2">Missing</th>
+                <th className="px-3 py-2">SP/PG ms</th><th className="px-3 py-2">Lỗi / chi tiết</th>
+              </tr></thead>
+              <tbody>
+                {((shadow?.recent as Array<Record<string, unknown>>) ?? []).map((r, i) => (
+                  <tr key={i} className="border-b border-line last:border-0 align-top">
+                    <td className="px-3 py-2 whitespace-nowrap">{fmt(r.at as string)}</td>
+                    <td className="px-3 py-2">{String(r.operation)}</td>
+                    <td className="px-3 py-2">{String(r.departmentCode ?? "—")}</td>
+                    <td className={`px-3 py-2 font-bold ${Number(r.differentFields) > 0 ? "text-danger" : "text-success"}`}>{String(r.differentFields)}</td>
+                    <td className="px-3 py-2 text-ink-muted">{String(r.knownLegacyDiffs)}</td>
+                    <td className="px-3 py-2">{Number(r.missingInPostgres) + Number(r.missingInSharePoint)}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{String(r.durationSpMs)}/{r.durationPgMs != null ? String(r.durationPgMs) : "—"}</td>
+                    <td className="px-3 py-2">
+                      {r.shadowError
+                        ? <span className="text-danger text-[12px]">{String(r.shadowError)}</span>
+                        : <details><summary className="cursor-pointer text-primary-600 text-[12px]">JSON</summary>
+                            <pre className="text-[10.5px] bg-surface rounded p-2 mt-1 max-w-[380px] overflow-x-auto">{JSON.stringify(r.detail, null, 1)}</pre>
+                          </details>}
+                    </td>
+                  </tr>
+                ))}
+                {(!shadow?.recent || (shadow.recent as unknown[]).length === 0) && (
+                  <tr><td colSpan={8} className="px-3 py-6 text-center text-ink-muted">Chưa có request shadow nào từ lần restart.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
     </AdminShell>
   );

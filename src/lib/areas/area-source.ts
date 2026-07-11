@@ -189,20 +189,99 @@ const pgAdapter = {
 };
 
 /* ── Shadow compare (source=sharepoint + shadow bật) ────────────────────────── */
-function diffAreas(sp: SourceArea[], pg: SourceArea[]) {
+/** Mã phòng PG đang unresolved (Q4) — cache 5 phút; diff membership CHỈ do các
+ *  mã này (vd PMKT) là "known legacy diff", không tính vào parity thật. */
+let unresolvedCache: { codes: Set<string>; at: number } | null = null;
+async function getUnresolvedCodes(): Promise<Set<string>> {
+  if (unresolvedCache && Date.now() - unresolvedCache.at < 300_000) return unresolvedCache.codes;
+  try {
+    const r = await appPool().query(
+      `SELECT DISTINCT department_code FROM department_area_assignments WHERE unresolved_department = TRUE`);
+    unresolvedCache = { codes: new Set(r.rows.map((x) => String(x.department_code))), at: Date.now() };
+  } catch {
+    unresolvedCache = { codes: new Set(), at: Date.now() };
+  }
+  return unresolvedCache.codes;
+}
+
+interface ShadowDiff extends Record<string, unknown> {
+  differentFields: number;      // diff THẬT (đã loại known legacy)
+  knownLegacyDiffs?: number;    // diff chỉ do mã unresolved hiển thị bên SP
+}
+
+function diffAreas(sp: SourceArea[], pg: SourceArea[], unresolved: Set<string>): ShadowDiff {
   const spSet = new Map(sp.map((a) => [a.code, a]));
   const pgSet = new Map(pg.map((a) => [a.code, a]));
   const missingInPostgres = sp.filter((a) => !pgSet.has(a.code)).map((a) => a.code);
   const missingInSharePoint = pg.filter((a) => !spSet.has(a.code)).map((a) => a.code);
-  let differentFields = 0;
+  let differentFields = 0, knownLegacyDiffs = 0;
+  const details: string[] = [];
   for (const [code, s] of spSet) {
     const p = pgSet.get(code);
     if (!p) continue;
-    if (s.name !== p.name || s.parentCode !== p.parentCode || s.areaType !== p.areaType ||
-        s.isCaptureRequired !== p.isCaptureRequired ||
-        s.departments.join(",") !== [...p.departments].sort().join(",")) differentFields++;
+    const fields: string[] = [];
+    if (s.name !== p.name) fields.push("name");
+    if (s.parentCode !== p.parentCode) fields.push("parent");
+    if (s.areaType !== p.areaType) fields.push("type");
+    if (s.isCaptureRequired !== p.isCaptureRequired) fields.push("required");
+    const sym = [...new Set([...s.departments, ...p.departments])]
+      .filter((d) => s.departments.includes(d) !== p.departments.includes(d));
+    if (sym.length) {
+      if (sym.every((d) => unresolved.has(d))) knownLegacyDiffs++;
+      else fields.push(`depts(${sym.slice(0, 5).join("+")})`);
+    }
+    if (fields.length) { differentFields++; if (details.length < 10) details.push(`${code}:${fields.join("/")}`); }
   }
-  return { sharepointCount: sp.length, postgresCount: pg.length, missingInPostgres, missingInSharePoint, differentFields };
+  return { sharepointCount: sp.length, postgresCount: pg.length, missingInPostgres, missingInSharePoint, differentFields, knownLegacyDiffs, ...(details.length ? { details } : {}) };
+}
+
+/* ── Shadow stats (in-memory, từ lần restart — cho Admin Shadow Monitor) ────── */
+export interface ShadowEntry {
+  at: string; operation: string; departmentCode: string | null;
+  differentFields: number; knownLegacyDiffs: number;
+  missingInPostgres: number; missingInSharePoint: number;
+  durationSpMs: number; durationPgMs: number | null; shadowError: string | null;
+  detail: Record<string, unknown>;
+}
+const shadowStats = {
+  since: new Date().toISOString(),
+  total: 0, clean: 0, realDiff: 0, knownOnly: 0, errors: 0,
+  sumSpMs: 0, sumPgMs: 0, pgSamples: 0,
+  recent: [] as ShadowEntry[], // ring ≤ 100 (ưu tiên lưu diff/error)
+};
+function recordShadow(e: ShadowEntry): void {
+  shadowStats.total++;
+  if (e.shadowError) shadowStats.errors++;
+  else if (e.differentFields > 0 || e.missingInPostgres > 0 || e.missingInSharePoint > 0) shadowStats.realDiff++;
+  else if (e.knownLegacyDiffs > 0) shadowStats.knownOnly++;
+  else shadowStats.clean++;
+  shadowStats.sumSpMs += e.durationSpMs;
+  if (e.durationPgMs != null) { shadowStats.sumPgMs += e.durationPgMs; shadowStats.pgSamples++; }
+  shadowStats.recent.unshift(e);
+  if (shadowStats.recent.length > 100) {
+    // giữ lại entry có vấn đề lâu hơn entry sạch
+    const idx = shadowStats.recent.map((x, i) => ({ x, i }))
+      .reverse().find(({ x }) => !x.shadowError && x.differentFields === 0 && x.missingInPostgres === 0 && x.missingInSharePoint === 0)?.i;
+    shadowStats.recent.splice(idx ?? shadowStats.recent.length - 1, 1);
+  }
+}
+export function getShadowStats() {
+  const okForCutover = shadowStats.total > 0 && shadowStats.realDiff === 0 && shadowStats.errors === 0;
+  return {
+    ...getAreaSourceDiagnostics(),
+    since: shadowStats.since,
+    total: shadowStats.total,
+    clean: shadowStats.clean,
+    knownOnly: shadowStats.knownOnly,
+    realDiff: shadowStats.realDiff,
+    errors: shadowStats.errors,
+    parityPct: shadowStats.total ? Math.round(((shadowStats.clean + shadowStats.knownOnly) / shadowStats.total) * 1000) / 10 : null,
+    avgSpMs: shadowStats.total ? Math.round(shadowStats.sumSpMs / shadowStats.total) : null,
+    avgPgMs: shadowStats.pgSamples ? Math.round(shadowStats.sumPgMs / shadowStats.pgSamples) : null,
+    okForCutover,
+    recent: shadowStats.recent.slice(0, 20),
+    recentAll: shadowStats.recent,
+  };
 }
 
 async function withShadow<T>(
@@ -210,7 +289,7 @@ async function withShadow<T>(
   departmentCode: string | null,
   primary: () => Promise<T>,
   shadow: () => Promise<T>,
-  compare: (a: T, b: T) => Record<string, unknown>,
+  compare: (a: T, b: T, unresolved: Set<string>) => Record<string, unknown>,
 ): Promise<T> {
   if (areaSource() === "postgres") return shadow(); // postgres là nguồn chính
   if (!shadowEnabled() || Math.random() >= sampleRate()) return primary();
@@ -219,15 +298,25 @@ async function withShadow<T>(
   const durationSpMs = Date.now() - t0;
   try {
     const t1 = Date.now();
-    const pgRes = await shadow();
+    const [pgRes, unresolved] = await Promise.all([shadow(), getUnresolvedCodes()]);
     const durationPgMs = Date.now() - t1;
-    console.log("[5S_AREA_SHADOW]", JSON.stringify({
-      operation, departmentCode, ...compare(spRes, pgRes), durationSpMs, durationPgMs,
-    }));
+    const diff = compare(spRes, pgRes, unresolved);
+    console.log("[5S_AREA_SHADOW]", JSON.stringify({ operation, departmentCode, ...diff, durationSpMs, durationPgMs }));
+    recordShadow({
+      at: new Date().toISOString(), operation, departmentCode,
+      differentFields: Number(diff.differentFields ?? 0), knownLegacyDiffs: Number(diff.knownLegacyDiffs ?? 0),
+      missingInPostgres: Array.isArray(diff.missingInPostgres) ? diff.missingInPostgres.length : 0,
+      missingInSharePoint: Array.isArray(diff.missingInSharePoint) ? diff.missingInSharePoint.length : 0,
+      durationSpMs, durationPgMs, shadowError: null, detail: diff,
+    });
   } catch (e) {
-    console.warn("[5S_AREA_SHADOW]", JSON.stringify({
-      operation, departmentCode, shadowError: (e as Error).message?.slice(0, 160), durationSpMs,
-    }));
+    const shadowError = (e as Error).message?.slice(0, 160) ?? "error";
+    console.warn("[5S_AREA_SHADOW]", JSON.stringify({ operation, departmentCode, shadowError, durationSpMs }));
+    recordShadow({
+      at: new Date().toISOString(), operation, departmentCode,
+      differentFields: 0, knownLegacyDiffs: 0, missingInPostgres: 0, missingInSharePoint: 0,
+      durationSpMs, durationPgMs: null, shadowError, detail: {},
+    });
   }
   return spRes; // response LUÔN là SharePoint khi source=sharepoint
 }
@@ -261,13 +350,17 @@ export async function getAreaGroupNameMap(): Promise<Map<string, string>> {
 export async function getAreaKpiBase(activeDeptCodes?: string[]): Promise<AreaKpiBase> {
   return withShadow("kpiBase", null,
     () => spAdapter.kpiBase(activeDeptCodes), () => pgAdapter.kpiBase(activeDeptCodes),
-    (a, b) => ({
-      physicalAreaDiff: a.physicalCapturePoints - b.physicalCapturePoints,
-      kpiObligationDiff: a.departmentAreaObligations - b.departmentAreaObligations,
-      assignmentCountDiff: a.perDepartment.length - b.perDepartment.length,
-      spPhysical: a.physicalCapturePoints, pgPhysical: b.physicalCapturePoints,
-      spObligations: a.departmentAreaObligations, pgObligations: b.departmentAreaObligations,
-    }));
+    (a, b) => {
+      const physicalAreaDiff = a.physicalCapturePoints - b.physicalCapturePoints;
+      const kpiObligationDiff = a.departmentAreaObligations - b.departmentAreaObligations;
+      const assignmentCountDiff = a.perDepartment.length - b.perDepartment.length;
+      return {
+        physicalAreaDiff, kpiObligationDiff, assignmentCountDiff,
+        differentFields: physicalAreaDiff !== 0 || kpiObligationDiff !== 0 || assignmentCountDiff !== 0 ? 1 : 0,
+        spPhysical: a.physicalCapturePoints, pgPhysical: b.physicalCapturePoints,
+        spObligations: a.departmentAreaObligations, pgObligations: b.departmentAreaObligations,
+      };
+    });
 }
 
 /** Chẩn đoán nhanh cho admin/vận hành. */

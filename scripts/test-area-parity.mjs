@@ -118,8 +118,8 @@ try {
   ok("shadow bật: response vẫn SP + có log diff", shadowRes.length > 0 && !!diffLog);
   if (diffLog) {
     const d = JSON.parse(diffLog[1]);
-    ok("shadow diff: SP=PG count, missing 0/0, fieldDiff=3 (PMKT display — đã giải thích)",
-      d.sharepointCount === d.postgresCount && d.missingInPostgres.length === 0 && d.missingInSharePoint.length === 0 && d.differentFields === 3,
+    ok("shadow diff: SP=PG count, missing 0/0, diff THẬT=0, known(PMKT)=3",
+      d.sharepointCount === d.postgresCount && d.missingInPostgres.length === 0 && d.missingInSharePoint.length === 0 && d.differentFields === 0 && d.knownLegacyDiffs === 3,
       diffLog[1]);
     ok("shadow log có duration 2 phía", typeof d.durationSpMs === "number" && typeof d.durationPgMs === "number");
   }
