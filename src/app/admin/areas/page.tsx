@@ -27,6 +27,8 @@ interface DQ {
   departmentsWithoutRequiredArea: string[];
   assignmentDeptCodesNotActive: string[];
   inactiveAreasUsedInHistory: string[];
+  orphanChildren: Array<{ areaId: number; areaCode: string }>;
+  duplicateAssignments: number;
 }
 
 const TYPE_LABEL: Record<string, string> = { group: "Nhóm", location: "Khu vực", capture_point: "Điểm chụp" };
@@ -64,7 +66,7 @@ async function api(url: string, body?: unknown, method = body ? "POST" : "GET"):
 }
 
 export default function AdminAreasPage() {
-  const [tab, setTab] = useState<"catalog" | "assign" | "quality" | "history" | "shadow">("catalog");
+  const [tab, setTab] = useState<"catalog" | "assign" | "quality" | "history">("catalog");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const flash = (ok: boolean, text: string) => setMsg({ ok, text });
@@ -134,12 +136,45 @@ export default function AdminAreasPage() {
     });
   };
 
+  // Kéo-thả đổi cha + đổi thứ tự (P5)
+  const [dragId, setDragId] = useState<number | null>(null);
+  const dropMove = (targetParentId: number | null, targetName: string) => {
+    if (dragId == null) return;
+    const dragged = areas.find((a) => a.id === dragId);
+    setDragId(null);
+    if (!dragged || dragged.id === targetParentId) return;
+    if (!window.confirm(`Chuyển "${dragged.areaName}" vào ${targetParentId == null ? "GỐC" : `nhóm "${targetName}"`}? (assignment giữ nguyên)`)) return;
+    void run(async () => {
+      const d = await api(`/api/admin/areas/${dragged.id}`, { action: "move", newParentId: targetParentId });
+      await loadAreas(); return d;
+    }, "Đã di chuyển (kéo-thả).");
+  };
+  const reorder = (dir: -1 | 1) => {
+    if (!sel) return;
+    const siblings = flat.filter((a) => a.parentId === sel.parentId && a.isActive === sel.isActive)
+      .sort((x, y) => x.sortOrder - y.sortOrder || x.areaName.localeCompare(y.areaName, "vi"));
+    const i = siblings.findIndex((a) => a.id === sel.id);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= siblings.length) return;
+    const other = siblings[j];
+    // Hoán đổi sortOrder (nếu trùng thì tách giá trị để ổn định)
+    const a1 = other.sortOrder === sel.sortOrder ? sel.sortOrder + dir : other.sortOrder;
+    const a2 = other.sortOrder === sel.sortOrder ? sel.sortOrder : sel.sortOrder;
+    void run(async () => {
+      await api(`/api/admin/areas/${sel.id}`, { action: "update", sortOrder: a1 });
+      const d = await api(`/api/admin/areas/${other.id}`, { action: "update", sortOrder: a2 });
+      await loadAreas(); return d;
+    }, "Đã đổi thứ tự.");
+  };
+
   /* ══ TAB 2 — Gán phòng ban ══ */
   const [mode, setMode] = useState<"byDept" | "byArea" | "review">("byDept");
   const [pickDept, setPickDept] = useState("");
   const [deptAsgs, setDeptAsgs] = useState<Asg[]>([]);
   const [pickAreaId, setPickAreaId] = useState<number | null>(null);
   const [areaAsgs, setAreaAsgs] = useState<Asg[]>([]);
+  const [areaQ, setAreaQ] = useState("");
+  const [selAreas, setSelAreas] = useState<Set<number>>(new Set());
   const loadDeptAsgs = useCallback(async (code: string) => {
     if (!code) { setDeptAsgs([]); return; }
     const d = await api(`/api/admin/area-assignments/review?departmentCode=${encodeURIComponent(code)}`);
@@ -183,6 +218,25 @@ export default function AdminAreasPage() {
     }, "Đã gán.");
   };
 
+  const bulkAssignSelected = () => {
+    const targets = [...selAreas].filter((id) => !activeAsgByArea.get(id));
+    if (!targets.length) { flash(false, "Các khu đã chọn đều đã gán."); return; }
+    if (!window.confirm(`Hệ thống sẽ tạo ${targets.length} assignment RIÊNG BIỆT cho ${pickDept}. Tiếp tục?`)) return;
+    void run(async () => {
+      const d = await api("/api/admin/area-assignments/bulk-assign", { departmentCode: pickDept, areaIds: targets });
+      setSelAreas(new Set()); await loadDeptAsgs(pickDept); await loadAreas(); return d;
+    }, `Đã gán ${targets.length} khu.`);
+  };
+  const bulkRemoveSelected = () => {
+    const ids = [...selAreas].map((id) => activeAsgByArea.get(id)?.id).filter((x): x is number => x != null);
+    if (!ids.length) { flash(false, "Các khu đã chọn chưa có assignment để bỏ."); return; }
+    if (!window.confirm(`Bỏ gán ${ids.length} assignment của ${pickDept}? (soft — giữ lịch sử)`)) return;
+    void run(async () => {
+      const d = await api("/api/admin/area-assignments/bulk-review", { ids, action: "reject" });
+      setSelAreas(new Set()); await loadDeptAsgs(pickDept); await loadAreas(); return d;
+    }, `Đã bỏ gán ${ids.length} khu.`);
+  };
+
   /* review sub-view (P2) */
   const [fSource, setFSource] = useState(""); const [fReview, setFReview] = useState("pending_review"); const [fUnres, setFUnres] = useState(false);
   const [revRows, setRevRows] = useState<Asg[]>([]); const [selRev, setSelRev] = useState<Set<number>>(new Set());
@@ -200,16 +254,14 @@ export default function AdminAreasPage() {
 
   /* ══ TAB 3 — Kiểm tra dữ liệu ══ */
   const [dq, setDq] = useState<DQ | null>(null);
-  const [mig, setMig] = useState<Record<string, unknown> | null>(null);
   const [unresRows, setUnresRows] = useState<Asg[]>([]);
   const [remapTo, setRemapTo] = useState("MKT");
   const loadQuality = useCallback(async () => {
-    const [q, m, u] = await Promise.all([
-      api("/api/admin/areas/data-quality"), api("/api/admin/areas/migration-preview"),
+    const [q, u] = await Promise.all([
+      api("/api/admin/areas/data-quality"),
       api("/api/admin/area-assignments/review?unresolved=1"),
     ]);
     setDq((q.issues as DQ) ?? null);
-    setMig((m.summary as Record<string, unknown>) ?? null);
     setUnresRows((u.assignments as Asg[]) ?? []);
   }, []);
   useEffect(() => { if (tab === "quality") void loadQuality(); }, [tab, loadQuality]);
@@ -231,11 +283,6 @@ export default function AdminAreasPage() {
       await loadQuality(); return d;
     }, "Đã loại.");
   };
-  const applyMigration = () => {
-    if (!window.confirm("Import/đồng bộ Config_Areas → PostgreSQL (idempotent, KHÔNG sửa SharePoint)?")) return;
-    void run(async () => { const d = await api("/api/admin/areas/migration-apply", {}); await loadAreas(); await loadQuality(); return d; }, "Đã import.");
-  };
-
   /* ══ TAB 4 — Lịch sử ══ */
   const [changes, setChanges] = useState<Change[]>([]);
   const [cEntity, setCEntity] = useState(""); const [cAction, setCAction] = useState("");
@@ -246,23 +293,6 @@ export default function AdminAreasPage() {
     setChanges((d.changes as Change[]) ?? []);
   }, [cEntity, cAction]);
   useEffect(() => { if (tab === "history") void loadChanges(); }, [tab, loadChanges]);
-
-  /* ══ TAB 5 — Shadow Monitor ══ */
-  const [shadow, setShadow] = useState<Record<string, unknown> | null>(null);
-  const loadShadow = useCallback(async () => {
-    const d = await api("/api/admin/areas/shadow-stats");
-    setShadow((d.stats as Record<string, unknown>) ?? null);
-  }, []);
-  useEffect(() => { if (tab === "shadow") void loadShadow(); }, [tab, loadShadow]);
-  const exportShadow = async () => {
-    const d = await api("/api/admin/areas/shadow-stats?full=1");
-    const blob = new Blob([JSON.stringify(d.stats, null, 2)], { type: "application/json" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `area-shadow-${new Date().toISOString().slice(0, 19)}.json`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  };
 
   /* ══ render ══ */
   const TabBtn = ({ k, label }: { k: typeof tab; label: string }) => (
@@ -276,14 +306,13 @@ export default function AdminAreasPage() {
     <AdminShell
       title="Khu vực 5S"
       subtitle="Danh mục cây · gán phòng ban tường minh (không kế thừa) · kiểm tra dữ liệu · lịch sử"
-      actions={<button onClick={applyMigration} disabled={busy} className="btn btn-secondary !min-h-10">Import/đồng bộ từ Config_Areas</button>}
+      actions={<button onClick={() => window.alert("Import Excel: đang phát triển.\nNguồn dữ liệu khu vực chính thức là PostgreSQL — tạo/sửa trực tiếp tại Tab 1 và Tab 2.")} className="btn btn-secondary !min-h-10">Import Excel</button>}
     >
       <div className="flex gap-1 border-b border-line mb-4">
         <TabBtn k="catalog" label="1 · Danh mục khu vực" />
         <TabBtn k="assign" label="2 · Gán phòng ban" />
         <TabBtn k="quality" label="3 · Kiểm tra dữ liệu" />
         <TabBtn k="history" label="4 · Lịch sử" />
-        <TabBtn k="shadow" label="5 · Shadow Monitor" />
       </div>
       {msg && <div className={`text-[13px] mb-3 rounded-md px-3.5 py-2.5 ${msg.ok ? "bg-success-bg text-success" : "bg-danger-bg text-danger"}`}>{msg.text}</div>}
 
@@ -296,10 +325,21 @@ export default function AdminAreasPage() {
               <label className="text-[12px] flex items-center gap-1"><input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} /> hiện khu ẩn</label>
               <button onClick={() => setNewArea({ open: true, parentId: null })} className="text-[12.5px] font-semibold text-primary-600">+ Khu vực gốc</button>
             </div>
+            {dragId != null && (
+              <div onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); dropMove(null, ""); }}
+                className="mx-3 my-2 border-2 border-dashed border-primary-600/50 rounded-md text-center text-[12px] text-primary-600 py-2">
+                Thả vào đây để đưa RA GỐC
+              </div>
+            )}
             <div className="max-h-[520px] overflow-y-auto">
               {(showInactive ? flat : flat.filter((a) => a.isActive)).map((a) => (
                 <button key={a.id} onClick={() => setSelId(a.id)}
-                  className={`w-full text-left px-4 py-2 border-b border-line last:border-0 flex items-center gap-2 ${selId === a.id ? "bg-primary-100/60" : ""} ${!a.isActive ? "opacity-45" : ""}`}
+                  draggable
+                  onDragStart={() => setDragId(a.id)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => { e.preventDefault(); dropMove(a.id, a.areaName); }}
+                  title="Kéo thả vào nhóm khác để đổi cha"
+                  className={`w-full text-left px-4 py-2 border-b border-line last:border-0 flex items-center gap-2 ${selId === a.id ? "bg-primary-100/60" : ""} ${!a.isActive ? "opacity-45" : ""} ${dragId === a.id ? "opacity-40" : ""}`}
                   style={{ paddingLeft: `${16 + a.depth * 22}px` }}>
                   <span>{TYPE_ICON[a.areaType]}</span>
                   <span className="flex-1 min-w-0">
@@ -357,6 +397,8 @@ export default function AdminAreasPage() {
                   <button onClick={saveArea} disabled={busy} className="btn btn-primary !min-h-9">Lưu</button>
                   <button onClick={() => setNewArea({ open: true, parentId: sel.id })} className="btn btn-secondary !min-h-9">+ Thêm khu con</button>
                   <button onClick={moveSel} className="btn btn-secondary !min-h-9">Di chuyển</button>
+                  <button onClick={() => reorder(-1)} className="btn btn-secondary !min-h-9" title="Lên trong nhóm">↑</button>
+                  <button onClick={() => reorder(1)} className="btn btn-secondary !min-h-9" title="Xuống trong nhóm">↓</button>
                   {sel.isActive
                     ? <button onClick={() => areaAction("deactivate", `Ẩn "${sel.areaName}"? (không xuất hiện trong picker/KPI, lịch sử giữ nguyên)`)} className="btn btn-secondary !min-h-9 text-warning">Ẩn</button>
                     : <button onClick={() => areaAction("reactivate")} className="btn btn-secondary !min-h-9 text-success">Kích hoạt lại</button>}
@@ -386,21 +428,30 @@ export default function AdminAreasPage() {
                 </select>
                 {pickDept && (
                   <>
+                    <input value={areaQ} onChange={(e) => setAreaQ(e.target.value)} placeholder="Tìm khu vực…"
+                      className="rounded-md border border-line-strong px-3 py-2 text-[13.5px] w-48" />
                     <span className="text-[12.5px] text-ink-muted">
                       Đã gán {deptAsgs.filter((s) => s.isActive).length} khu · bắt buộc {deptAsgs.filter((s) => s.isActive && s.isRequired).length}
+                      {selAreas.size > 0 && <> · chọn {selAreas.size}</>}
                     </span>
                     <span className="flex-1" />
-                    <button onClick={bulkAssignVisible} disabled={busy} className="btn btn-secondary !min-h-9">Gán toàn bộ khu đang hiển thị</button>
+                    <button onClick={bulkAssignSelected} disabled={busy || !selAreas.size} className="btn btn-primary !min-h-9">Gán đã chọn</button>
+                    <button onClick={bulkRemoveSelected} disabled={busy || !selAreas.size} className="btn btn-secondary !min-h-9">Bỏ gán đã chọn</button>
+                    <button onClick={bulkAssignVisible} disabled={busy} className="btn btn-secondary !min-h-9">Gán tất cả đang hiển thị</button>
                   </>
                 )}
               </div>
               {pickDept && (
                 <div className="max-h-[480px] overflow-y-auto border border-line rounded-md">
-                  {activeFlat.map((a) => {
+                  {activeFlat.filter((a) => !areaQ.trim() || a.areaName.toLowerCase().includes(areaQ.trim().toLowerCase()) || a.areaCode.toLowerCase().includes(areaQ.trim().toLowerCase())).map((a) => {
                     const asg = activeAsgByArea.get(a.id);
                     return (
                       <div key={a.id} className="flex items-center gap-2.5 px-3 py-2 border-b border-line last:border-0" style={{ paddingLeft: `${12 + a.depth * 20}px` }}>
-                        <input type="checkbox" checked={!!asg} disabled={busy || a.areaType === "group"} onChange={() => toggleAssign(a)} title={a.areaType === "group" ? "Nhóm — không gán trực tiếp" : ""} />
+                        <input type="checkbox" checked={selAreas.has(a.id)} disabled={a.areaType === "group"}
+                          onChange={(e) => { const n = new Set(selAreas); if (e.target.checked) n.add(a.id); else n.delete(a.id); setSelAreas(n); }}
+                          title="Chọn để gán/bỏ gán hàng loạt" />
+                        <input type="checkbox" checked={!!asg} disabled={busy || a.areaType === "group"} onChange={() => toggleAssign(a)}
+                          className="accent-[var(--success)]" title={a.areaType === "group" ? "Nhóm — không gán trực tiếp" : "Trạng thái GÁN (tick = tạo assignment)"} />
                         <span>{TYPE_ICON[a.areaType]}</span>
                         <span className="flex-1 text-[13px] font-medium truncate">{a.areaName} <span className="text-ink-muted">({a.areaCode})</span></span>
                         {asg && (
@@ -506,14 +557,33 @@ export default function AdminAreasPage() {
       {/* ════ TAB 3 ════ */}
       {tab === "quality" && (
         <div className="flex flex-col gap-4">
-          {mig && (
-            <div className="text-[12.5px] text-ink-muted">
-              Baseline: SharePoint <b className="text-ink">{String(mig.spOperationalObligations)}</b> · PostgreSQL <b className="text-ink">{String(mig.pgExpectedObligations)}</b>
-              {mig.baselineMatch ? <b className="text-success"> KHỚP ✓</b> : <b className="text-danger"> LỆCH ✗</b>}
-              {" · "}Điểm chụp vật lý: <b className="text-ink">{String(mig.physicalCapturePoints)}</b>
-              {" · "}Chờ duyệt bulk: <b className="text-warning">{String(mig.bulkPendingReview)}</b>
-            </div>
-          )}
+          {/* HEALTH DASHBOARD — % healthy tính từ các nhóm cảnh báo bên dưới */}
+          {dq && (() => {
+            const issueCount =
+              dq.requiredAreasWithoutAssignment.length + dq.unresolvedAssignments.length +
+              dq.assignmentsToInactiveArea.length + dq.cycles.length +
+              dq.departmentsWithoutRequiredArea.length + dq.assignmentDeptCodesNotActive.length +
+              (dq.orphanChildren?.length ?? 0) + (dq.duplicateAssignments ?? 0);
+            const activeCapture = activeFlat.filter((a) => a.areaType !== "group" && a.isCaptureRequired).length;
+            const healthyAreas = activeCapture - dq.requiredAreasWithoutAssignment.length;
+            const healthPct = activeCapture ? Math.round((healthyAreas / activeCapture) * 100) : 100;
+            return (
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+                {([
+                  ["% khu vực healthy", `${healthPct}%`, issueCount === 0 ? "text-success" : healthPct >= 90 ? "text-warning" : "text-danger"],
+                  ["Tổng cảnh báo", issueCount, issueCount === 0 ? "text-success" : "text-danger"],
+                  ["Unresolved", dq.unresolvedAssignments.length, dq.unresolvedAssignments.length ? "text-danger" : "text-success"],
+                  ["Chờ duyệt", dq.pendingReviewCount, dq.pendingReviewCount ? "text-warning" : "text-success"],
+                  ["Điểm chụp active", activeCapture, ""],
+                ] as Array<[string, unknown, string]>).map(([label, value, tone]) => (
+                  <div key={label} className="bg-white rounded-lg border border-line shadow-e2 p-3.5">
+                    <div className="text-[11.5px] text-ink-muted font-semibold">{label}</div>
+                    <div className={`text-[22px] font-bold mt-0.5 tracking-tight ${tone}`}>{String(value)}</div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
 
           {/* Unresolved panel — hiện đủ assignment nguồn TRƯỚC khi remap */}
           {unresCodes.map((code) => (
@@ -543,6 +613,8 @@ export default function AdminAreasPage() {
                 ["Assignment trỏ khu ĐANG ẨN", dq.assignmentsToInactiveArea.map((x) => `#${x.assignmentId} ${x.departmentCode} @ ${x.areaCode}`)],
                 ["Mã phòng trong assignment KHÔNG active", dq.assignmentDeptCodesNotActive],
                 ["Cây có cycle", dq.cycles.map((c) => c.areaCode)],
+                ["Khu con ACTIVE nhưng cha bị ẨN (orphan)", (dq.orphanChildren ?? []).map((o) => o.areaCode)],
+                ["Duplicate assignment (unique constraint verify)", dq.duplicateAssignments ? [`${dq.duplicateAssignments} nhóm trùng!`] : []],
                 ["Khu ẨN còn trong submission lịch sử (chỉ thông tin — snapshot vẫn hiển thị)", dq.inactiveAreasUsedInHistory],
               ] as Array<[string, string[]]>).map(([title, items]) => (
                 <div key={title} className="bg-white rounded-lg border border-line shadow-e2 p-4">
@@ -596,80 +668,6 @@ export default function AdminAreasPage() {
         </>
       )}
 
-      {/* ════ TAB 5 — Shadow Monitor ════ */}
-      {tab === "shadow" && (
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[12.5px] text-ink-muted">
-              Nguồn: <b className="text-ink">{String(shadow?.source ?? "…")}</b> ·
-              shadow: <b className="text-ink">{shadow?.shadowEnabled ? "BẬT" : "tắt"}</b> ·
-              sample: <b className="text-ink">{String(shadow?.sampleRate ?? "…")}</b> ·
-              số liệu từ: {fmt(shadow?.since as string | undefined)} (in-memory, reset khi restart)
-            </span>
-            <span className="flex-1" />
-            <button onClick={() => loadShadow()} className="btn btn-secondary !min-h-9">Làm mới</button>
-            <button onClick={exportShadow} className="btn btn-secondary !min-h-9">Export JSON diff</button>
-          </div>
-
-          <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
-            {([
-              ["Tổng request shadow", shadow?.total ?? "…", ""],
-              ["Parity", shadow?.parityPct != null ? `${shadow.parityPct}%` : "—", shadow?.realDiff === 0 ? "text-success" : "text-warning"],
-              ["Diff THẬT", shadow?.realDiff ?? "…", Number(shadow?.realDiff) > 0 ? "text-danger" : "text-success"],
-              ["Known diff (PMKT)", shadow?.knownOnly ?? "…", "text-ink-muted"],
-              ["Latency SP (avg)", shadow?.avgSpMs != null ? `${shadow.avgSpMs}ms` : "—", ""],
-              ["Latency PG (avg)", shadow?.avgPgMs != null ? `${shadow.avgPgMs}ms` : "—", "text-success"],
-            ] as Array<[string, unknown, string]>).map(([label, value, tone]) => (
-              <div key={label} className="bg-white rounded-lg border border-line shadow-e2 p-3.5">
-                <div className="text-[11.5px] text-ink-muted font-semibold">{label}</div>
-                <div className={`text-[22px] font-bold mt-0.5 tracking-tight ${tone}`}>{String(value)}</div>
-              </div>
-            ))}
-          </div>
-
-          <div className={`text-[13px] rounded-md px-3.5 py-2.5 ${shadow?.okForCutover ? "bg-success-bg text-success" : "bg-warning-bg text-warning"}`}>
-            {shadow?.okForCutover
-              ? "✓ Sẵn sàng cutover: không diff thật, không shadow error (tích lũy từ lần restart)."
-              : Number(shadow?.errors) > 0 || Number(shadow?.realDiff) > 0
-                ? `⚠ Chưa sẵn sàng: ${shadow?.realDiff ?? 0} diff thật · ${shadow?.errors ?? 0} shadow error — xem bảng dưới.`
-                : "Chưa đủ dữ liệu — cần request thật từ người dùng (shadow sample theo tỷ lệ cấu hình)."}
-          </div>
-
-          <div className="bg-white rounded-lg border border-line shadow-e2 overflow-x-auto">
-            <div className="px-4 py-3 border-b border-line text-[14px] font-semibold">20 bản ghi shadow gần nhất (ưu tiên giữ diff/error)</div>
-            <table className="w-full text-[13px]">
-              <thead className="text-ink-muted text-left"><tr className="border-b border-line">
-                <th className="px-3 py-2">Thời gian</th><th className="px-3 py-2">Operation</th><th className="px-3 py-2">Phòng</th>
-                <th className="px-3 py-2">Diff thật</th><th className="px-3 py-2">Known</th><th className="px-3 py-2">Missing</th>
-                <th className="px-3 py-2">SP/PG ms</th><th className="px-3 py-2">Lỗi / chi tiết</th>
-              </tr></thead>
-              <tbody>
-                {((shadow?.recent as Array<Record<string, unknown>>) ?? []).map((r, i) => (
-                  <tr key={i} className="border-b border-line last:border-0 align-top">
-                    <td className="px-3 py-2 whitespace-nowrap">{fmt(r.at as string)}</td>
-                    <td className="px-3 py-2">{String(r.operation)}</td>
-                    <td className="px-3 py-2">{String(r.departmentCode ?? "—")}</td>
-                    <td className={`px-3 py-2 font-bold ${Number(r.differentFields) > 0 ? "text-danger" : "text-success"}`}>{String(r.differentFields)}</td>
-                    <td className="px-3 py-2 text-ink-muted">{String(r.knownLegacyDiffs)}</td>
-                    <td className="px-3 py-2">{Number(r.missingInPostgres) + Number(r.missingInSharePoint)}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">{String(r.durationSpMs)}/{r.durationPgMs != null ? String(r.durationPgMs) : "—"}</td>
-                    <td className="px-3 py-2">
-                      {r.shadowError
-                        ? <span className="text-danger text-[12px]">{String(r.shadowError)}</span>
-                        : <details><summary className="cursor-pointer text-primary-600 text-[12px]">JSON</summary>
-                            <pre className="text-[10.5px] bg-surface rounded p-2 mt-1 max-w-[380px] overflow-x-auto">{JSON.stringify(r.detail, null, 1)}</pre>
-                          </details>}
-                    </td>
-                  </tr>
-                ))}
-                {(!shadow?.recent || (shadow.recent as unknown[]).length === 0) && (
-                  <tr><td colSpan={8} className="px-3 py-6 text-center text-ink-muted">Chưa có request shadow nào từ lần restart.</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
     </AdminShell>
   );
 }

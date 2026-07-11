@@ -1,7 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auth } from "@/auth";
-import { createAreaForDepartment } from "@/lib/sharepoint/area-service";
+import { generateAreaCode } from "@/lib/sharepoint/area-service";
 import { listAreaTree, listAreasByDepartmentCode } from "@/lib/areas/area-source";
+import { createArea } from "@/lib/areas/area-pg-service";
+import { assignDepartmentToArea } from "@/lib/areas/area-assignment-service";
 import { resolveRequestUser } from "@/lib/auth/request-department";
 import { denyIfNotAdmin } from "@/lib/sharepoint/admin-guard";
 
@@ -45,8 +47,26 @@ export async function POST(req: NextRequest) {
   if (!areaName) return NextResponse.json({ error: "Tên khu vực là bắt buộc." }, { status: 400 });
   if (areaName.length > 80) return NextResponse.json({ error: "Tên khu vực quá dài." }, { status: 400 });
   try {
-    const result = await createAreaForDepartment(me.departmentCode, areaName);
-    return NextResponse.json({ ok: true, action: result.action, area: result.area });
+    // P5 cutover: ghi PostgreSQL (five_s_areas + assignment) — KHÔNG ghi Config_Areas.
+    const code = generateAreaCode(me.departmentCode, areaName);
+    const session = await auth();
+    const actor = session?.user?.email ?? "capture-quick-add";
+    let areaId: number;
+    try {
+      const area = await createArea({
+        areaCode: code, areaName, areaType: "capture_point", isCaptureRequired: true,
+      }, actor);
+      areaId = area.id;
+    } catch (ce) {
+      // Mã đã tồn tại (thêm lại) → tìm id hiện có, chỉ đảm bảo assignment.
+      if (!/đã tồn tại/.test((ce as Error).message)) throw ce;
+      const { appQuery } = await import("@/lib/db/pg");
+      const r = await appQuery(`SELECT id FROM five_s_areas WHERE area_code=$1`, [code]);
+      if (!r.rows[0]) throw ce;
+      areaId = Number(r.rows[0].id);
+    }
+    await assignDepartmentToArea({ departmentCode: me.departmentCode, areaId }, actor);
+    return NextResponse.json({ ok: true, action: "created", area: { code, name: areaName, departmentCode: me.departmentCode, departments: [me.departmentCode], parentCode: null, sortOrder: 0 } });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }

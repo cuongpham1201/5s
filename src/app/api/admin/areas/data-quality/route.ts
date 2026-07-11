@@ -35,6 +35,13 @@ export async function GET() {
     const usedInactive = [...new Set(subs.map((s) => s.AreaCode).filter((c) => c && inactiveAreaCodes.has(c)))];
     const asgDeptRows = await appQuery(`SELECT DISTINCT department_code FROM department_area_assignments WHERE is_active AND NOT unresolved_department`);
     const inactiveDeptCodes = asgDeptRows.rows.map((x) => String(x.department_code)).filter((c) => !activeCodes.has(c));
+    // P5: orphan (khu con ACTIVE nhưng cha INACTIVE) + duplicate (phòng-khu-loại trùng — unique constraint chặn, verify 0)
+    const orphanRows = await appQuery(`
+      SELECT c.id, c.area_code FROM five_s_areas c JOIN five_s_areas p ON p.id = c.parent_id
+      WHERE c.is_active = TRUE AND p.is_active = FALSE ORDER BY c.area_code`);
+    const dupRows = await appQuery(`
+      SELECT department_code, area_id, assignment_type, count(*)::int n
+      FROM department_area_assignments GROUP BY 1,2,3 HAVING count(*) > 1`);
     return NextResponse.json({
       ok: true,
       issues: {
@@ -43,6 +50,8 @@ export async function GET() {
         departmentsWithoutRequiredArea: activeDepts.filter((d) => !deptWithRequired.has(d.code)).map((d) => d.code),
         assignmentDeptCodesNotActive: inactiveDeptCodes,
         inactiveAreasUsedInHistory: usedInactive,
+        orphanChildren: orphanRows.rows.map((x) => ({ areaId: Number(x.id), areaCode: String(x.area_code) })),
+        duplicateAssignments: dupRows.rows.length,
       },
     });
   } catch (e) {
