@@ -66,7 +66,7 @@ async function api(url: string, body?: unknown, method = body ? "POST" : "GET"):
 }
 
 export default function AdminAreasPage() {
-  const [tab, setTab] = useState<"catalog" | "assign" | "quality" | "history">("catalog");
+  const [tab, setTab] = useState<"catalog" | "assign" | "quality" | "history" | "versions">("catalog");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const flash = (ok: boolean, text: string) => setMsg({ ok, text });
@@ -294,6 +294,48 @@ export default function AdminAreasPage() {
   }, [cEntity, cAction]);
   useEffect(() => { if (tab === "history") void loadChanges(); }, [tab, loadChanges]);
 
+  /* ══ TAB 5 — Phiên bản cấu hình (P6) ══ */
+  interface Ver { id: number; versionNo: number; name: string | null; triggerType: string; areasCount: number; assignmentsCount: number; activeAreasCount: number; operationalObligationsCount: number; snapshotHash: string; createdByEmail: string | null; createdAt: string; restoredFromVersionId: number | null; isProtected: boolean }
+  const [vers, setVers] = useState<Ver[]>([]);
+  const [snapName, setSnapName] = useState("");
+  const [snapNote, setSnapNote] = useState("");
+  const [cmpData, setCmpData] = useState<Record<string, unknown> | null>(null);
+  const [cmpTitle, setCmpTitle] = useState("");
+  const [preview, setPreview] = useState<{ id: number; data: Record<string, unknown> } | null>(null);
+  const loadVers = useCallback(async () => {
+    const d = await api("/api/admin/areas/versions");
+    setVers((d.versions as Ver[]) ?? []);
+  }, []);
+  useEffect(() => { if (tab === "versions") void loadVers(); }, [tab, loadVers]);
+  const createSnap = () => run(async () => {
+    const d = await api("/api/admin/areas/versions", { name: snapName.trim() || null, description: snapNote.trim() || null, force: false });
+    if ((d as { action?: string }).action === "skipped_same_hash") flash(true, "Cấu hình không đổi so với version mới nhất — không tạo bản mới (dùng Ép tạo nếu vẫn muốn).");
+    setSnapName(""); setSnapNote(""); await loadVers(); return d;
+  }, "Đã tạo snapshot.");
+  const compareWith = (v: Ver, otherId?: number) => run(async () => {
+    const d = await api(`/api/admin/areas/versions/${v.id}/compare`, otherId != null ? { otherVersionId: otherId } : {});
+    setCmpData((d.compare as Record<string, unknown>) ?? null);
+    setCmpTitle(otherId != null ? `v${vers.find((x) => x.id === otherId)?.versionNo} → v${v.versionNo}` : `HIỆN TẠI → v${v.versionNo}`);
+    return d;
+  }, "Đã so sánh.");
+  const doPreview = (v: Ver) => run(async () => {
+    const d = await api(`/api/admin/areas/versions/${v.id}/restore-preview`, {});
+    setPreview({ id: v.id, data: (d.preview as Record<string, unknown>) ?? {} });
+    return d;
+  }, "Đã tạo preview restore.");
+  const doRestore = (v: Ver) => {
+    if (!window.confirm(`RESTORE cấu hình khu vực về v${v.versionNo}?\n\nThao tác này thay đổi cấu hình khu vực hiện hành nhưng KHÔNG thay đổi lịch sử ảnh.\nHệ thống tự tạo snapshot "before_restore" trước khi thực hiện.`)) return;
+    void run(async () => {
+      const d = await api(`/api/admin/areas/versions/${v.id}/restore`, { confirm: true });
+      setPreview(null); await loadVers(); await loadAreas(); return d;
+    }, `Đã restore về v${v.versionNo} (verify hash khớp).`);
+  };
+  const toggleProtect = (v: Ver) => run(async () => {
+    const d = await api(`/api/admin/areas/versions/${v.id}/protect`, { protected: !v.isProtected });
+    await loadVers(); return d;
+  });
+  const exportVer = (v: Ver) => { window.open(`/api/admin/areas/versions/${v.id}/export`, "_blank"); };
+
   /* ══ render ══ */
   const TabBtn = ({ k, label }: { k: typeof tab; label: string }) => (
     <button onClick={() => setTab(k)}
@@ -313,6 +355,7 @@ export default function AdminAreasPage() {
         <TabBtn k="assign" label="2 · Gán phòng ban" />
         <TabBtn k="quality" label="3 · Kiểm tra dữ liệu" />
         <TabBtn k="history" label="4 · Lịch sử" />
+        <TabBtn k="versions" label="5 · Phiên bản cấu hình" />
       </div>
       {msg && <div className={`text-[13px] mb-3 rounded-md px-3.5 py-2.5 ${msg.ok ? "bg-success-bg text-success" : "bg-danger-bg text-danger"}`}>{msg.text}</div>}
 
@@ -666,6 +709,126 @@ export default function AdminAreasPage() {
             </table>
           </div>
         </>
+      )}
+
+
+      {/* ════ TAB 5 — Phiên bản cấu hình ════ */}
+      {tab === "versions" && (
+        <div className="flex flex-col gap-4">
+          <div className="bg-white rounded-lg border border-line shadow-e2 p-3.5 flex flex-wrap items-center gap-2.5">
+            <input value={snapName} onChange={(e) => setSnapName(e.target.value)} placeholder="Tên snapshot (vd Baseline sau chỉnh TCKS)" className="rounded-md border border-line-strong px-3 py-2 text-[13.5px] w-72" />
+            <input value={snapNote} onChange={(e) => setSnapNote(e.target.value)} placeholder="Ghi chú" className="flex-1 min-w-40 rounded-md border border-line-strong px-3 py-2 text-[13.5px]" />
+            <button onClick={createSnap} disabled={busy} className="btn btn-primary !min-h-9">Tạo snapshot</button>
+            <button onClick={() => { if (vers[0]) exportVer(vers[0]); else flash(false, "Chưa có version — tạo snapshot trước."); }} className="btn btn-secondary !min-h-9">Export bản mới nhất</button>
+          </div>
+
+          {preview && (() => {
+            const pd = preview.data as { valid?: boolean; validationErrors?: string[]; warnings?: string[]; planned?: Record<string, number>; compare?: { kpi?: Record<string, unknown> } };
+            const v = vers.find((x) => x.id === preview.id);
+            return (
+              <div className="bg-white rounded-lg border border-warning/60 shadow-e2 p-4">
+                <div className="text-[14px] font-bold mb-1">Preview restore → v{v?.versionNo}</div>
+                <div className="text-[12.5px] mb-2">
+                  {pd.valid ? <span className="text-success font-semibold">Snapshot hợp lệ ✓</span> : <span className="text-danger font-semibold">KHÔNG hợp lệ: {(pd.validationErrors ?? []).join(" · ")}</span>}
+                </div>
+                <div className="text-[13px] mb-1.5">Kế hoạch: upsert {pd.planned?.areasUpsert ?? 0} khu · ẩn {pd.planned?.areasDeactivate ?? 0} khu · upsert {pd.planned?.assignmentsUpsert ?? 0} assignment · ẩn {pd.planned?.assignmentsDeactivate ?? 0} assignment</div>
+                {pd.compare?.kpi && <div className="text-[13px] mb-1.5">KPI: điểm chụp {String((pd.compare.kpi as Record<string, unknown>).physicalBefore)}→{String((pd.compare.kpi as Record<string, unknown>).physicalAfter)} · nghĩa vụ {String((pd.compare.kpi as Record<string, unknown>).obligationsBefore)}→{String((pd.compare.kpi as Record<string, unknown>).obligationsAfter)}</div>}
+                {(pd.warnings ?? []).map((w, i) => <div key={i} className="text-[12.5px] text-warning">⚠ {w}</div>)}
+                <div className="text-[12.5px] text-ink-muted mt-2 mb-2">Thao tác này thay đổi cấu hình khu vực hiện hành nhưng KHÔNG thay đổi lịch sử ảnh.</div>
+                <div className="flex gap-2">
+                  {pd.valid && v && <button onClick={() => doRestore(v)} disabled={busy} className="btn btn-primary !min-h-9">Xác nhận RESTORE</button>}
+                  <button onClick={() => setPreview(null)} className="btn btn-secondary !min-h-9">Đóng</button>
+                </div>
+              </div>
+            );
+          })()}
+
+          {cmpData && (() => {
+            const c = cmpData as { areas?: { added: string[]; removed: string[]; changed: Array<{ area_code: string; changes: Record<string, { from: unknown; to: unknown }> }> }; assignments?: { added: string[]; removed: string[]; changed: Array<{ key: string; changes: Record<string, { from: unknown; to: unknown }> }> }; kpi?: Record<string, unknown> };
+            const k = (c.kpi ?? {}) as Record<string, unknown>;
+            return (
+              <div className="bg-white rounded-lg border border-line shadow-e2 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-[14px] font-bold flex-1">So sánh: {cmpTitle}</span>
+                  <button onClick={() => setCmpData(null)} className="text-[12.5px] text-ink-muted">✕ đóng</button>
+                </div>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
+                  {([["Khu vực +", c.areas?.added.length ?? 0], ["Khu vực −", c.areas?.removed.length ?? 0], ["Khu vực sửa", c.areas?.changed.length ?? 0], ["KPI nghĩa vụ", `${String(k.obligationsBefore)}→${String(k.obligationsAfter)}`]] as Array<[string, unknown]>).map(([l, val]) => (
+                    <div key={l} className="bg-surface rounded-md p-2.5"><div className="text-[11px] text-ink-muted font-semibold">{l}</div><div className="text-[18px] font-bold">{String(val)}</div></div>
+                  ))}
+                </div>
+                <div className="grid lg:grid-cols-2 gap-3 text-[12.5px]">
+                  <div>
+                    <div className="font-semibold mb-1">Khu vực</div>
+                    {(c.areas?.added ?? []).map((x) => <div key={"a" + x} className="text-success">+ {x}</div>)}
+                    {(c.areas?.removed ?? []).map((x) => <div key={"r" + x} className="text-danger">− {x} (sẽ ẩn)</div>)}
+                    {(c.areas?.changed ?? []).map((x) => (
+                      <details key={x.area_code}><summary className="cursor-pointer">≠ {x.area_code} ({Object.keys(x.changes).join(", ")})</summary>
+                        <pre className="text-[10.5px] bg-surface rounded p-1.5 mt-1 overflow-x-auto">{JSON.stringify(x.changes, null, 1)}</pre></details>
+                    ))}
+                    {!(c.areas?.added.length || c.areas?.removed.length || c.areas?.changed.length) && <div className="text-ink-muted">Không đổi</div>}
+                  </div>
+                  <div>
+                    <div className="font-semibold mb-1">Assignment (phòng|khu|loại)</div>
+                    {(c.assignments?.added ?? []).map((x) => <div key={"a" + x} className="text-success">+ {x}</div>)}
+                    {(c.assignments?.removed ?? []).map((x) => <div key={"r" + x} className="text-danger">− {x} (sẽ ẩn)</div>)}
+                    {(c.assignments?.changed ?? []).map((x) => (
+                      <details key={x.key}><summary className="cursor-pointer">≠ {x.key} ({Object.keys(x.changes).join(", ")})</summary>
+                        <pre className="text-[10.5px] bg-surface rounded p-1.5 mt-1 overflow-x-auto">{JSON.stringify(x.changes, null, 1)}</pre></details>
+                    ))}
+                    {!(c.assignments?.added.length || c.assignments?.removed.length || c.assignments?.changed.length) && <div className="text-ink-muted">Không đổi</div>}
+                  </div>
+                </div>
+                {Array.isArray((c.kpi as Record<string, unknown>)?.perDepartmentDiff) && ((c.kpi as { perDepartmentDiff: Array<{ departmentCode: string; before: number; after: number }> }).perDepartmentDiff.length > 0) && (
+                  <div className="mt-3 text-[12.5px]">
+                    <div className="font-semibold mb-1">KPI theo phòng (thay đổi)</div>
+                    {(c.kpi as { perDepartmentDiff: Array<{ departmentCode: string; before: number; after: number }> }).perDepartmentDiff.map((d) => (
+                      <span key={d.departmentCode} className="inline-block mr-3">{d.departmentCode}: {d.before}→{d.after}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          <div className="bg-white rounded-lg border border-line shadow-e2 overflow-x-auto">
+            <table className="w-full text-[13px]">
+              <thead className="text-ink-muted text-left"><tr className="border-b border-line">
+                <th className="px-3 py-2">v#</th><th className="px-3 py-2">Tên</th><th className="px-3 py-2">Thời gian</th>
+                <th className="px-3 py-2">Người tạo</th><th className="px-3 py-2">Trigger</th>
+                <th className="px-3 py-2">Khu/Asg</th><th className="px-3 py-2">Nghĩa vụ</th><th className="px-3 py-2">Hash</th>
+                <th className="px-3 py-2">Thao tác</th>
+              </tr></thead>
+              <tbody>
+                {vers.map((v) => (
+                  <tr key={v.id} className="border-b border-line last:border-0">
+                    <td className="px-3 py-2 font-bold">v{v.versionNo}
+                      {v.isProtected && <span className="ml-1 px-1.5 py-0.5 rounded-pill text-[10px] font-bold bg-warning-bg text-warning">🔒</span>}
+                      {v.restoredFromVersionId != null && <span className="ml-1 px-1.5 py-0.5 rounded-pill text-[10px] font-bold bg-info-bg text-info">restore</span>}
+                    </td>
+                    <td className="px-3 py-2 max-w-[180px] truncate">{v.name ?? "—"}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{fmt(v.createdAt)}</td>
+                    <td className="px-3 py-2">{v.createdByEmail ?? "—"}</td>
+                    <td className="px-3 py-2 text-[12px]">{v.triggerType}</td>
+                    <td className="px-3 py-2">{v.activeAreasCount}/{v.areasCount} · {v.assignmentsCount}</td>
+                    <td className="px-3 py-2 font-semibold">{v.operationalObligationsCount}</td>
+                    <td className="px-3 py-2 font-mono text-[11px]">{v.snapshotHash.slice(0, 10)}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex flex-wrap gap-x-2 gap-y-1 text-[12px] font-semibold">
+                        <button onClick={() => compareWith(v)} className="text-primary-600">So với hiện tại</button>
+                        <button onClick={() => { const o = window.prompt("So sánh với version số nào? (v#)"); const ov = vers.find((x) => String(x.versionNo) === o?.replace(/^v/i, "").trim()); if (ov) void compareWith(v, ov.id); else if (o) flash(false, "Không thấy version đó."); }} className="text-primary-600">So với v#…</button>
+                        <button onClick={() => doPreview(v)} className="text-warning">Preview restore</button>
+                        <button onClick={() => exportVer(v)} className="text-ink-muted">Export</button>
+                        <button onClick={() => toggleProtect(v)} className="text-ink-muted">{v.isProtected ? "Bỏ 🔒" : "🔒 Protect"}</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {vers.length === 0 && <tr><td colSpan={9} className="px-3 py-6 text-center text-ink-muted">Chưa có version — bấm &quot;Tạo snapshot&quot;.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
 
     </AdminShell>

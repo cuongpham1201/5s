@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { denyIfNotAdmin } from "@/lib/sharepoint/admin-guard";
+import { createAreaConfigurationSnapshot } from "@/lib/areas/area-version-service";
 import { approveAssignment, unassignDepartmentFromArea } from "@/lib/areas/area-assignment-service";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +20,10 @@ export async function POST(req: Request) {
     }
     if (ids.length > 200) return NextResponse.json({ ok: false, error: "tối đa 200 assignment/lần" }, { status: 400 });
     const session = await auth();
+    // P6 auto-snapshot trước thao tác BULK (idempotent — hash trùng thì bỏ qua).
+    await createAreaConfigurationSnapshot({
+      triggerType: "before_bulk_change", actor: session?.user?.email ?? "admin-api",
+    }).catch(() => { /* snapshot lỗi KHÔNG chặn nghiệp vụ */ });
     const actor = session?.user?.email ?? "admin-api";
     const errors: Array<{ id: number; error: string }> = [];
     let done = 0;
