@@ -206,12 +206,51 @@ export default function AdminPoliciesPage() {
           <div className="text-[12.5px] text-ink-muted mb-1.5">
             Cấu hình ({Object.keys(typeDefaults).length} tham số — giá trị đang hiển thị = defaults trừ khi bạn đổi; CHỈ phần khác defaults được lưu):
           </div>
-          <div className="grid sm:grid-cols-2 gap-x-6 border border-line rounded-md p-3 mb-3">
-            {Object.entries(typeDefaults).map(([k, def]) => (
-              <FieldEditor key={`${type}-${k}-${editing === "new" ? "new" : (editing as Policy).id}`} k={k} def={def} value={cfg[k]}
-                onChange={(v) => setCfg((c) => ({ ...c, [k]: v }))} />
-            ))}
-          </div>
+          {type === "daily" ? (
+            /* P8A — form 4 rule Daily chuyên dụng (spec) */
+            <div className="border border-line rounded-md p-3 mb-3 grid sm:grid-cols-2 gap-x-6 gap-y-2">
+              <label className="flex items-center gap-2 text-[13px]">
+                <span className="font-medium w-56">Số lần chụp mỗi khu / ngày</span>
+                <input type="number" min={1} max={20}
+                  value={Number(cfg.captures_per_area_per_day ?? typeDefaults.captures_per_area_per_day)}
+                  onChange={(e) => setCfg((c) => ({ ...c, captures_per_area_per_day: Math.min(20, Math.max(1, Number(e.target.value) || 1)) }))}
+                  className="w-24 rounded-md border border-line-strong px-2 py-1" />
+                <span className="text-ink-muted text-[12px]">(1–20)</span>
+              </label>
+              <label className="flex items-center gap-2 text-[13px]">
+                <span className="font-medium w-56">Giờ reset ngày nghiệp vụ</span>
+                <input type="time"
+                  value={`${String(Number(cfg.reset_hour ?? typeDefaults.reset_hour)).padStart(2, "0")}:${String(Number(cfg.reset_minute ?? typeDefaults.reset_minute ?? 0)).padStart(2, "0")}`}
+                  onChange={(e) => { const [h, m] = e.target.value.split(":").map(Number); setCfg((c) => ({ ...c, reset_hour: h || 0, reset_minute: m || 0 })); }}
+                  className="rounded-md border border-line-strong px-2 py-1" />
+                <span className="text-ink-muted text-[12px]">Asia/Ho_Chi_Minh</span>
+              </label>
+              <label className="flex items-center gap-2 text-[13px]">
+                <input type="checkbox" checked={Boolean(cfg.weekend_required ?? typeDefaults.weekend_required)}
+                  onChange={(e) => setCfg((c) => ({ ...c, weekend_required: e.target.checked }))} />
+                <span className="font-medium">Cuối tuần vẫn tính nghĩa vụ chụp</span>
+              </label>
+              <label className="block text-[13px]">
+                <span className="font-medium">Ngày nghỉ (mỗi dòng YYYY-MM-DD — ngày này KHÔNG tạo nghĩa vụ)</span>
+                <textarea rows={3}
+                  defaultValue={((cfg.holiday_dates ?? typeDefaults.holiday_dates ?? []) as string[]).join("\n")}
+                  onBlur={(e) => {
+                    const lines = e.target.value.split("\n").map((x) => x.trim()).filter(Boolean);
+                    const bad = lines.filter((x) => !/^\d{4}-\d{2}-\d{2}$/.test(x));
+                    if (bad.length) { flash(false, `Ngày nghỉ không hợp lệ: ${bad.join(", ")}`); return; }
+                    setCfg((c) => ({ ...c, holiday_dates: [...new Set(lines)].sort() }));
+                  }}
+                  className="mt-1 w-full rounded-md border border-line-strong px-2 py-1 font-mono text-[12px]" />
+              </label>
+            </div>
+          ) : (
+            <div className="grid sm:grid-cols-2 gap-x-6 border border-line rounded-md p-3 mb-3">
+              {Object.entries(typeDefaults).map(([k, def]) => (
+                <FieldEditor key={`${type}-${k}-${editing === "new" ? "new" : (editing as Policy).id}`} k={k} def={def} value={cfg[k]}
+                  onChange={(v) => setCfg((c) => ({ ...c, [k]: v }))} />
+              ))}
+            </div>
+          )}
           <div className="flex gap-2">
             <button onClick={save} disabled={busy || !meta.policyName.trim()} className="btn btn-primary !min-h-9">Lưu (mặc định TẮT)</button>
             <button onClick={() => setEditing(null)} className="btn btn-secondary !min-h-9">Huỷ</button>

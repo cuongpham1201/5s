@@ -4,6 +4,8 @@
  */
 import { listActiveDepartments } from "./department-service";
 import { listAreaTree } from "@/lib/areas/area-source";
+import { resolveDailyPolicy, POLICY_DEFAULTS, type DailyPolicy } from "@/lib/policy/policy-service";
+import { businessDayKey, obligationDay, areaCompleted } from "@/lib/policy/daily-rules";
 import { getSubmissions, getSubmissionPhotos } from "./submission-service";
 import type { SubmissionRecord, SubmissionPhotoRecord } from "@/types/sharepoint";
 
@@ -99,7 +101,7 @@ export interface PhotoFact {
  * photo PATH (header is only a fallback for legacy rows / unparseable paths).
  * Returns the per-submission first-photo path map (thumbnails) alongside.
  */
-async function buildPhotoFacts(subs: SubmissionRecord[]): Promise<{ thumbs: Map<string, string>; facts: Map<string, PhotoFact>; threeSPhotos: Array<{ dateKey: string; kind: string | null }> }> {
+async function buildPhotoFacts(subs: SubmissionRecord[], resetHour = 0, resetMinute = 0): Promise<{ thumbs: Map<string, string>; facts: Map<string, PhotoFact>; threeSPhotos: Array<{ dateKey: string; kind: string | null }> }> {
   let photos: SubmissionPhotoRecord[] = [];
   try { photos = await getSubmissionPhotos(); } catch { photos = []; }
   const headerById = new Map(subs.map((s) => [s.SubmissionId, s]));
@@ -128,12 +130,27 @@ async function buildPhotoFacts(subs: SubmissionRecord[]): Promise<{ thumbs: Map<
       // SANITIZED ([^\w-] → "_"), so unicode codes like "CĐ" become "C_" on disk
       // and would never match an active department (bug: CĐ uploads not counted).
       const departmentCode = header?.DepartmentCode || parsed?.dept || "";
-      const dateKey = parsed?.dateKey || (p.CaptureTime ? vnDateKey(new Date(p.CaptureTime)) : header ? dateKeyOf(header) : "");
+      // P8A: reset 00:00 (default) → GIỮ NGUYÊN path-first như trước. Khi policy
+      // đổi giờ reset, ngày nghiệp vụ phải suy từ THỜI ĐIỂM chụp (path là lịch).
+      const dateKey = (resetHour === 0 && resetMinute === 0)
+        ? (parsed?.dateKey || (p.CaptureTime ? vnDateKey(new Date(p.CaptureTime)) : header ? dateKeyOf(header) : ""))
+        : (p.CaptureTime ? businessDayKey(new Date(p.CaptureTime), resetHour, resetMinute)
+           : header?.SubmittedAt ? businessDayKey(new Date(header.SubmittedAt), resetHour, resetMinute)
+           : parsed?.dateKey ?? "");
       facts.set(p.SubmissionId, { submissionId: p.SubmissionId, departmentCode, dateKey, firstPath: path });
     }
   }
   const thumbs = new Map([...firstBySub].map(([k, v]) => [k, v.path]));
   return { thumbs, facts, threeSPhotos };
+}
+
+/** P8A: Daily policy qua RESOLVER (fail-safe → defaults = hành vi hiện tại). */
+async function dailyRules(): Promise<DailyPolicy> {
+  try {
+    return (await resolveDailyPolicy()).policy;
+  } catch {
+    return { ...POLICY_DEFAULTS.daily };
+  }
 }
 
 export interface TodaySummary {
@@ -183,13 +200,14 @@ function toLatest(r: SubmissionRecord, thumb?: Map<string, string>): LatestSubmi
 }
 
 export async function getTodaySubmissionSummary(): Promise<TodaySummary> {
-  const today = vnDateKey();
+  const daily = await dailyRules(); // P8A: rule 2 (reset) — default 00:00 = vnDateKey cũ
+  const today = businessDayKey(new Date(), daily.reset_hour, daily.reset_minute);
   const [active, subs] = await Promise.all([
     listActiveDepartments().catch(() => []),
     safeSubmissions(),
   ]);
   // SOURCE OF TRUTH = Data_SubmissionPhotos (≥1 non-deleted photo fact today).
-  const { thumbs, facts, threeSPhotos } = await buildPhotoFacts(subs);
+  const { thumbs, facts, threeSPhotos } = await buildPhotoFacts(subs, daily.reset_hour, daily.reset_minute);
   // Resolve fact dept codes against ACTIVE codes: path segments are sanitized
   // ("CĐ" → "C_"), so headerless legacy facts need a normalized match.
   const norm = (s: string) => s.replace(/[^\w-]/g, "_");
@@ -251,6 +269,9 @@ export interface ProgressSummary {
   };
   areaSummary: { totalAreas: number; completedAreas: number; remainingAreas: number; completionRate: number };
   departments: DepartmentProgress[];
+  /** P8A: hôm nay có tạo nghĩa vụ chụp không (weekend/holiday theo Daily policy). */
+  isObligationDay?: boolean;
+  obligationReason?: "normal" | "weekend_off" | "holiday";
 }
 
 /**
@@ -264,13 +285,15 @@ export interface ProgressSummary {
  *  - ngày theo Asia/Ho_Chi_Minh (vnDateKey).
  */
 export async function getDepartmentProgress(): Promise<ProgressSummary> {
-  const today = vnDateKey();
+  const daily = await dailyRules(); // P8A: 4 rule Daily qua resolver
+  const today = businessDayKey(new Date(), daily.reset_hour, daily.reset_minute);
+  const oblDay = obligationDay(today, daily);
   const [active, subs, areas] = await Promise.all([
     listActiveDepartments().catch(() => []),
     safeSubmissions(),
     listAreaTree().catch(() => []),   // FACADE (AREA_SOURCE) — contract chuẩn hoá
   ]);
-  const { facts } = await buildPhotoFacts(subs);
+  const { facts } = await buildPhotoFacts(subs, daily.reset_hour, daily.reset_minute);
   const headerById = new Map(subs.map((s) => [s.SubmissionId, s]));
   const norm = (s: string) => s.replace(/[^\w-]/g, "_");
   const byNorm = new Map(active.map((d) => [norm(d.code), d.code]));
@@ -285,23 +308,32 @@ export async function getDepartmentProgress(): Promise<ProgressSummary> {
     }
   }
 
-  // Hôm nay: phòng đã chụp (rule cũ) + (phòng, khu) đã chụp từ photo facts.
+  // Hôm nay: phòng đã chụp (rule cũ — KHÔNG đổi) + SỐ LẦN chụp per (phòng, khu)
+  // từ photo facts (P8A rule 1: hoàn thành khi count ≥ captures_per_area_per_day).
   const submittedToday = new Set<string>();
-  const doneByDept = new Map<string, Set<string>>();
+  const captureCount = new Map<string, number>(); // "dept|area" → số submission hôm nay
   for (const f of facts.values()) {
     if (f.dateKey !== today || !f.departmentCode) continue;
     const dept = byNorm.get(norm(f.departmentCode)) ?? f.departmentCode;
     submittedToday.add(dept);
     const areaCode = headerById.get(f.submissionId)?.AreaCode;
     if (areaCode) {
-      if (!doneByDept.has(dept)) doneByDept.set(dept, new Set());
-      doneByDept.get(dept)!.add(areaCode);
+      const k = `${dept}|${areaCode}`;
+      captureCount.set(k, (captureCount.get(k) ?? 0) + 1);
     }
+  }
+  const doneByDept = new Map<string, Set<string>>();
+  for (const [k, n] of captureCount) {
+    if (!areaCompleted(n, daily)) continue;
+    const [dept, areaCode] = [k.slice(0, k.indexOf("|")), k.slice(k.indexOf("|") + 1)];
+    if (!doneByDept.has(dept)) doneByDept.set(dept, new Set());
+    doneByDept.get(dept)!.add(areaCode);
   }
 
   const departments: DepartmentProgress[] = active.map((d) => {
     const leafSet = leavesByDept.get(d.code) ?? new Set<string>();
-    const total = leafSet.size;
+    // Rule 3+4: cuối tuần (weekend_required=false) / ngày nghỉ → KHÔNG tạo nghĩa vụ.
+    const total = oblDay.isObligationDay ? leafSet.size : 0;
     const done = doneByDept.get(d.code) ?? new Set<string>();
     const completed = [...done].filter((c) => leafSet.has(c)).length;
     const departmentCompleted = submittedToday.has(d.code);
@@ -340,6 +372,8 @@ export async function getDepartmentProgress(): Promise<ProgressSummary> {
       completionRate: totalAreas ? completedAreas / totalAreas : 0,
     },
     departments,
+    isObligationDay: oblDay.isObligationDay,
+    obligationReason: oblDay.reason,
   };
 }
 

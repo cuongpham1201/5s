@@ -32,6 +32,7 @@ export interface CapturePolicy {
 export interface DailyPolicy {
   captures_per_area_per_day: number; // 1 — distinct (phòng, khu)/ngày
   reset_hour: number;                // 0 — reset 00:00
+  reset_minute: number;              // 0
   reset_timezone: string;            // Asia/Ho_Chi_Minh (vnDateKey)
   weekend_required: boolean;         // true — chưa có ngoại lệ cuối tuần
   skip_holidays: boolean;            // false — chưa có danh sách ngày lễ
@@ -75,7 +76,7 @@ export const POLICY_DEFAULTS: {
     area_required: true, department_required: true,
   },
   daily: {
-    captures_per_area_per_day: 1, reset_hour: 0, reset_timezone: "Asia/Ho_Chi_Minh",
+    captures_per_area_per_day: 1, reset_hour: 0, reset_minute: 0, reset_timezone: "Asia/Ho_Chi_Minh",
     weekend_required: true, skip_holidays: false, holiday_dates: [], count_overtime: true,
   },
   audit: {
@@ -217,6 +218,39 @@ export function sanitizeConfig(type: PolicyType, config: unknown): Record<string
   return out;
 }
 
+/** Validation config theo type (P8A: siết DAILY theo spec; type khác pass-through). */
+export function validatePolicyConfig(type: PolicyType, config: Record<string, unknown>): void {
+  if (type !== "daily") return;
+  if ("captures_per_area_per_day" in config) {
+    const n = Number(config.captures_per_area_per_day);
+    if (!Number.isInteger(n) || n < 1 || n > 20) throw new Error("captures_per_area_per_day phải là số nguyên 1–20.");
+  }
+  if ("reset_hour" in config) {
+    const h = Number(config.reset_hour);
+    if (!Number.isInteger(h) || h < 0 || h > 23) throw new Error("reset_hour phải 0–23.");
+  }
+  if ("reset_minute" in config) {
+    const m = Number(config.reset_minute);
+    if (!Number.isInteger(m) || m < 0 || m > 59) throw new Error("reset_minute phải 0–59.");
+  }
+  if ("reset_timezone" in config && config.reset_timezone !== "Asia/Ho_Chi_Minh") {
+    throw new Error("reset_timezone chỉ hỗ trợ Asia/Ho_Chi_Minh.");
+  }
+  if ("weekend_required" in config && typeof config.weekend_required !== "boolean") {
+    throw new Error("weekend_required phải là boolean.");
+  }
+  if ("holiday_dates" in config) {
+    const arr = config.holiday_dates;
+    if (!Array.isArray(arr)) throw new Error("holiday_dates phải là mảng.");
+    const seen = new Set<string>();
+    for (const d of arr) {
+      if (typeof d !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(d)) throw new Error(`Ngày nghỉ không hợp lệ: ${String(d)} (YYYY-MM-DD).`);
+      if (seen.has(d)) throw new Error(`Ngày nghỉ trùng: ${d}.`);
+      seen.add(d);
+    }
+  }
+}
+
 export async function createPolicy(input: {
   policyType: PolicyType; policyName: string; description?: string | null;
   effectiveFrom?: string | null; effectiveTo?: string | null;
@@ -230,7 +264,7 @@ export async function createPolicy(input: {
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$9) RETURNING *`,
     [input.policyType, input.policyName.trim(), input.description ?? null,
      input.effectiveFrom ?? null, input.effectiveTo ?? null, input.priority ?? 0,
-     input.enabled ?? false, JSON.stringify(sanitizeConfig(input.policyType, input.config)), actor]);
+     input.enabled ?? false, JSON.stringify((() => { const c = sanitizeConfig(input.policyType, input.config); validatePolicyConfig(input.policyType, c); return c; })()), actor]);
   const row = mapRow(r.rows[0]);
   await plog(row.id, "create", null, row, actor);
   clearPolicyCache();
@@ -257,7 +291,7 @@ export async function updatePolicy(id: number, patch: {
      patch.effectiveFrom !== undefined, patch.effectiveFrom ?? null,
      patch.effectiveTo !== undefined, patch.effectiveTo ?? null,
      patch.priority ?? null,
-     patch.config !== undefined ? JSON.stringify(sanitizeConfig(cur.policyType, patch.config)) : null,
+     patch.config !== undefined ? JSON.stringify((() => { const c = sanitizeConfig(cur.policyType, patch.config); validatePolicyConfig(cur.policyType, c); return c; })()) : null,
      actor]);
   const row = mapRow(r.rows[0]);
   await plog(id, "update", cur, row, actor);
