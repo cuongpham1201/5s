@@ -23,6 +23,7 @@ const CARDS = [
   { href: "/admin/config/departments", icon: "🔄", title: "Đồng bộ phòng ban Microsoft 365", desc: "Đồng bộ Config_Departments từ M365" },
   { href: "/admin/config/departments", icon: "🏢", title: "Quản lý phòng ban", desc: "Danh sách phòng ban đang hoạt động" },
   { href: "/admin/areas", icon: "📍", title: "Khu vực 5S", desc: "Danh mục cây · gán phòng ban · kiểm tra dữ liệu (PostgreSQL)" },
+  { href: "/admin/policies", icon: "📜", title: "Chính sách 5S", desc: "Policy Engine — quy tắc Daily/Audit/Capture/Violation/Notification" },
   { href: "/admin/config/check-items", icon: "✅", title: "Hạng mục 5S", desc: "Checklist / hạng mục kiểm tra" },
   { href: "/admin/config/watermark", icon: "🖼️", title: "Cấu hình watermark", desc: "Bật/tắt dòng + dòng tùy chỉnh (toàn hệ thống)" },
   { href: "/admin/config/role-mapping", icon: "🛡️", title: "Phân quyền quản trị", desc: "Gán quyền theo email (Config_RoleMapping)" },

@@ -30,6 +30,7 @@ const NAV: NavEntry[] = [
   { href: "/admin/hrm-sync", label: "HRM Sync", icon: "refresh" },
   { href: "/admin/config/departments", label: "Phòng ban", icon: "building" },
   { href: "/admin/areas", label: "Khu vực 5S", icon: "mapPin" },
+  { href: "/admin/policies", label: "Chính sách 5S", icon: "shield" },
   { href: "/admin/config/check-items", label: "Hạng mục 5S", icon: "check" },
   { href: "/admin/config/watermark", label: "Watermark", icon: "image" },
   { href: "/admin/config/role-mapping", label: "Phân quyền", icon: "shield" },
