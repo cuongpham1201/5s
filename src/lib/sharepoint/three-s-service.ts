@@ -3,7 +3,7 @@
  * records (Data_Submissions.SubmissionType = "3s" + tagged photo rows).
  */
 import { getSubmissions, getSubmissionPhotos } from "./submission-service";
-import { parsePhotoPath } from "./photo-stats";
+import { parsePhotoPath } from "./photo-path";
 import { vnDateKey } from "./report-service";
 
 export interface ThreeSRow {

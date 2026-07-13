@@ -69,17 +69,8 @@ function bucketRange(from: string, to: string, group: StatGroup): string[] {
   return out;
 }
 
-/** Dept + date parsed from a stored photo path (new + old layouts). */
-export function parsePhotoPath(path: string): { dept: string; dateKey: string } | null {
-  const parts = path.split("/");
-  if (parts[0] !== "Img" || parts.length < 4) return null;
-  const dept = parts[1];
-  if (/^\d{4}-\d{2}-\d{2}$/.test(parts[2])) return { dept, dateKey: parts[2] };
-  if (/^\d{4}$/.test(parts[2]) && /^\d{2}$/.test(parts[3]) && /^\d{2}$/.test(parts[4] ?? "")) {
-    return { dept, dateKey: `${parts[2]}-${parts[3]}-${parts[4]}` };
-  }
-  return null;
-}
+export { parsePhotoPath } from "./photo-path";
+import { parsePhotoPath } from "./photo-path";
 
 /** Parse+default from/to/group query params (shared by JSON + export routes). */
 export function parseStatParams(sp: URLSearchParams): { from: string; to: string; group: StatGroup; type: StatType; dim: StatDim } {

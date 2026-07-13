@@ -32,10 +32,7 @@ export async function verifyPassword(password: string, stored: string): Promise<
   return (await derive(password, unb64(saltB64), Number(iterStr))) === hashB64;
 }
 
-export function normalizeUsername(raw: string): string | null {
-  const u = (raw ?? "").trim().toLowerCase();
-  return /^[a-z0-9._-]{3,32}$/.test(u) ? u : null;
-}
+export { normalizeUsername } from "@/lib/auth/username";
 
 // ── types ─────────────────────────────────────────────────────────────────────
 export interface Identity {

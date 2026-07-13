@@ -34,10 +34,8 @@ export function isLocalEmail(email?: string | null): boolean {
   return (email ?? "").toLowerCase().endsWith(`@${LOCAL_EMAIL_DOMAIN}`);
 }
 
-export function normalizeUsername(raw: string): string | null {
-  const u = (raw ?? "").trim().toLowerCase();
-  return /^[a-z0-9._-]{3,32}$/.test(u) ? u : null;
-}
+export { normalizeUsername } from "./username";
+import { normalizeUsername } from "./username";
 
 // ---- password hashing (WebCrypto PBKDF2 — edge/node safe) ----
 

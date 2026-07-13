@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AdminShell } from "@/components/layout/AdminShell";
 
 interface Dept { code: string; name: string }
-interface AreaRow { id: string; code: string; name: string; departmentCode: string; sortOrder: number; isActive: boolean }
+interface AreaRow { code: string; name: string; isActive: boolean }
 interface DeptUser { email: string; displayName: string | null; departmentCode: string | null; areaCount: number }
 
 export default function UserAreasPage() {
@@ -39,7 +39,7 @@ export default function UserAreasPage() {
     setChecked(new Set());
     try {
       const [ar, ur] = await Promise.all([
-        fetch(`/api/admin/config/areas?departmentCode=${encodeURIComponent(code)}&includeInactive=false`).then((r) => (r.ok ? r.json() : null)),
+        fetch(`/api/config/areas?departmentCode=${encodeURIComponent(code)}`).then((r) => (r.ok ? r.json() : null)),
         fetch(`/api/admin/config/user-areas?departmentCode=${encodeURIComponent(code)}`).then((r) => (r.ok ? r.json() : null)),
       ]);
       setAreas((ar?.areas ?? []).filter((a: AreaRow) => a.isActive));
@@ -176,7 +176,7 @@ export default function UserAreasPage() {
                   <div className="p-8 text-center">
                     <div className="text-[15px] font-semibold text-ink">Phòng ban này chưa có khu vực chụp.</div>
                     <div className="text-[13px] text-ink-muted mt-1 mb-4">Hãy tạo khu vực trước khi phân quyền.</div>
-                    <Link href="/admin/config/areas" className="btn btn-secondary !min-h-9">Đi tới Quản lý khu vực</Link>
+                    <Link href="/admin/areas" className="btn btn-secondary !min-h-9">Đi tới Quản lý khu vực</Link>
                   </div>
                 ) : (
                   <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-2.5">

@@ -8,6 +8,7 @@ import { resolveDailyPolicy, POLICY_DEFAULTS, type DailyPolicy } from "@/lib/pol
 import { businessDayKey, obligationDay, areaCompleted } from "@/lib/policy/daily-rules";
 import { getSubmissions, getSubmissionPhotos } from "./submission-service";
 import type { SubmissionRecord, SubmissionPhotoRecord } from "@/types/sharepoint";
+import { parsePhotoPath } from "./photo-path";
 
 /** Today's date key in Asia/Ho_Chi_Minh (YYYY-MM-DD). */
 export function vnDateKey(d: Date = new Date()): string {
@@ -68,24 +69,6 @@ async function firstPhotoPathMap(): Promise<Map<string, string>> {
     if (!cur || p.SeqNo < cur.seq) map.set(p.SubmissionId, { seq: p.SeqNo, path });
   }
   return new Map([...map].map(([k, v]) => [k, v.path]));
-}
-
-/**
- * Parse DepartmentCode + date (YYYY-MM-DD) directly from a stored photo path.
- * Supports BOTH layouts during transition:
- *   new: Img/<Dept>/<YYYY-MM-DD>/<Sub>/file
- *   old: Img/<Dept>/<YYYY>/<MM>/<DD>/<Sub>/file
- * Returns null when neither shape matches (caller falls back to the header).
- */
-function parsePhotoPath(path: string): { dept: string; dateKey: string } | null {
-  const parts = path.split("/");
-  if (parts[0] !== "Img" || parts.length < 4) return null;
-  const dept = parts[1];
-  if (/^\d{4}-\d{2}-\d{2}$/.test(parts[2])) return { dept, dateKey: parts[2] };
-  if (/^\d{4}$/.test(parts[2]) && /^\d{2}$/.test(parts[3]) && /^\d{2}$/.test(parts[4])) {
-    return { dept, dateKey: `${parts[2]}-${parts[3]}-${parts[4]}` };
-  }
-  return null;
 }
 
 export interface PhotoFact {

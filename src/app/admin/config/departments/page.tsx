@@ -3,33 +3,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { AdminShell } from "@/components/layout/AdminShell";
 
-interface ImportResult {
-  source: string;
-  deactivateMissing: boolean;
-  created: string[];
-  updated: string[];
-  deactivated: string[];
-  skipped: string[];
-  stats?: {
-    totalScanned: number;
-    activeMembers: number;
-    activeWithDepartment: number;
-    distinctAll: number;
-    distinctFiltered: number;
-  };
-  note?: string;
-  error?: string;
-}
-
 interface Dept { code: string; name: string }
 
 export default function ConfigDepartmentsPage() {
   const [depts, setDepts] = useState<Dept[]>([]);
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
-  const [result, setResult] = useState<ImportResult | null>(null);
-  const [lastSync, setLastSync] = useState<string | null>(null);
-
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -43,67 +21,11 @@ export default function ConfigDepartmentsPage() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const sync = async () => {
-    setSyncing(true);
-    setResult(null);
-    try {
-      const r = await fetch("/api/admin/sharepoint/import-departments", { method: "POST" });
-      const data: ImportResult = await r.json();
-      setResult(data);
-      const now = new Date();
-      setLastSync(now.toLocaleString("vi-VN"));
-    } catch (e) {
-      setResult({ source: "", deactivateMissing: false, created: [], updated: [], deactivated: [], skipped: [], error: String(e) });
-    } finally {
-      setSyncing(false);
-      void load();
-    }
-  };
-
-  const stat = (label: string, value: string | number) => (
-    <div className="bg-white rounded-lg p-4 shadow-e2 border border-line">
-      <div className="text-[12px] text-ink-muted font-semibold">{label}</div>
-      <div className="text-[24px] font-bold mt-1 tracking-tight">{value}</div>
-    </div>
-  );
-
   return (
     <AdminShell
       title="Phòng ban (Config_Departments)"
-      subtitle="Đồng bộ từ Microsoft 365"
-      actions={
-        <button onClick={sync} disabled={syncing} className="btn btn-primary !min-h-10">
-          {syncing ? "Đang đồng bộ…" : "Đồng bộ phòng ban từ Microsoft 365"}
-        </button>
-      }
+      subtitle="Danh mục phòng ban 5S (nguồn HRM sync — quản trị tại Đồng bộ HRM)"
     >
-      <p className="text-[13px] text-ink-muted mb-4">
-        Đồng bộ upsert theo DepartmentCode từ người dùng Microsoft 365 (chỉ thành viên đang hoạt động,
-        có phòng ban). Mặc định KHÔNG vô hiệu hoá phòng ban thiếu (deactivateMissing=false).
-        {lastSync && <> · Lần đồng bộ gần nhất: <b>{lastSync}</b></>}
-      </p>
-
-      {result?.stats && (
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
-          {stat("Tổng quét", result.stats.totalScanned)}
-          {stat("Thành viên hoạt động", result.stats.activeMembers)}
-          {stat("Có phòng ban", result.stats.activeWithDepartment)}
-          {stat("Phòng ban (thô)", result.stats.distinctAll)}
-          {stat("Phòng ban (chuẩn hoá)", result.stats.distinctFiltered)}
-        </div>
-      )}
-
-      {result && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-          {stat("Đã tạo", result.created.length)}
-          {stat("Đã cập nhật", result.updated.length)}
-          {stat("Đã vô hiệu hoá", result.deactivated.length)}
-          {stat("Bỏ qua (không đổi)", result.skipped.length)}
-        </div>
-      )}
-
-      {result?.note && <div className="text-warning text-[13px] mb-3">{result.note}</div>}
-      {result?.error && <div className="text-danger text-[13px] mb-3">Lỗi: {result.error}</div>}
 
       <div className="bg-white rounded-lg border border-line shadow-e2">
         <div className="flex items-center justify-between px-5 py-4 border-b border-line">

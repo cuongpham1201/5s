@@ -36,11 +36,18 @@ export default function ConfigCheckItemsPage() {
     try {
       const [dr, ar, cr] = await Promise.all([
         fetch("/api/config/departments").then((r) => (r.ok ? r.json() : null)),
-        fetch("/api/admin/config/areas").then((r) => (r.ok ? r.json() : null)),
+        fetch("/api/config/areas").then((r) => (r.ok ? r.json() : null)),
         fetch("/api/admin/config/check-items").then((r) => (r.ok ? r.json() : null)),
       ]);
       setDepts(dr?.departments ?? []);
-      setAreas((ar?.areas ?? []).filter((a: Area & { isActive?: boolean }) => a));
+      // Facade trả SourceArea (departments: string[]) — trải phẳng thành entry theo phòng.
+      setAreas(
+        (ar?.areas ?? [])
+          .filter((a: { isActive?: boolean; areaType?: string }) => a.isActive !== false && a.areaType !== "group")
+          .flatMap((a: { code: string; name: string; departments: string[] }) =>
+            (a.departments ?? []).map((dc: string) => ({ code: a.code, name: a.name, departmentCode: dc })),
+          ),
+      );
       setItems(cr?.checkItems ?? []);
     } finally {
       setLoading(false);

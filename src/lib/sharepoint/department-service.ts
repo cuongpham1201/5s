@@ -123,7 +123,9 @@ export async function resolveDepartmentFromGraphValue(raw: string | null | undef
       options = mockOptions();
       usedFallback = true;
     }
-  } catch {
+  } catch (e) {
+    // Production KHÔNG fallback mock — log rõ để vận hành thấy nguồn thật lỗi.
+    console.error("[department-service] Đọc Config_Departments thất bại:", (e as Error).message);
     if (!devAllowed()) {
       return {
         departmentRaw: value,

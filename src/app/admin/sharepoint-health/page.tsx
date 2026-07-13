@@ -29,8 +29,6 @@ function Pill({ s }: { s: State }) {
 export default function SharePointHealthPage() {
   const [health, setHealth] = useState<Health | null>(null);
   const [loading, setLoading] = useState(true);
-  const [action, setAction] = useState<string | null>(null);
-  const [actionResult, setActionResult] = useState<unknown>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -47,20 +45,6 @@ export default function SharePointHealthPage() {
   useEffect(() => {
     void load();
   }, [load]);
-
-  const run = async (path: string, label: string) => {
-    setAction(label);
-    setActionResult(null);
-    try {
-      const r = await fetch(path, { method: "POST" });
-      setActionResult(await r.json());
-    } catch (e) {
-      setActionResult({ error: String(e) });
-    } finally {
-      setAction(null);
-      void load();
-    }
-  };
 
   return (
     <div className="max-w-[720px] mx-auto p-5 min-h-screen">
@@ -112,33 +96,6 @@ export default function SharePointHealthPage() {
             </div>
           )}
 
-          <div className="flex gap-2.5">
-            <button
-              disabled={!!action}
-              onClick={() => run("/api/admin/sharepoint/provision", "provision")}
-              className="btn btn-primary flex-1"
-            >
-              {action === "provision" ? "Đang tạo…" : "Provision lists"}
-            </button>
-            <button
-              disabled={!!action}
-              onClick={() => run("/api/admin/sharepoint/import-departments", "import")}
-              className="btn btn-secondary flex-1"
-            >
-              {action === "import" ? "Đang đồng bộ…" : "Import departments (org)"}
-            </button>
-            <button
-              disabled={!!action}
-              onClick={() => run("/api/admin/sharepoint/seed-config", "seed")}
-              className="btn btn-secondary flex-1"
-            >
-              {action === "seed" ? "Đang seed…" : "Seed (dev)"}
-            </button>
-          </div>
-
-          {actionResult != null && (
-            <pre className="card text-[11px] overflow-x-auto whitespace-pre-wrap">{JSON.stringify(actionResult, null, 2)}</pre>
-          )}
         </div>
       )}
     </div>
