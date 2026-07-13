@@ -12,6 +12,7 @@
 import { getQueue, updateStatus, findBySubmission, recoverStuckUploads, markUnrecoverable, resetFailedForRetry } from "./offline-queue";
 import { getCompletedSubmissionById, setSubmissionUploadStatus, setUploadResult } from "@/lib/submissions/local-submission-store";
 import { listPhotosBySubmission, deletePhotosBySubmission, deletePhoto, resolvePhotoBytes } from "@/lib/storage/photo-store";
+import { isLocalResetPending } from "@/lib/storage/local-data-version";
 import { trace } from "@/lib/debug/trace";
 import { ulog, shipClientLogs } from "@/lib/debug/upload-log";
 import type { StoredPhoto } from "@/lib/storage/storage-types";
@@ -289,6 +290,9 @@ async function uploadOne(submissionId: string, attemptCount: number, queueId: st
  */
 export async function processQueue(opts: { manual?: boolean } = {}): Promise<number> {
   if (running || isOffline()) return 0;
+  // Chặn tự retry khi thiết bị còn dữ liệu test cũ chưa reset (Phase Reset):
+  // tránh ảnh test trồi ngược lên server trong lúc/ sau khi clean slate.
+  if (isLocalResetPending()) { qlog("queue.process:blocked-reset-pending", {}); return 0; }
   running = true;
   let processed = 0;
   // Rescue items left "uploading" by a killed app (iOS PWA) so they retry.

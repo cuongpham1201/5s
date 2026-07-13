@@ -6,6 +6,7 @@ import { PwaRegister } from "@/components/pwa/PwaRegister";
 import { SessionCaptureProvider } from "@/features/capture/session-context";
 import { SyncRunner } from "@/components/system/SyncRunner";
 import { ProfileResume } from "@/components/system/ProfileResume";
+import { ClientResetGate } from "@/components/system/ClientResetGate";
 
 /** Client providers wrapper (auth session + capture session + PWA SW + sync). */
 export function Providers({ children }: { children: ReactNode }) {
@@ -15,6 +16,7 @@ export function Providers({ children }: { children: ReactNode }) {
         <PwaRegister />
         <SyncRunner />
         <ProfileResume />
+        <ClientResetGate />
         {children}
       </SessionCaptureProvider>
     </SessionProvider>
